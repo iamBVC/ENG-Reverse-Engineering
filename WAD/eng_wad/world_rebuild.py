@@ -461,6 +461,9 @@ def _write_instanced_mesh_obj(
     apply_object_yaw: bool = True,
     object_yaw_sign: int = 1,
     object_z_mirror_center: float | None = None,
+    object_x_offset: float = 0.0,
+    object_y_offset: float = 0.0,
+    object_z_offset: float = 0.0,
 ) -> int:
     """Append one STPC mesh instance to an open OBJ file.
 
@@ -475,7 +478,7 @@ def _write_instanced_mesh_obj(
     """
     f.write(f"\no {object_name}\n")
     f.write(f"# MAP object {inst.object_index}; STPC mesh {mesh.index}; mesh_offset=0x{mesh.offset:08X}\n")
-    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={inst.small_04 if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}\n")
+    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={inst.small_04 if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}; object_alignment_offset={object_x_offset:.9g},{object_y_offset:.9g},{object_z_offset:.9g}\n")
     yaw = _angle4096_to_radians(inst.small_04, sign=object_yaw_sign) if apply_object_yaw else 0.0
     base_x = inst.world_x
     base_y = inst.world_y
@@ -490,6 +493,12 @@ def _write_instanced_mesh_obj(
         out_z = base_z + rz
         if mirror_object_z:
             out_z = 2.0 * object_z_mirror_center - out_z
+        # Final user-tunable alignment correction. This is deliberately applied
+        # after all source-coordinate conversion/mirroring so it behaves like a
+        # simple world-space nudge against the validated terrain.obj.
+        out_x += object_x_offset
+        out_y += object_y_offset
+        out_z += object_z_offset
         f.write(_obj_vertex_line(out_x, out_y, out_z, scale=scale, flip_z=flip_z))
     for v in mesh.vertices:
         nx = v.nx
@@ -528,6 +537,9 @@ def write_instanced_stpc_objs(
     apply_object_yaw: bool = True,
     object_yaw_sign: int = 1,
     object_z_mirror_center: float | None = None,
+    object_x_offset: float = 0.0,
+    object_y_offset: float = 0.0,
+    object_z_offset: float = 0.0,
 ) -> Path | None:
     """Write combined and single-hit STPC instance OBJ files.
 
@@ -563,7 +575,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{inst.object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
 
     # Single-hit files: exactly one STPC mesh per OBJ file.
     by_hit_dir = out_dir / "objects_by_hit"
@@ -601,7 +613,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{object_index:03d}_primary_mesh_{mesh.index:03d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
 
     if write_per_object:
         grouped_dir = out_dir / "diagnostics" / "objects_grouped_by_object"
@@ -625,7 +637,7 @@ def write_instanced_stpc_objs(
                     if mesh is None:
                         continue
                     name = f"object_{object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
+                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
     return combined
 
 
@@ -828,6 +840,9 @@ def export_world(
     apply_stpc_object_yaw: bool = True,
     stpc_object_yaw_sign: int = 1,
     mirror_stpc_objects_z: bool = True,
+    object_x_offset: float = 0.0,
+    object_y_offset: float = 0.0,
+    object_z_offset: float = 1.5,
 ) -> WorldRebuildResult:
     """Export the reconstructed level world into `out_dir`.
 
@@ -901,20 +916,23 @@ def export_world(
 
     _write_csv(out_dir / "stpc_instance_transforms.csv", [
         "object_index","raw_x","raw_y","raw_z","render_x","render_y","render_z",
-        "object_z_sign","local_z_sign","object_z_mirror_enabled","object_z_mirror_center","yaw_units_4096","yaw_degrees","apply_yaw"
+        "object_z_sign","local_z_sign","object_z_mirror_enabled","object_z_mirror_center","object_x_offset","object_y_offset","object_z_offset","yaw_units_4096","yaw_degrees","apply_yaw"
     ], (
         {
             "object_index": o.object_index,
             "raw_x": o.world_x,
             "raw_y": o.world_y,
             "raw_z": o.world_z,
-            "render_x": o.world_x,
-            "render_y": o.world_y,
-            "render_z": (2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z,
+            "render_x": o.world_x + object_x_offset,
+            "render_y": o.world_y + object_y_offset,
+            "render_z": ((2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z) + object_z_offset,
             "object_z_sign": stpc_object_z_sign,
             "local_z_sign": stpc_local_z_sign,
             "object_z_mirror_enabled": object_z_mirror_center is not None,
             "object_z_mirror_center": object_z_mirror_center if object_z_mirror_center is not None else "",
+            "object_x_offset": object_x_offset,
+            "object_y_offset": object_y_offset,
+            "object_z_offset": object_z_offset,
             "yaw_units_4096": o.small_04,
             "yaw_degrees": (o.small_04 / 4096.0) * 360.0 * stpc_object_yaw_sign if apply_stpc_object_yaw else 0.0,
             "apply_yaw": apply_stpc_object_yaw,
@@ -934,6 +952,9 @@ def export_world(
         apply_object_yaw=apply_stpc_object_yaw,
         object_yaw_sign=stpc_object_yaw_sign,
         object_z_mirror_center=object_z_mirror_center,
+        object_x_offset=object_x_offset,
+        object_y_offset=object_y_offset,
+        object_z_offset=object_z_offset,
     )
     world_combined = write_world_combined_obj(out_dir)
 
@@ -1027,6 +1048,7 @@ def export_world(
         "stpc_local_z_sign": stpc_local_z_sign,
         "mirror_stpc_objects_z": mirror_stpc_objects_z,
         "stpc_object_z_mirror_center": object_z_mirror_center,
+        "object_alignment_offset": {"x": object_x_offset, "y": object_y_offset, "z": object_z_offset},
         "apply_stpc_object_yaw": apply_stpc_object_yaw,
         "stpc_object_yaw_sign": stpc_object_yaw_sign,
         "terrain_tiles_written": terrain_tiles_written,
@@ -1035,7 +1057,7 @@ def export_world(
         "objects_by_hit_folder": "objects_by_hit/",
         "objects_primary_obj": "objects_primary.obj" if hits else None,
         "combined_obj": str(world_combined.name) if world_combined else None,
-        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, the same centered Z mirror, and experimental object yaw from small_04. Scale, materials, and full object-definition semantics are still unresolved; use objects_by_hit/ and diagnostics/ for validation.",
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale, materials, and full object-definition semantics are still unresolved; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")

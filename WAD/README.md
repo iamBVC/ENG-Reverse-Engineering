@@ -758,3 +758,52 @@ Useful transform flags:
 ```
 
 If terrain tile rotation appears reversed, try `--world-terrain-yaw-sign -1`. If STPC object placement appears mirrored, compare with `--world-no-object-z-mirror`. If STPC object rotation appears reversed, try `--world-stpc-yaw-sign -1` or `--world-no-stpc-yaw`.
+
+## World alignment calibration notes
+
+The `world/` exporter now treats `terrain.obj` as the validated reference mesh and
+writes STPC object candidates relative to that terrain.  Some object-definition
+semantics are still unresolved, so a small residual object-vs-terrain offset can
+remain on certain levels.
+
+The exporter exposes final world-space offsets that are applied **only to STPC
+object instances**, after all MAP/STPC coordinate conversion, mirroring, and yaw
+have been applied:
+
+```bash
+python wad_extractor.py level.wad --world-object-x-offset 0.25
+python wad_extractor.py level.wad --world-object-z-offset -0.50
+python wad_extractor.py level.wad --world-object-y-offset 0.10
+```
+
+These options are intended for calibration while the remaining STPC object-definition
+fields are being reversed.  The exact values used are written to:
+
+```text
+world/stpc_instance_transforms.csv
+world/summary.json
+```
+
+Recommended workflow:
+
+1. Open `world/combined.obj` in Blender or Noesis.
+2. Pick a visible prop with an obvious contact point, for example a crate, gate,
+   post, bridge support, or platform corner.
+3. Measure the delta needed to move the object onto the matching terrain feature.
+4. Re-export with `--world-object-x-offset`, `--world-object-y-offset`, and/or
+   `--world-object-z-offset`.
+5. Send the offset values back with a screenshot if the same residual offset is
+   consistent across the level; that lets us decide whether the correction is a
+   global coordinate-origin adjustment or a still-undecoded per-object pivot field.
+
+### Validated object/terrain alignment offset
+
+The stable world exporter uses a default object-space Z correction of `+1.5`:
+
+```bash
+python wad_extractor.py level.wad --world-object-z-offset 1.5
+```
+
+This is now the default, but the flag remains available for experiments. The correction is applied only to STPC object instances after the MAP object position, object yaw, local STPC Z conversion, and centered world mirror. `terrain.obj` is not moved by this offset.
+
+Current best explanation: this is probably an object-anchor/pivot correction from the STPC object-definition scripting layer, not a MAP position error. The MAP object XYZ fields align globally, and the executable contains a STPC definition resolver (`sub_553630`) that converts offsets inside object-definition bytecode to runtime pointers before executing that definition. Our exporter currently scans those definitions for mesh offsets, but it does not yet execute the nearby placement/anchor opcodes. The consistent `+1.5` correction likely represents one of those definition-level local placement constants or a collision/render pivot convention used by the engine.
