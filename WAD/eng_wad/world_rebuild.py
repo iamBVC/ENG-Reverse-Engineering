@@ -727,7 +727,7 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
     return out
 
 
-def write_world_mtl(path: Path, materials: list[RuntimeMaterial] | None = None) -> None:
+def write_world_mtl(path: Path, materials: list[RuntimeMaterial] | None = None, *, texture_prefix: str = "textures") -> None:
     """Write world materials.
 
     The ordinary terrain/object OBJs still use simple diffuse colours.  When a
@@ -749,13 +749,63 @@ def write_world_mtl(path: Path, materials: list[RuntimeMaterial] | None = None) 
             f.write("\n")
             f.write(f"newmtl trak_mat_{i:04d}\nKd {shade:.3f} {shade:.3f} {shade:.3f}\nKa 0 0 0\n")
             if m is not None and not m.is_color_only:
-                f.write(f"map_Kd textures/texture_{m.texture_index:02d}.png\n")
+                f.write(f"map_Kd {texture_prefix}/texture_{m.texture_index:02d}.png\n")
                 f.write(f"# material_rect_texels={m.x0},{m.y0},{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
             f.write("\n")
 
 
 
-def _material_uvs_for_triangle(mat: RuntimeMaterial | None, *, tex_w: int = 256, tex_h: int = 256, flip_v_for_obj: bool = True) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+
+TERRAIN_UV_VARIANTS = (
+    "default",
+    "flip_u",
+    "flip_v",
+    "flip_uv",
+    "rot90_cw",
+    "rot90_ccw",
+    "rot180",
+    "diag_alt",
+)
+
+
+def _apply_terrain_uv_variant(
+    uvs: tuple[tuple[float, float], tuple[float, float], tuple[float, float]],
+    variant: str,
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Return one experimental UV corner-order variant.
+
+    The EXE confirms which texture page and rectangle each material uses, but
+    the terrain triangle records still need one final corner-order convention.
+    These variants keep the same confirmed rectangle and only change which
+    corner is assigned to each triangle vertex.
+    """
+    a, b, c = uvs
+    if variant == "default":
+        return (a, b, c)
+    if variant == "flip_u":
+        return (b, a, c)
+    if variant == "flip_v":
+        return (c, b, a)
+    if variant == "flip_uv":
+        return (b, c, a)
+    if variant == "rot90_cw":
+        return (c, a, b)
+    if variant == "rot90_ccw":
+        return (b, c, a)
+    if variant == "rot180":
+        return (c, a, b)
+    if variant == "diag_alt":
+        return (a, c, b)
+    return (a, b, c)
+
+def _material_uvs_for_triangle(
+    mat: RuntimeMaterial | None,
+    *,
+    tex_w: int = 256,
+    tex_h: int = 256,
+    flip_v_for_obj: bool = True,
+    variant: str = "default",
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
     """Return a conservative per-triangle UV assignment for a material rectangle.
 
     The EXE confirms the material rectangle and UV range, but not yet the exact
@@ -769,7 +819,8 @@ def _material_uvs_for_triangle(mat: RuntimeMaterial | None, *, tex_w: int = 256,
         v0, v1 = 1.0 - v0, 1.0 - v1
     # Default triangle corner order.  If textures appear rotated/flipped, the
     # next target is the face flag/unknown field that selects this orientation.
-    return ((u0, v1), (u1, v1), (u0, v0))
+    base = ((u0, v1), (u1, v1), (u0, v0))
+    return _apply_terrain_uv_variant(base, variant)
 
 
 def write_textured_terrain_probe_obj(
@@ -782,6 +833,8 @@ def write_textured_terrain_probe_obj(
     flip_z: bool = False,
     terrain_yaw_sign: int = 1,
     mirror_terrain_z: bool = True,
+    uv_variant: str = "default",
+    mtl_name: str = "world.mtl",
 ) -> Path:
     """Write a first textured-terrain OBJ probe using confirmed material rects.
 
@@ -821,8 +874,9 @@ def write_textured_terrain_probe_obj(
     terrain_z_mirror_center = ((z_min + z_max) * 0.5) if (mirror_terrain_z and z_min is not None and z_max is not None) else None
 
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write("mtllib world.mtl\n")
+        f.write(f"mtllib {mtl_name}\n")
         f.write("# Textured terrain probe. Texture page + material rectangle are EXE-confirmed.\n")
+        f.write(f"# UV variant: {uv_variant}\n")
         f.write("# Per-triangle UV corner orientation is still experimental.\n")
         vbase = 1
         vtbase = 1
@@ -867,7 +921,7 @@ def write_textured_terrain_probe_obj(
                     current_mat = tri.material_index
                     f.write(f"usemtl trak_mat_{current_mat:04d}\n")
                 tex_w = tex_h = 256
-                uvs = _material_uvs_for_triangle(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=True)
+                uvs = _material_uvs_for_triangle(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=True, variant=uv_variant)
                 for u, v in uvs:
                     f.write(f"vt {u:.9g} {v:.9g}\n")
                 a = vbase + tri.i0
@@ -877,6 +931,65 @@ def write_textured_terrain_probe_obj(
                 vtbase += 3
             vbase += rec.a_count
     return path
+
+
+
+def write_terrain_uv_variant_objs(
+    *,
+    out_dir: Path,
+    mapx: MapFullExe,
+    trak: TrakFile,
+    materials: list[RuntimeMaterial],
+    scale: float = 1.0,
+    flip_z: bool = False,
+    terrain_yaw_sign: int = 1,
+    mirror_terrain_z: bool = True,
+) -> Path:
+    """Write textured terrain OBJ variants with working MTL/PNG paths.
+
+    Earlier variant exports reused a parent MTL path.  Many OBJ viewers resolve
+    ``map_Kd`` paths relative to the OBJ, not the MTL, so the textures could
+    appear missing even though the OBJ had vt/usemtl records.  This folder gets
+    its own MTL whose texture paths are explicitly relative to the variant OBJ
+    files: ``../textures/texture_XX.png``.
+    """
+    variants_dir = out_dir / "terrain_uv_variants"
+    variants_dir.mkdir(parents=True, exist_ok=True)
+
+    # Keep the variant folder self-contained.  Some OBJ viewers resolve map_Kd
+    # relative to the OBJ, some relative to the MTL, and some reject parent
+    # directory references such as ../textures entirely.  The working
+    # terrain_textured_probe.obj lives beside world.mtl and uses
+    # textures/texture_XX.png, so mirror that layout here: each variant folder
+    # gets its own textures/ directory and MTL entries that never leave the
+    # folder.
+    copy_textures_for_world(out_dir / "textures", variants_dir / "textures")
+    write_world_mtl(variants_dir / "world_uv_variants.mtl", materials, texture_prefix="textures")
+
+    rows = []
+    for variant in TERRAIN_UV_VARIANTS:
+        obj_path = variants_dir / f"terrain_textured_{variant}.obj"
+        write_textured_terrain_probe_obj(
+            path=obj_path,
+            mapx=mapx,
+            trak=trak,
+            materials=materials,
+            scale=scale,
+            flip_z=flip_z,
+            terrain_yaw_sign=terrain_yaw_sign,
+            mirror_terrain_z=mirror_terrain_z,
+            uv_variant=variant,
+            mtl_name="world_uv_variants.mtl",
+        )
+        rows.append({
+            "variant": variant,
+            "obj": obj_path.name,
+            "mtl": "world_uv_variants.mtl",
+            "texture_path_style": "textures/texture_XX.png",
+        })
+
+    _write_csv(variants_dir / "uv_variants.csv", ["variant", "obj", "mtl", "texture_path_style"], rows)
+    return variants_dir
 
 
 # ---------------------------------------------------------------------------
@@ -1148,6 +1261,8 @@ def export_world(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 1.5,
+    world_terrain_uv_variant: str = "default",
+    write_terrain_uv_variants: bool = True,
 ) -> WorldRebuildResult:
     """Export the reconstructed level world into `out_dir`.
 
@@ -1208,11 +1323,29 @@ def export_world(
                 flip_z=flip_z,
                 terrain_yaw_sign=terrain_yaw_sign,
                 mirror_terrain_z=mirror_terrain_z,
+                uv_variant=world_terrain_uv_variant,
+                mtl_name="world.mtl",
             )
         except Exception:
             # Keep the stable geometry export even if the experimental textured
             # probe hits an unexpected material row.
             textured_terrain_obj = None
+
+    terrain_uv_variants_dir = None
+    if terrain_obj is not None and materials and write_terrain_uv_variants:
+        try:
+            terrain_uv_variants_dir = write_terrain_uv_variant_objs(
+                out_dir=out_dir,
+                mapx=mapx,
+                trak=trak,
+                materials=materials,
+                scale=scale,
+                flip_z=flip_z,
+                terrain_yaw_sign=terrain_yaw_sign,
+                mirror_terrain_z=mirror_terrain_z,
+            )
+        except Exception:
+            terrain_uv_variants_dir = None
 
     terrain_z_min, terrain_z_max = _obj_bounds_z(terrain_obj) if terrain_obj else (None, None)
     object_z_mirror_center = None
@@ -1368,6 +1501,8 @@ def export_world(
         "unique_meshes_referenced": len({h.mesh_index for h in hits}),
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
         "terrain_textured_probe_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
+        "terrain_textured_uv_variant": world_terrain_uv_variant,
+        "terrain_uv_variants_dir": str(terrain_uv_variants_dir.name) if terrain_uv_variants_dir else None,
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
         "mirror_terrain_z": mirror_terrain_z,

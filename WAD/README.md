@@ -845,3 +845,35 @@ world/
 ```
 
 `terrain_textured_probe.obj` is an experimental UV validation export. Texture page and source rectangle are confirmed; per-triangle UV corner orientation is still being reverse-engineered.
+
+## Terrain UV variant texture-path fix
+
+`world/terrain_textured_probe.obj` and every file in `world/terrain_uv_variants/` now use material files that point to visible PNG textures.
+
+The variant folder is self-contained because some OBJ viewers do not resolve parent-relative texture paths reliably:
+
+```text
+world/terrain_uv_variants/
+  world_uv_variants.mtl
+  textures/
+    texture_00.png
+    texture_01.png
+    ...
+  terrain_textured_default.obj
+  terrain_textured_flip_u.obj
+  ...
+```
+
+Each variant OBJ references:
+
+```text
+mtllib world_uv_variants.mtl
+```
+
+and `world_uv_variants.mtl` uses:
+
+```text
+map_Kd textures/texture_XX.png
+```
+
+This mirrors the working `world/terrain_textured_probe.obj` behavior while keeping the UV variants easy to open independently.

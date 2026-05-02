@@ -82,6 +82,8 @@ def extract_wad(
     world_object_x_offset: float = 0.0,
     world_object_y_offset: float = 0.0,
     world_object_z_offset: float = 1.5,
+    world_terrain_uv_variant: str = "default",
+    world_write_terrain_uv_variants: bool = True,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -257,6 +259,8 @@ def extract_wad(
                     object_x_offset=world_object_x_offset,
                     object_y_offset=world_object_y_offset,
                     object_z_offset=world_object_z_offset,
+                    world_terrain_uv_variant=world_terrain_uv_variant,
+                    write_terrain_uv_variants=world_write_terrain_uv_variants,
                 )
                 print(
                     f"  → world/ ({len(world.object_instances)} MAP objects, "
@@ -348,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-object-x-offset", type=float, default=0.0, help="final world-space X offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-y-offset", type=float, default=0.0, help="final world-space Y offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-z-offset", type=float, default=1.5, help="final world-space Z offset applied only to STPC object instances after all conversion/mirroring; default 1.5 is the visually validated object/terrain alignment correction")
+    parser.add_argument("--world-terrain-uv-variant", choices=("default", "flip_u", "flip_v", "flip_uv", "rot90_cw", "rot90_ccw", "rot180", "diag_alt"), default="default", help="UV corner-order variant used for world/terrain_textured_probe.obj")
+    parser.add_argument("--no-world-terrain-uv-variants", action="store_true", help="skip writing world/terrain_uv_variants/ textured OBJ comparison set")
 
     args = parser.parse_args(argv)
 
@@ -401,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
             world_object_x_offset=args.world_object_x_offset,
             world_object_y_offset=args.world_object_y_offset,
             world_object_z_offset=args.world_object_z_offset,
+            world_terrain_uv_variant=args.world_terrain_uv_variant,
+            world_write_terrain_uv_variants=not args.no_world_terrain_uv_variants,
             verbose=not args.quiet,
         )
         if not ok:
