@@ -1,5 +1,5 @@
 """
-world_rebuild.py — experimental world reconstruction probe.
+world_rebuild.py — confirmed TRAK/MAP/STPC world reconstruction exporter.
 
 This module combines the parts of the WAD that are now structurally decoded:
 
@@ -15,18 +15,17 @@ reverse-engineering notes.  At runtime the game converts it to:
 where dword_6D9DBC is the raw STPC chunk base.  Many of those object-definition
 records contain 32-bit values that match decoded STPC mesh-record offsets.
 
-This exporter is deliberately conservative:
+This exporter is deliberately conservative around unresolved STPC object-definition details:
 
 * It only instances STPC meshes when an exact little-endian u32 match to a
   decoded mesh-record offset is found inside the object's STPC definition scan
   window.
 * It uses the confirmed MAP object XYZ as translation.
-* It does NOT apply rotation or scale by default, because those fields are not
-  fully proven yet.  Candidate angle/rotation fields are exported in CSV so they
-  can be tested visually.
-
-The output is meant to guide the next reverse-engineering step, not to claim a
-perfect final world renderer.
+* It applies the confirmed MAP tile placement/yaw to TRAK terrain.
+* It applies the confirmed MAP object XYZ and the validated coordinate-basis fix
+  to STPC object candidates.
+* STPC object scale and full object-definition semantics are still unresolved;
+  diagnostic CSV files preserve the raw fields used by the exporter.
 """
 
 from __future__ import annotations
@@ -285,6 +284,7 @@ def _write_trak_record_instance_obj(
     tz: float,
     yaw_units: int = 0,
     yaw_sign: int = 1,
+    terrain_z_mirror_center: float | None = None,
     scale: float,
     flip_z: bool,
     vertex_base: int,
@@ -301,12 +301,16 @@ def _write_trak_record_instance_obj(
         return vertex_base
     f.write(f"\no {name}\n")
     yaw = _angle4096_to_radians(yaw_units, sign=yaw_sign) if yaw_units else 0.0
-    f.write(f"# TRAK record {record.index}; MAP tile translation={tx:.9g},{ty:.9g},{tz:.9g}; yaw_units={yaw_units}; yaw_sign={yaw_sign}\n")
+    f.write(f"# TRAK record {record.index}; MAP tile translation={tx:.9g},{ty:.9g},{tz:.9g}; yaw_units={yaw_units}; yaw_sign={yaw_sign}; terrain_z_mirror_center={terrain_z_mirror_center}\n")
     for v in record.table_a:
         rx, rz = _rotate_xz(v.x, v.z, yaw) if yaw else (v.x, v.z)
-        f.write(_obj_vertex_line(tx + rx, ty + v.y, tz + rz, scale=scale, flip_z=flip_z))
+        raw_z = tz + rz
+        out_z = (2.0 * terrain_z_mirror_center - raw_z) if terrain_z_mirror_center is not None else raw_z
+        f.write(_obj_vertex_line(tx + rx, ty + v.y, out_z, scale=scale, flip_z=flip_z))
     for v in record.table_a:
         rnx, rnz = _rotate_xz(v.nx, v.nz, yaw) if yaw else (v.nx, v.nz)
+        if terrain_z_mirror_center is not None:
+            rnz = -rnz
         f.write(_obj_normal_line(rnx, v.ny, rnz, flip_z=flip_z))
     current_mat = None
     for tri in record.table_b:
@@ -332,6 +336,7 @@ def write_map_placed_trak_terrain_obj(
     scale: float = 1.0,
     flip_z: bool = False,
     terrain_yaw_sign: int = 1,
+    mirror_terrain_z: bool = True,
     write_per_tile_dir: Path | None = None,
 ) -> tuple[Path, int, int]:
     """Write world-placed terrain by applying MAP tile XYZ to TRAK meshes.
@@ -344,10 +349,42 @@ def write_map_placed_trak_terrain_obj(
     path.parent.mkdir(parents=True, exist_ok=True)
     placed = 0
     skipped = 0
+
+    # Compute the raw terrain Z center before writing.  A simple sign flip around
+    # world origin can separate terrain from MAP/STPC objects.  The visual
+    # validation showed the terrain should instead be mirrored inside its own
+    # world bounds.
+    z_min = None
+    z_max = None
+    if mirror_terrain_z:
+        for tile_i, tile in enumerate(mapx.tiles):
+            if tile_i >= len(mapx.tile_trak_indices):
+                continue
+            rec_i = mapx.tile_trak_indices[tile_i]
+            if rec_i < 0 or rec_i >= len(trak.records):
+                continue
+            rec = trak.records[rec_i]
+            if not rec.table_a:
+                continue
+            if tile_i < len(mapx.tile_defs):
+                td = mapx.tile_defs[tile_i]
+                tz0 = -_fixed12_signed_from_u32(td.u32_24)
+                yaw_units0 = td.u32_04 & 0xFFFF
+            else:
+                tz0 = tile.z
+                yaw_units0 = 0
+            yaw0 = _angle4096_to_radians(yaw_units0, sign=terrain_yaw_sign) if yaw_units0 else 0.0
+            for vv in rec.table_a:
+                _, rz0 = _rotate_xz(vv.x, vv.z, yaw0) if yaw0 else (vv.x, vv.z)
+                zz = tz0 + rz0
+                z_min = zz if z_min is None else min(z_min, zz)
+                z_max = zz if z_max is None else max(z_max, zz)
+    terrain_z_mirror_center = ((z_min + z_max) * 0.5) if (mirror_terrain_z and z_min is not None and z_max is not None) else None
+
     with path.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
         f.write("# World-placed TRAK terrain.  Each MAP tile translates one TRAK record mesh.\n")
-        f.write("# This replaces the old local-only terrain_trak export that stacked sectors at the origin.\n")
+        f.write("# Terrain Z is mirrored around the terrain center by default so it matches the validated MAP/STPC object coordinate basis without moving the level away from its original bounds.\n")
         vbase = 1
         for tile_i, tile in enumerate(mapx.tiles):
             if tile_i >= len(mapx.tile_trak_indices):
@@ -375,7 +412,7 @@ def write_map_placed_trak_terrain_obj(
                 yaw_units = int(tile.unk_float) if isinstance(tile.unk_float, int) else 0
             vbase = _write_trak_record_instance_obj(
                 f, rec, name=name, tx=tx, ty=ty, tz=tz, yaw_units=yaw_units, yaw_sign=terrain_yaw_sign,
-                scale=scale, flip_z=flip_z, vertex_base=vbase,
+                terrain_z_mirror_center=terrain_z_mirror_center, scale=scale, flip_z=flip_z, vertex_base=vbase,
             )
             if vbase != before:
                 placed += 1
@@ -406,7 +443,7 @@ def write_map_placed_trak_terrain_obj(
                 _write_trak_record_instance_obj(
                     f, rec, name=f"tile_{tile_i:04d}_trak_{rec_i:03d}",
                     tx=tx, ty=ty, tz=tz, yaw_units=yaw_units, yaw_sign=terrain_yaw_sign,
-                    scale=scale, flip_z=flip_z, vertex_base=1,
+                    terrain_z_mirror_center=terrain_z_mirror_center, scale=scale, flip_z=flip_z, vertex_base=1,
                 )
     return path, placed, skipped
 
@@ -423,31 +460,43 @@ def _write_instanced_mesh_obj(
     local_z_sign: int = -1,
     apply_object_yaw: bool = True,
     object_yaw_sign: int = 1,
+    object_z_mirror_center: float | None = None,
 ) -> int:
     """Append one STPC mesh instance to an open OBJ file.
 
-    MAP object positions store Z in the opposite sign from MAP terrain tiles.
-    For world reconstruction we therefore default to object_z_sign=-1.  STPC
-    local mesh Z is also default-negated so the object geometry uses the same
-    basis as TRAK terrain.  These are still explicit parameters because this
-    part is being visually validated.
+    Append one STPC mesh instance to an open OBJ file.
+
+    Important coordinate note: after visual validation, terrain.obj is the
+    reference orientation.  MAP object positions are still correct in magnitude
+    but need the same centered Z-space mirror as the terrain/object basis when
+    written into the combined world.  object_z_mirror_center mirrors the whole
+    transformed STPC vertex around the level's Z center, preserving level bounds
+    while correcting the left/right mirrored placement.
     """
     f.write(f"\no {object_name}\n")
     f.write(f"# MAP object {inst.object_index}; STPC mesh {mesh.index}; mesh_offset=0x{mesh.offset:08X}\n")
-    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={inst.small_04 if apply_object_yaw else 0}\n")
+    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={inst.small_04 if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}\n")
     yaw = _angle4096_to_radians(inst.small_04, sign=object_yaw_sign) if apply_object_yaw else 0.0
     base_x = inst.world_x
     base_y = inst.world_y
     base_z = object_z_sign * inst.world_z
+    mirror_object_z = object_z_mirror_center is not None
     for v in mesh.vertices:
         lx = v.x
         lz = local_z_sign * v.z
         rx, rz = _rotate_xz(lx, lz, yaw) if yaw else (lx, lz)
-        f.write(_obj_vertex_line(base_x + rx, base_y + v.y, base_z + rz, scale=scale, flip_z=flip_z))
+        out_x = base_x + rx
+        out_y = base_y + v.y
+        out_z = base_z + rz
+        if mirror_object_z:
+            out_z = 2.0 * object_z_mirror_center - out_z
+        f.write(_obj_vertex_line(out_x, out_y, out_z, scale=scale, flip_z=flip_z))
     for v in mesh.vertices:
         nx = v.nx
         nz = local_z_sign * v.nz
         rnx, rnz = _rotate_xz(nx, nz, yaw) if yaw else (nx, nz)
+        if mirror_object_z:
+            rnz = -rnz
         f.write(_obj_normal_line(rnx, v.ny, rnz, flip_z=flip_z))
     current_mat: int | None = None
     for tri in mesh.triangles:
@@ -478,6 +527,7 @@ def write_instanced_stpc_objs(
     local_z_sign: int = -1,
     apply_object_yaw: bool = True,
     object_yaw_sign: int = 1,
+    object_z_mirror_center: float | None = None,
 ) -> Path | None:
     """Write combined and single-hit STPC instance OBJ files.
 
@@ -487,12 +537,12 @@ def write_instanced_stpc_objs(
     meshes merged together.
 
     This version always writes:
-      * stpc_instances_combined.obj        — all candidate hits together
-      * stpc_instances_by_hit/*.obj        — exactly one mesh per file
-      * stpc_instances_primary_only.obj    — only the first/earliest hit per object
+      * objects_all_candidates.obj  — all candidate hits together
+      * objects_by_hit/*.obj        — exactly one mesh per file
+      * objects_primary.obj         — only the first/earliest hit per object
 
     If write_per_object is true it also writes grouped files for comparison in
-    stpc_instances_grouped_by_object/, but those are explicitly named grouped.
+    diagnostics/objects_grouped_by_object/, but those are explicitly named grouped.
     """
     if not hits:
         return None
@@ -501,11 +551,11 @@ def write_instanced_stpc_objs(
     by_mesh = {m.index: m for m in meshes}
 
     # Combined file: one object/group per MAP-object/mesh-hit pair.
-    combined = out_dir / "stpc_instances_combined.obj"
+    combined = out_dir / "objects_all_candidates.obj"
     with combined.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
-        f.write("# Experimental: STPC meshes translated to confirmed MAP object XYZ.\n")
-        f.write("# Rotation and scale are not applied yet. Validate visually.\n")
+        f.write("# STPC meshes translated to confirmed MAP object XYZ.\n")
+        f.write("# Coordinate-basis fix and experimental yaw are applied; scale is still unresolved.\n")
         vbase = 1
         for hit in hits:
             inst = by_object.get(hit.object_index)
@@ -513,10 +563,10 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{inst.object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
 
     # Single-hit files: exactly one STPC mesh per OBJ file.
-    by_hit_dir = out_dir / "stpc_instances_by_hit"
+    by_hit_dir = out_dir / "objects_by_hit"
     by_hit_dir.mkdir(parents=True, exist_ok=True)
     for hit in hits:
         inst = by_object.get(hit.object_index)
@@ -532,6 +582,7 @@ def write_instanced_stpc_objs(
                 scale=scale, flip_z=flip_z, vertex_base=1,
                 object_z_sign=object_z_sign, local_z_sign=local_z_sign,
                 apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign,
+                object_z_mirror_center=object_z_mirror_center,
             )
 
     # Primary-only file: first/earliest hit per object.  This is often the most
@@ -539,7 +590,7 @@ def write_instanced_stpc_objs(
     first_by_object: dict[int, StpcMeshReferenceHit] = {}
     for hit in sorted(hits, key=lambda h: (h.object_index, h.hit_relative_offset, h.mesh_index)):
         first_by_object.setdefault(hit.object_index, hit)
-    primary = out_dir / "stpc_instances_primary_only.obj"
+    primary = out_dir / "objects_primary.obj"
     with primary.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
         f.write("# One earliest mesh-reference hit per MAP object.\n")
@@ -550,10 +601,10 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{object_index:03d}_primary_mesh_{mesh.index:03d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
 
     if write_per_object:
-        grouped_dir = out_dir / "stpc_instances_grouped_by_object"
+        grouped_dir = out_dir / "diagnostics" / "objects_grouped_by_object"
         grouped_dir.mkdir(parents=True, exist_ok=True)
         hits_by_object: dict[int, list[StpcMeshReferenceHit]] = {}
         for h in hits:
@@ -564,9 +615,9 @@ def write_instanced_stpc_objs(
                 continue
             path = grouped_dir / f"object_{object_index:03d}_all_candidate_hits.obj"
             with path.open("w", encoding="utf-8", newline="\n") as f:
-                f.write("mtllib ../world.mtl\n")
+                f.write("mtllib ../../world.mtl\n")
                 f.write(f"# GROUPED candidate STPC hits for MAP object {object_index}.\n")
-                f.write("# This may intentionally contain multiple meshes; use stpc_instances_by_hit/ for singular meshes.\n")
+                f.write("# This may intentionally contain multiple meshes; use objects_by_hit/ for singular meshes.\n")
                 f.write(f"# position={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}\n")
                 vbase = 1
                 for hit in sorted(obj_hits, key=lambda h: (h.hit_relative_offset, h.mesh_index)):
@@ -574,22 +625,45 @@ def write_instanced_stpc_objs(
                     if mesh is None:
                         continue
                     name = f"object_{object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign)
+                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center)
     return combined
 
 
-def write_world_combined_probe_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
+
+
+def _obj_bounds_z(path: Path) -> tuple[float | None, float | None]:
+    """Return min/max unscaled OBJ Z coordinate from vertex lines in an OBJ file."""
+    if not path.exists():
+        return None, None
+    z_min = None
+    z_max = None
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if not line.startswith("v "):
+                continue
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            try:
+                z = float(parts[3])
+            except ValueError:
+                continue
+            z_min = z if z_min is None else min(z_min, z)
+            z_max = z if z_max is None else max(z_max, z)
+    return z_min, z_max
+
+def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
     """Create a tiny OBJ wrapper that references terrain and instance geometry.
 
     OBJ cannot include other OBJ files, so this function concatenates the two
     generated OBJs when both exist.  It rewrites face indices while copying the
     second file to keep the combined OBJ valid.
     """
-    terrain = world_dir / "terrain_trak.obj"
-    inst = world_dir / "stpc_instances_combined.obj"
+    terrain = world_dir / "terrain.obj"
+    inst = world_dir / "objects_all_candidates.obj"
     if not inst.exists() and not terrain.exists():
         return None
-    out = world_dir / "world_combined_probe.obj"
+    out = world_dir / "combined.obj"
 
     vertex_offset = 0
     normal_offset = 0
@@ -628,9 +702,9 @@ def write_world_combined_probe_obj(world_dir: Path, *, include_terrain: bool = T
 
     with out.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
-        f.write("# Combined experimental world probe: TRAK terrain + translated STPC candidates.\n")
+        f.write("# Combined reconstructed world: TRAK terrain + translated STPC object candidates.\n")
         if include_terrain and terrain.exists():
-            f.write("\no terrain_trak\n")
+            f.write("\no terrain\n")
             copy_obj(terrain, f, add_offsets=True)
         if inst.exists():
             f.write("\n# --- STPC translated candidate instances ---\n")
@@ -735,7 +809,7 @@ document.getElementById('fit').onclick=fit; resize(); fit();
 # Public export API
 # ---------------------------------------------------------------------------
 
-def export_world_rebuild_probe(
+def export_world(
     *,
     out_dir: Path,
     mapx: MapFullExe,
@@ -748,16 +822,23 @@ def export_world_rebuild_probe(
     write_terrain: bool = True,
     write_per_object: bool = True,
     terrain_yaw_sign: int = 1,
+    mirror_terrain_z: bool = True,
     stpc_object_z_sign: int = -1,
     stpc_local_z_sign: int = -1,
     apply_stpc_object_yaw: bool = True,
     stpc_object_yaw_sign: int = 1,
+    mirror_stpc_objects_z: bool = True,
 ) -> WorldRebuildResult:
-    """Export a first-pass reconstructed world probe into `out_dir`.
+    """Export the reconstructed level world into `out_dir`.
 
-    The result combines confirmed terrain geometry with candidate STPC object
-    instances.  Treat STPC instance placement as experimental until rotation,
-    scale, and the full STPC object-definition language are decoded.
+    Confirmed pieces:
+    * TRAK terrain geometry is placed with MAP tile position/yaw and mirrored on Z around the terrain center to match MAP/STPC object space.
+    * STPC object candidates are translated with MAP object XYZ.
+    * STPC object candidates are mirrored around the same world Z center by default, matching the visually validated terrain orientation.
+
+    Still unresolved:
+    * Full STPC object-definition semantics.
+    * Object scale and material/texture assignment.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     write_world_mtl(out_dir / "world.mtl")
@@ -781,7 +862,7 @@ def export_world_rebuild_probe(
         # `terrain_trak.obj` is now the MAP-placed terrain.  The previous local
         # only export stacked every TRAK record around the origin and is kept as
         # a diagnostic name only through the dedicated TRAK folder.
-        terrain_obj = out_dir / "terrain_trak.obj"
+        terrain_obj = out_dir / "terrain.obj"
         _, terrain_tiles_written, terrain_tiles_skipped = write_map_placed_trak_terrain_obj(
             path=terrain_obj,
             mapx=mapx,
@@ -789,8 +870,13 @@ def export_world_rebuild_probe(
             scale=scale,
             flip_z=flip_z,
             terrain_yaw_sign=terrain_yaw_sign,
-            write_per_tile_dir=out_dir / "terrain_tiles_by_map_tile",
+            write_per_tile_dir=out_dir / "terrain_tiles",
         )
+
+    terrain_z_min, terrain_z_max = _obj_bounds_z(terrain_obj) if terrain_obj else (None, None)
+    object_z_mirror_center = None
+    if mirror_stpc_objects_z and terrain_z_min is not None and terrain_z_max is not None:
+        object_z_mirror_center = (terrain_z_min + terrain_z_max) * 0.5
 
     _write_marker_cross_obj(out_dir / "map_object_markers.obj", instances, hits_by_object, scale=scale, flip_z=flip_z)
 
@@ -798,14 +884,15 @@ def export_world_rebuild_probe(
     # are intentionally redundant with map_full/ because they show the exporter
     # interpretation, not just the raw file fields.
     _write_csv(out_dir / "terrain_tile_transforms.csv", [
-        "tile_index","trak_record_index","tx","ty","tz","yaw_units_4096","yaw_degrees","source"
+        "tile_index","trak_record_index","tx","ty","raw_tz","terrain_z_mirror_enabled","yaw_units_4096","yaw_degrees","source"
     ], (
         {
             "tile_index": i,
             "trak_record_index": mapx.tile_trak_indices[i] if i < len(mapx.tile_trak_indices) else -1,
             "tx": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_16) if i < len(mapx.tile_defs) else t.x,
             "ty": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_20) if i < len(mapx.tile_defs) else t.y,
-            "tz": -_fixed12_signed_from_u32(mapx.tile_defs[i].u32_24) if i < len(mapx.tile_defs) else t.z,
+            "raw_tz": -_fixed12_signed_from_u32(mapx.tile_defs[i].u32_24) if i < len(mapx.tile_defs) else t.z,
+            "terrain_z_mirror_enabled": mirror_terrain_z,
             "yaw_units_4096": (mapx.tile_defs[i].u32_04 & 0xFFFF) if i < len(mapx.tile_defs) else 0,
             "yaw_degrees": (((mapx.tile_defs[i].u32_04 & 0xFFFF) / 4096.0) * 360.0 * terrain_yaw_sign) if i < len(mapx.tile_defs) else 0.0,
             "source": "tile_defs_24",
@@ -814,7 +901,7 @@ def export_world_rebuild_probe(
 
     _write_csv(out_dir / "stpc_instance_transforms.csv", [
         "object_index","raw_x","raw_y","raw_z","render_x","render_y","render_z",
-        "object_z_sign","local_z_sign","yaw_units_4096","yaw_degrees","apply_yaw"
+        "object_z_sign","local_z_sign","object_z_mirror_enabled","object_z_mirror_center","yaw_units_4096","yaw_degrees","apply_yaw"
     ], (
         {
             "object_index": o.object_index,
@@ -823,9 +910,11 @@ def export_world_rebuild_probe(
             "raw_z": o.world_z,
             "render_x": o.world_x,
             "render_y": o.world_y,
-            "render_z": stpc_object_z_sign * o.world_z,
+            "render_z": (2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z,
             "object_z_sign": stpc_object_z_sign,
             "local_z_sign": stpc_local_z_sign,
+            "object_z_mirror_enabled": object_z_mirror_center is not None,
+            "object_z_mirror_center": object_z_mirror_center if object_z_mirror_center is not None else "",
             "yaw_units_4096": o.small_04,
             "yaw_degrees": (o.small_04 / 4096.0) * 360.0 * stpc_object_yaw_sign if apply_stpc_object_yaw else 0.0,
             "apply_yaw": apply_stpc_object_yaw,
@@ -844,8 +933,9 @@ def export_world_rebuild_probe(
         local_z_sign=stpc_local_z_sign,
         apply_object_yaw=apply_stpc_object_yaw,
         object_yaw_sign=stpc_object_yaw_sign,
+        object_z_mirror_center=object_z_mirror_center,
     )
-    world_combined = write_world_combined_probe_obj(out_dir)
+    world_combined = write_world_combined_obj(out_dir)
 
     # CSV: all MAP object placements.
     _write_csv(out_dir / "map_object_instances.csv", [
@@ -932,17 +1022,20 @@ def export_world_rebuild_probe(
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
+        "mirror_terrain_z": mirror_terrain_z,
         "stpc_object_z_sign": stpc_object_z_sign,
         "stpc_local_z_sign": stpc_local_z_sign,
+        "mirror_stpc_objects_z": mirror_stpc_objects_z,
+        "stpc_object_z_mirror_center": object_z_mirror_center,
         "apply_stpc_object_yaw": apply_stpc_object_yaw,
         "stpc_object_yaw_sign": stpc_object_yaw_sign,
         "terrain_tiles_written": terrain_tiles_written,
         "terrain_tiles_skipped": terrain_tiles_skipped,
-        "stpc_instances_combined_obj": str(combined_obj.name) if combined_obj else None,
-        "stpc_single_mesh_folder": "stpc_instances_by_hit/",
-        "stpc_primary_only_obj": "stpc_instances_primary_only.obj" if hits else None,
-        "world_combined_probe_obj": str(world_combined.name) if world_combined else None,
-        "important_note": "Terrain now applies MAP tile yaw. STPC instances use MAP object XYZ with Z converted into terrain space and experimental object yaw from small_04. Scale is still not decoded; use single-hit files for validation.",
+        "objects_all_candidates_obj": str(combined_obj.name) if combined_obj else None,
+        "objects_by_hit_folder": "objects_by_hit/",
+        "objects_primary_obj": "objects_primary.obj" if hits else None,
+        "combined_obj": str(world_combined.name) if world_combined else None,
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, the same centered Z mirror, and experimental object yaw from small_04. Scale, materials, and full object-definition semantics are still unresolved; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")
@@ -956,3 +1049,12 @@ def export_world_rebuild_probe(
         combined_obj_path=combined_obj,
         terrain_obj_path=terrain_obj,
     )
+
+
+# Backwards-compatible name used by earlier project patches.
+def export_world_rebuild_probe(**kwargs):
+    return export_world(**kwargs)
+
+# Backwards-compatible internal name.
+def write_world_combined_probe_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
+    return write_world_combined_obj(world_dir, include_terrain=include_terrain)

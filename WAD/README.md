@@ -17,7 +17,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can:
 - parse the `LGHT` chunk into `lights.csv`
 - decode the `TRAK` chunk into records, vertex/triangle tables, OBJ surfaces, and an HTML viewer
 - export `STPC` static geometry as OBJ meshes
-- export a `world/` folder that combines TRAK terrain with experimental MAP-object → STPC mesh instances
+- export a `world/` folder that reconstructs the level world from TRAK terrain, MAP tile/object placement, and STPC mesh candidates
 - preserve raw binary chunks that are not fully decoded yet
 
 ## Installation
@@ -62,7 +62,7 @@ Most extraction features are enabled by default.  Use these flags to disable par
 --no-trak             skip TRAK CSV/OBJ/viewer export
 --no-lights           skip LGHT light CSV export
 --no-raw              do not export raw undecoded chunks
---no-world-rebuild    skip experimental TRAK + MAP-object + STPC world rebuild probe
+--no-world            skip reconstructed TRAK + MAP-object + STPC world export
 --world-probe          also run the older Section-4 instance-hunting diagnostics, now deprecated
 --quiet               reduce per-record progress output
 ```
@@ -170,11 +170,12 @@ extracted/t1l1m001/
     map_object_instances.csv
     stpc_object_defs.csv
     stpc_mesh_reference_hits.csv
-    terrain_trak.obj
-    map_object_markers.obj
-    stpc_instances_combined.obj
-    stpc_instances_by_object/
-    world_combined_probe.obj
+    terrain.obj
+    objects_primary.obj
+    objects_all_candidates.obj
+    objects_by_hit/
+    combined.obj
+    diagnostics/
     world_viewer.html
 ```
 
@@ -220,9 +221,9 @@ A zero-dependency browser viewer.  Open it directly in a browser.  It supports:
 This is not intended to replace a real 3D engine viewer, but it is useful for quick inspection.
 
 
-## How to inspect the experimental world rebuild
+## How to inspect the reconstructed world export
 
-The `world/` folder is the current best world-regeneration probe. It uses the executable-confirmed relationship:
+The `world/` folder is the current world-regeneration export. It uses the executable-confirmed relationship:
 
 ```text
 TRAK = terrain / world-sector triangle geometry
@@ -236,11 +237,11 @@ For each MAP object record, the game converts the object-definition field to:
 dword_6D9DBC + stpc_object_def_offset
 ```
 
-where `dword_6D9DBC` is the raw STPC chunk base. The exporter scans each referenced STPC object-definition window for exact little-endian `u32` values that match decoded STPC mesh-record offsets. When it finds a match, it exports that STPC mesh translated to the confirmed MAP object XYZ.
+where `dword_6D9DBC` is the raw STPC chunk base. The exporter scans each referenced STPC object-definition window for exact little-endian `u32` values that match decoded STPC mesh-record offsets. When it finds a match, it exports that STPC mesh translated to the confirmed MAP object XYZ, with the validated Z-basis correction; terrain uses a centered Z mirror and experimental MAP-object yaw.
 
-### `world/terrain_trak.obj`
+### `world/terrain.obj`
 
-The decoded TRAK terrain/world surface.
+The reconstructed terrain/world surface. It is generated from TRAK Table A/B geometry placed by MAP tile XYZ, MAP tile yaw, and the tile → TRAK-record index table.
 
 ### `world/map_object_instances.csv`
 
@@ -262,25 +263,31 @@ Unique STPC object-definition offsets referenced by MAP objects, with the first 
 
 Exact hits where an STPC object definition contains a decoded STPC mesh-record offset. These rows are the current bridge from MAP object placement to STPC geometry.
 
-### `world/stpc_instances_combined.obj`
+### `world/objects_primary.obj`
 
-All STPC mesh-reference hits translated to MAP object XYZ. Rotation and scale are not applied yet.
+One earliest mesh-reference hit per MAP object. This is the cleanest object export for quick inspection.
 
-### `world/stpc_instances_by_object/`
+### `world/objects_all_candidates.obj`
 
-One OBJ per MAP object that had at least one STPC mesh-reference hit. This is usually easier to inspect than the combined file.
+All STPC mesh-reference hits translated to MAP object XYZ. This may include multiple candidates for the same MAP object while the full STPC object-definition language is still being decoded.
 
-### `world/world_combined_probe.obj`
+### `world/objects_by_hit/`
 
-A combined diagnostic OBJ containing TRAK terrain plus translated STPC candidate instances.
+One OBJ per exact STPC mesh-reference hit. Each file contains exactly one STPC mesh candidate. This is the safest folder for checking individual placements.
+
+### `world/combined.obj`
+
+The reconstructed terrain plus all translated STPC candidate instances in one OBJ.
 
 ### `world/world_viewer.html`
 
 A lightweight object-placement viewer. Orange points have at least one STPC mesh-reference hit. Blue points are MAP object records without a current mesh match.
 
-### Deprecated: `world_probe/`
+### `world/diagnostics/` and deprecated `world_probe/`
 
-The older Section-4 `world_probe/` diagnostics are now opt-in via `--world-probe`. The executable-confirmed MAP loader showed that Section 4 is not the main STPC placement table, so the new `world/` rebuild probe should be used instead.
+`world/diagnostics/objects_grouped_by_object/` contains grouped candidate meshes per MAP object. These are useful for reverse-engineering but may intentionally contain multiple meshes.
+
+The older Section-4 `world_probe/` diagnostics are now opt-in via `--world-probe`. The executable-confirmed MAP loader showed that Section 4 is not the main STPC placement table, so the official `world/` export should be used instead.
 
 ## Known WAD container structure
 
@@ -562,8 +569,8 @@ These are preserved in `raw/` for later analysis:
 
 Useful next reverse-engineering tasks:
 
-1. Validate MAP-object → STPC-definition → STPC-mesh references visually in `world/world_combined_probe.obj`.
-2. Decode MAP object rotation/scale fields and apply them to `world/stpc_instances_combined.obj`.
+1. Validate MAP-object → STPC-definition → STPC-mesh references visually in `world/combined.obj`.
+2. Decode MAP object scale and the full STPC object-definition language, then apply it to `world/objects_all_candidates.obj`.
 2. Decode `MAP ` `flags` and `type_idx` values.
 3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` palette/texture data.
 4. Decode TRAK Table C/D/E semantics and the 20-byte global table at `dword_581154` used by Table B material/global indices.
@@ -582,7 +589,7 @@ eng_wad/wad.py            WAD chunk scanner/container utilities
 eng_wad/text_chunk.py     TEXT parser and texture/palette exports
 eng_wad/map_chunk.py      partial-safe MAP parser
 eng_wad/map_export.py     MAP CSV, PNG, OBJ, and HTML viewer exports
-eng_wad/world_rebuild.py  experimental TRAK + MAP-object + STPC world rebuild probe
+eng_wad/world_rebuild.py  TRAK + MAP-object + STPC world reconstruction export
 eng_wad/instance_hunter.py deprecated Section-4 world-probe diagnostics
 eng_wad/stpc_chunk.py     STPC mesh scanner/exporter library
 eng_wad/trak_chunk.py     TRAK parser/exporter library
@@ -671,12 +678,12 @@ To skip this export:
 python wad_extractor.py level.wad --no-map-full
 ```
 
-## World rebuild probe update: MAP-placed terrain and single STPC mesh exports
+## World rebuild update: official terrain and object exports
 
 The `world/` exporter now treats TRAK geometry as **local terrain-sector geometry** and uses MAP to place it:
 
 ```text
-world/terrain_trak.obj
+world/terrain.obj
 ```
 
 is generated by applying:
@@ -690,7 +697,7 @@ This is different from the diagnostic TRAK-only exports under `trak/`, where eac
 The STPC candidate instance exporter now separates ambiguous mesh hits:
 
 ```text
-world/stpc_instances_by_hit/
+world/objects_by_hit/
 ```
 
 contains exactly one STPC mesh per OBJ file. This is the safest folder to inspect while the STPC object-definition language is still being decoded.
@@ -698,33 +705,34 @@ contains exactly one STPC mesh per OBJ file. This is the safest folder to inspec
 Other STPC world outputs:
 
 ```text
-world/stpc_instances_combined.obj
+world/objects_all_candidates.obj
 ```
 
 contains all candidate hits together.
 
 ```text
-world/stpc_instances_primary_only.obj
+world/objects_primary.obj
 ```
 
 contains only the earliest detected mesh-reference hit per MAP object.
 
 ```text
-world/stpc_instances_grouped_by_object/
+world/diagnostics/objects_grouped_by_object/
 ```
 
 contains grouped candidate hits per MAP object. These files may intentionally contain multiple meshes and should be treated as diagnostic.
 
-Known limitation: MAP object XYZ is confirmed, but STPC rotation and scale are still not applied.
+Known limitation: the current visual reference is `terrain.obj`. The exporter therefore mirrors STPC object instances around the same centered world Z axis used by the validated terrain orientation. STPC object yaw is applied experimentally from `small_04`; scale, materials, and full STPC object-definition semantics are still unresolved.
 
 ## World rebuild transform update
 
-The `world/` exporter now applies the MAP transforms that are known from the executable-backed MAP parser:
+The `world/` exporter applies the MAP transforms that are known from the executable-backed MAP parser:
 
-- `terrain_trak.obj` uses `MAP tile_defs_24` fixed-point XYZ plus the tile yaw value.
+- `terrain.obj` uses `MAP tile_defs_24` fixed-point XYZ plus the tile yaw value.
 - MAP tile yaw appears to use 4096 units per full turn. Common values are `0`, `1024`, `2048`, and `3072`.
-- STPC object positions are stored with the opposite Z sign from TRAK/MAP terrain tiles, so the world rebuild exporter defaults to `--world-stpc-object-z-sign -1`.
-- Local STPC mesh Z is also negated by default with `--world-stpc-local-z-sign -1` so object meshes use the same basis as TRAK terrain.
+- Terrain is the visual reference: it uses MAP tile fixed-point XYZ, tile yaw, and the centered Z mirror validated in `terrain.obj`.
+- STPC object positions still use `--world-stpc-object-z-sign -1`, then are mirrored around the terrain Z center by default so their placement matches the corrected terrain orientation.
+- Local STPC mesh Z is negated by default with `--world-stpc-local-z-sign -1`.
 - STPC object yaw is experimental and currently uses the MAP object `small_04` field as a 4096-unit yaw value.
 
 Useful validation files:
@@ -732,9 +740,9 @@ Useful validation files:
 ```text
 world/terrain_tile_transforms.csv
 world/stpc_instance_transforms.csv
-world/terrain_trak.obj
-world/stpc_instances_by_hit/
-world/world_combined_probe.obj
+world/terrain.obj
+world/objects_by_hit/
+world/combined.obj
 ```
 
 Useful transform flags:
@@ -744,8 +752,9 @@ Useful transform flags:
 --world-terrain-yaw-sign -1
 --world-stpc-object-z-sign -1
 --world-stpc-local-z-sign -1
+--world-no-object-z-mirror
 --world-no-stpc-yaw
 --world-stpc-yaw-sign -1
 ```
 
-If terrain tile rotation appears reversed, try `--world-terrain-yaw-sign -1`. If STPC object rotation appears reversed, try `--world-stpc-yaw-sign -1` or `--world-no-stpc-yaw`.
+If terrain tile rotation appears reversed, try `--world-terrain-yaw-sign -1`. If STPC object placement appears mirrored, compare with `--world-no-object-z-mirror`. If STPC object rotation appears reversed, try `--world-stpc-yaw-sign -1` or `--world-no-stpc-yaw`.

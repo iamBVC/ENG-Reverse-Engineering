@@ -22,7 +22,7 @@ from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
 from eng_wad.trak_chunk import export_trak_from_bytes
-from eng_wad.world_rebuild import export_world_rebuild_probe
+from eng_wad.world_rebuild import export_world
 from eng_wad.wad import chunk_bytes, chunk_manifest_lines, read_wad
 
 
@@ -60,7 +60,7 @@ def extract_wad(
     extract_raw: bool = True,
     extract_world_probe: bool = False,
     extract_map_full: bool = True,
-    extract_world_rebuild: bool = True,
+    extract_world: bool = True,
     texture_fields: bool = True,
     stpc_alignment: int = 4,
     stpc_min_score: float = 0.85,
@@ -73,8 +73,10 @@ def extract_wad(
     world_scale: float = 1.0,
     world_flip_z: bool = False,
     world_terrain_yaw_sign: int = 1,
+    world_mirror_terrain_z: bool = True,
     world_stpc_object_z_sign: int = -1,
     world_stpc_local_z_sign: int = -1,
+    world_mirror_stpc_objects_z: bool = True,
     world_apply_stpc_yaw: bool = True,
     world_stpc_yaw_sign: int = 1,
     verbose: bool = True,
@@ -210,11 +212,11 @@ def extract_wad(
 
     # WORLD REBUILD: experimental reconstruction using confirmed MAP object XYZ
     # and exact STPC mesh-offset references found inside STPC object definitions.
-    if extract_world_rebuild:
+    if extract_world:
         if mapx is not None and trak_result is not None and stpc_result is not None and stpc_bytes_for_world is not None:
-            print("  [WRLD] Rebuilding experimental TRAK + STPC world probe …")
+            print("  [WRLD] Exporting reconstructed TRAK + STPC world …")
             try:
-                world = export_world_rebuild_probe(
+                world = export_world(
                     out_dir=out_dir / "world",
                     mapx=mapx,
                     trak=trak_result.trak,
@@ -224,8 +226,10 @@ def extract_wad(
                     scale=world_scale,
                     flip_z=world_flip_z,
                     terrain_yaw_sign=world_terrain_yaw_sign,
+                    mirror_terrain_z=world_mirror_terrain_z,
                     stpc_object_z_sign=world_stpc_object_z_sign,
                     stpc_local_z_sign=world_stpc_local_z_sign,
+                    mirror_stpc_objects_z=world_mirror_stpc_objects_z,
                     apply_stpc_object_yaw=world_apply_stpc_yaw,
                     stpc_object_yaw_sign=world_stpc_yaw_sign,
                 )
@@ -294,7 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-raw", action="store_true", help="do not export raw undecoded chunks")
     parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
     parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
-    parser.add_argument("--no-world-rebuild", action="store_true", help="skip experimental TRAK + MAP-object + STPC world rebuild probe")
+    parser.add_argument("--no-world", action="store_true", help="skip reconstructed TRAK + MAP-object + STPC world export")
+    parser.add_argument("--no-world-rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--quiet", action="store_true", help="suppress per-record progress")
 
     parser.add_argument("--stpc-alignment", type=int, default=4, help="STPC scan alignment; use 1 for exhaustive scan")
@@ -310,7 +315,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-scale", type=float, default=1.0, help="scale applied to world/ OBJ exports")
     parser.add_argument("--world-flip-z", action="store_true", help="flip final Z axis in all world/ OBJ exports after per-source conversion")
     parser.add_argument("--world-terrain-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying MAP tile yaw to TRAK terrain")
-    parser.add_argument("--world-stpc-object-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to MAP object positions when exporting STPC instances; -1 aligns object Z with TRAK terrain")
+    parser.add_argument("--world-no-terrain-z-mirror", action="store_true", help="disable the default centered Z mirror applied to TRAK terrain")
+    parser.add_argument("--world-stpc-object-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to MAP object positions before the centered object mirror")
+    parser.add_argument("--world-no-object-z-mirror", action="store_true", help="disable the default centered Z mirror applied to STPC object instances")
     parser.add_argument("--world-stpc-local-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to local STPC mesh vertices before object yaw/translation")
     parser.add_argument("--world-no-stpc-yaw", action="store_true", help="do not apply experimental MAP object yaw from small_04 to STPC instances")
     parser.add_argument("--world-stpc-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying experimental MAP object yaw to STPC instances")
@@ -346,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
             extract_raw=not args.no_raw,
             extract_world_probe=args.world_probe,
             extract_map_full=not args.no_map_full,
-            extract_world_rebuild=not args.no_world_rebuild,
+            extract_world=not (args.no_world or args.no_world_rebuild),
             texture_fields=not args.no_texture_fields,
             stpc_alignment=args.stpc_alignment,
             stpc_min_score=args.stpc_min_score,
@@ -359,8 +366,10 @@ def main(argv: list[str] | None = None) -> int:
             world_scale=args.world_scale,
             world_flip_z=args.world_flip_z,
             world_terrain_yaw_sign=args.world_terrain_yaw_sign,
+            world_mirror_terrain_z=not args.world_no_terrain_z_mirror,
             world_stpc_object_z_sign=args.world_stpc_object_z_sign,
             world_stpc_local_z_sign=args.world_stpc_local_z_sign,
+            world_mirror_stpc_objects_z=not args.world_no_object_z_mirror,
             world_apply_stpc_yaw=not args.world_no_stpc_yaw,
             world_stpc_yaw_sign=args.world_stpc_yaw_sign,
             verbose=not args.quiet,
