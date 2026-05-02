@@ -72,6 +72,11 @@ def extract_wad(
     world_def_scan_bytes: int = 2048,
     world_scale: float = 1.0,
     world_flip_z: bool = False,
+    world_terrain_yaw_sign: int = 1,
+    world_stpc_object_z_sign: int = -1,
+    world_stpc_local_z_sign: int = -1,
+    world_apply_stpc_yaw: bool = True,
+    world_stpc_yaw_sign: int = 1,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -218,6 +223,11 @@ def extract_wad(
                     scan_bytes=world_def_scan_bytes,
                     scale=world_scale,
                     flip_z=world_flip_z,
+                    terrain_yaw_sign=world_terrain_yaw_sign,
+                    stpc_object_z_sign=world_stpc_object_z_sign,
+                    stpc_local_z_sign=world_stpc_local_z_sign,
+                    apply_stpc_object_yaw=world_apply_stpc_yaw,
+                    stpc_object_yaw_sign=world_stpc_yaw_sign,
                 )
                 print(
                     f"  → world/ ({len(world.object_instances)} MAP objects, "
@@ -298,7 +308,12 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--world-def-scan-bytes", type=int, default=2048, help="bytes to scan from each MAP object STPC-definition offset for mesh references")
     parser.add_argument("--world-scale", type=float, default=1.0, help="scale applied to world/ OBJ exports")
-    parser.add_argument("--world-flip-z", action="store_true", help="flip Z axis in world/ OBJ exports")
+    parser.add_argument("--world-flip-z", action="store_true", help="flip final Z axis in all world/ OBJ exports after per-source conversion")
+    parser.add_argument("--world-terrain-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying MAP tile yaw to TRAK terrain")
+    parser.add_argument("--world-stpc-object-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to MAP object positions when exporting STPC instances; -1 aligns object Z with TRAK terrain")
+    parser.add_argument("--world-stpc-local-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to local STPC mesh vertices before object yaw/translation")
+    parser.add_argument("--world-no-stpc-yaw", action="store_true", help="do not apply experimental MAP object yaw from small_04 to STPC instances")
+    parser.add_argument("--world-stpc-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying experimental MAP object yaw to STPC instances")
 
     args = parser.parse_args(argv)
 
@@ -343,6 +358,11 @@ def main(argv: list[str] | None = None) -> int:
             world_def_scan_bytes=args.world_def_scan_bytes,
             world_scale=args.world_scale,
             world_flip_z=args.world_flip_z,
+            world_terrain_yaw_sign=args.world_terrain_yaw_sign,
+            world_stpc_object_z_sign=args.world_stpc_object_z_sign,
+            world_stpc_local_z_sign=args.world_stpc_local_z_sign,
+            world_apply_stpc_yaw=not args.world_no_stpc_yaw,
+            world_stpc_yaw_sign=args.world_stpc_yaw_sign,
             verbose=not args.quiet,
         )
         if not ok:
