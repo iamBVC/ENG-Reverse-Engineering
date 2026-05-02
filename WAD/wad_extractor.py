@@ -14,11 +14,15 @@ from pathlib import Path
 
 from eng_wad.binary import Reader, u32
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
+from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
+from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
 from eng_wad.map_export import export_map_outputs
 from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
+from eng_wad.trak_chunk import export_trak_from_bytes
+from eng_wad.world_rebuild import export_world_rebuild_probe
 from eng_wad.wad import chunk_bytes, chunk_manifest_lines, read_wad
 
 
@@ -51,14 +55,23 @@ def extract_wad(
     extract_textures: bool = True,
     extract_map: bool = True,
     extract_stpc_obj: bool = True,
+    extract_trak: bool = True,
     extract_lights: bool = True,
     extract_raw: bool = True,
+    extract_world_probe: bool = False,
+    extract_map_full: bool = True,
+    extract_world_rebuild: bool = True,
     texture_fields: bool = True,
     stpc_alignment: int = 4,
     stpc_min_score: float = 0.85,
     stpc_scale: float = 1.0,
     stpc_flip_z: bool = False,
     stpc_debug_faces: bool = False,
+    trak_scale: float = 1.0,
+    trak_flip_z: bool = False,
+    world_def_scan_bytes: int = 2048,
+    world_scale: float = 1.0,
+    world_flip_z: bool = False,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -73,6 +86,13 @@ def extract_wad(
     print(f"  {wad_path.name} ({len(data):,} bytes, {len(chunks)} chunks)")
     print(f"  → {out_dir}")
     print(f"{'=' * 72}")
+
+    parsed_map = None
+    map_bytes_for_probe = None
+    trak_result = None
+    stpc_result = None
+    mapx = None
+    stpc_bytes_for_world = None
 
     info_lines = chunk_manifest_lines(wad_path, data, chunks)
     _write_level_metadata(data, by_tag, out_dir, info_lines)
@@ -94,7 +114,8 @@ def extract_wad(
     if extract_map and "MAP " in by_tag:
         print("  [MAP ] Parsing level map …")
         try:
-            parsed_map = parse_map_chunk(chunk_bytes(data, by_tag["MAP "]), verbose=verbose)
+            map_bytes_for_probe = chunk_bytes(data, by_tag["MAP "])
+            parsed_map = parse_map_chunk(map_bytes_for_probe, verbose=verbose)
             export_map_outputs(parsed_map, out_dir / "map", verbose=verbose)
         except Exception as exc:
             print(f"  [MAP ] Parse/export error: {exc}", file=sys.stderr)
@@ -119,12 +140,56 @@ def extract_wad(
                 path = export_raw_chunk(tag, chunk_bytes(data, chunk), raw_dir)
                 print(f"  [{tag:4s}] → raw/{path.name} ({chunk.size:,} bytes)")
 
+    # TRAK: track/navigation/collision-like sector data.
+    # The raw TRAK chunk is still preserved in raw/trak.bin when raw export is enabled.
+    # This decoded export writes the confirmed record table, Table A vertices,
+    # Table B triangle/plane records, raw Table C/D/E rows, diagnostic OBJ files,
+    # and an HTML viewer into the dedicated trak/ folder.
+    if extract_trak and "TRAK" in by_tag:
+        print("  [TRAK] Parsing track/spatial sector data …")
+        try:
+            trak_result = export_trak_from_bytes(
+                chunk_bytes(data, by_tag["TRAK"]),
+                out_dir / "trak",
+                scale=trak_scale,
+                flip_z=trak_flip_z,
+            )
+            trak = trak_result.trak
+            print(
+                f"  → trak/ ({trak.record_count} records, "
+                f"A={trak.total_a_entries:,}, B={trak.total_b_entries:,}, "
+                f"C/D/E={trak.total_c_entries:,}/{trak.total_d_entries:,}/{trak.total_e_entries:,})"
+            )
+        except Exception as exc:
+            print(f"  [TRAK] Parse/export error: {exc}", file=sys.stderr)
+    elif extract_trak:
+        print("  [TRAK] chunk not found — skipping")
+
+    # MAP_FULL: executable-confirmed MAP parser. This needs TRAK because MAP
+    # stores per-tile vertex colors sized from the referenced TRAK record's
+    # Table A vertex count. It writes corrected MAP diagnostics into map_full/.
+    if extract_map_full:
+        if map_bytes_for_probe is not None and trak_result is not None:
+            print("  [MAPX] Parsing executable-confirmed MAP structure …")
+            try:
+                mapx = parse_map_full_exe(map_bytes_for_probe, trak_result.trak)
+                export_map_full_exe(mapx, out_dir / "map_full")
+                print(
+                    f"  → map_full/ ({mapx.tile_count} tiles, "
+                    f"objects={len(mapx.objects)}, colors={sum(c.byte_size + c.extra_byte_size for c in mapx.colors):,} bytes)"
+                )
+            except Exception as exc:
+                print(f"  [MAPX] Parse/export error: {exc}", file=sys.stderr)
+        elif verbose:
+            print("  [MAPX] skipped — needs both MAP and TRAK")
+
     # STPC: additionally unpack static meshes to OBJ using the importable library.
     if extract_stpc_obj and "STPC" in by_tag:
         print("  [STPC] Exporting static geometry OBJ meshes …")
         try:
-            result = export_stpc_meshes_from_bytes(
-                chunk_bytes(data, by_tag["STPC"]),
+            stpc_bytes_for_world = chunk_bytes(data, by_tag["STPC"])
+            stpc_result = export_stpc_meshes_from_bytes(
+                stpc_bytes_for_world,
                 out_dir / "stpc",
                 alignment=stpc_alignment,
                 min_score=stpc_min_score,
@@ -133,9 +198,70 @@ def extract_wad(
                 write_debug=stpc_debug_faces,
                 verbose=verbose,
             )
-            print(f"  → stpc/ ({len(result.meshes)} meshes, manifest.csv, combined.obj)")
+            print(f"  → stpc/ ({len(stpc_result.meshes)} meshes, manifest.csv, combined.obj)")
         except Exception as exc:
             print(f"  [STPC] OBJ export error: {exc}", file=sys.stderr)
+
+
+    # WORLD REBUILD: experimental reconstruction using confirmed MAP object XYZ
+    # and exact STPC mesh-offset references found inside STPC object definitions.
+    if extract_world_rebuild:
+        if mapx is not None and trak_result is not None and stpc_result is not None and stpc_bytes_for_world is not None:
+            print("  [WRLD] Rebuilding experimental TRAK + STPC world probe …")
+            try:
+                world = export_world_rebuild_probe(
+                    out_dir=out_dir / "world",
+                    mapx=mapx,
+                    trak=trak_result.trak,
+                    stpc_bytes=stpc_bytes_for_world,
+                    stpc_result=stpc_result,
+                    scan_bytes=world_def_scan_bytes,
+                    scale=world_scale,
+                    flip_z=world_flip_z,
+                )
+                print(
+                    f"  → world/ ({len(world.object_instances)} MAP objects, "
+                    f"{len(world.mesh_reference_hits)} STPC mesh-reference hits, "
+                    f"objects_with_hits={world.unique_objects_with_hits})"
+                )
+            except Exception as exc:
+                print(f"  [WRLD] World rebuild export error: {exc}", file=sys.stderr)
+        elif verbose:
+            missing = []
+            if mapx is None:
+                missing.append("MAP_FULL")
+            if trak_result is None:
+                missing.append("TRAK")
+            if stpc_result is None or stpc_bytes_for_world is None:
+                missing.append("STPC")
+            print(f"  [WRLD] skipped — missing {', '.join(missing)}")
+
+
+    # WORLD PROBE: exploratory search for STPC placement/instance tables.
+    # This is intentionally diagnostic and conservative. It exports MAP Section 4
+    # as raw numeric fields and produces candidate mesh-id + XYZ combinations that
+    # can be compared against TRAK terrain and in-game object locations.
+    if extract_world_probe:
+        if map_bytes_for_probe is not None and parsed_map is not None and stpc_result is not None:
+            print("  [WRLD] Exporting instance-hunting diagnostics …")
+            try:
+                probe = export_instance_hunt(
+                    out_dir=out_dir / "world_probe",
+                    map_bytes=map_bytes_for_probe,
+                    parsed_map=parsed_map,
+                    trak=trak_result.trak if trak_result else None,
+                    stpc_result=stpc_result,
+                )
+                print(f"  → world_probe/ ({len(probe.candidates):,} MAP Section 4 candidates)")
+            except Exception as exc:
+                print(f"  [WRLD] Probe export error: {exc}", file=sys.stderr)
+        elif verbose:
+            missing = []
+            if map_bytes_for_probe is None or parsed_map is None:
+                missing.append("MAP")
+            if stpc_result is None:
+                missing.append("STPC")
+            print(f"  [WRLD] skipped — missing {', '.join(missing)}")
 
     print(f"\n  Done — outputs in: {out_dir}\n")
     return True
@@ -153,8 +279,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-texture-fields", action="store_true", help="skip diagnostic palette-field images")
     parser.add_argument("--no-map", action="store_true", help="skip MAP parsing and map viewer exports")
     parser.add_argument("--no-stpc-obj", action="store_true", help="skip STPC OBJ mesh export")
+    parser.add_argument("--no-trak", action="store_true", help="skip TRAK CSV/OBJ/viewer export")
     parser.add_argument("--no-lights", action="store_true", help="skip LGHT light CSV export")
     parser.add_argument("--no-raw", action="store_true", help="do not export raw undecoded chunks")
+    parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
+    parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
+    parser.add_argument("--no-world-rebuild", action="store_true", help="skip experimental TRAK + MAP-object + STPC world rebuild probe")
     parser.add_argument("--quiet", action="store_true", help="suppress per-record progress")
 
     parser.add_argument("--stpc-alignment", type=int, default=4, help="STPC scan alignment; use 1 for exhaustive scan")
@@ -162,6 +292,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stpc-scale", type=float, default=1.0, help="scale applied to STPC OBJ vertices")
     parser.add_argument("--stpc-flip-z", action="store_true", help="flip Z axis in STPC OBJ export")
     parser.add_argument("--stpc-debug-faces", action="store_true", help="write stpc/faces_debug.csv")
+
+    parser.add_argument("--trak-scale", type=float, default=1.0, help="scale applied to TRAK OBJ vertices")
+    parser.add_argument("--trak-flip-z", action="store_true", help="flip Z axis in TRAK OBJ export")
+
+    parser.add_argument("--world-def-scan-bytes", type=int, default=2048, help="bytes to scan from each MAP object STPC-definition offset for mesh references")
+    parser.add_argument("--world-scale", type=float, default=1.0, help="scale applied to world/ OBJ exports")
+    parser.add_argument("--world-flip-z", action="store_true", help="flip Z axis in world/ OBJ exports")
 
     args = parser.parse_args(argv)
 
@@ -189,14 +326,23 @@ def main(argv: list[str] | None = None) -> int:
             extract_textures=not args.no_tex,
             extract_map=not args.no_map,
             extract_stpc_obj=not args.no_stpc_obj,
+            extract_trak=not args.no_trak,
             extract_lights=not args.no_lights,
             extract_raw=not args.no_raw,
+            extract_world_probe=args.world_probe,
+            extract_map_full=not args.no_map_full,
+            extract_world_rebuild=not args.no_world_rebuild,
             texture_fields=not args.no_texture_fields,
             stpc_alignment=args.stpc_alignment,
             stpc_min_score=args.stpc_min_score,
             stpc_scale=args.stpc_scale,
             stpc_flip_z=args.stpc_flip_z,
             stpc_debug_faces=args.stpc_debug_faces,
+            trak_scale=args.trak_scale,
+            trak_flip_z=args.trak_flip_z,
+            world_def_scan_bytes=args.world_def_scan_bytes,
+            world_scale=args.world_scale,
+            world_flip_z=args.world_flip_z,
             verbose=not args.quiet,
         )
         if not ok:
