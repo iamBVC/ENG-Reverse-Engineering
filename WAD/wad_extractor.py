@@ -14,7 +14,6 @@ from pathlib import Path
 
 from eng_wad.binary import Reader, u32
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
-from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
 from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
 from eng_wad.map_export import export_map_outputs
@@ -254,33 +253,6 @@ def extract_wad(
                 missing.append("STPC")
             print(f"  [WRLD] skipped — missing {', '.join(missing)}")
 
-
-    # WORLD PROBE: exploratory search for STPC placement/instance tables.
-    # This is intentionally diagnostic and conservative. It exports MAP Section 4
-    # as raw numeric fields and produces candidate mesh-id + XYZ combinations that
-    # can be compared against TRAK terrain and in-game object locations.
-    if extract_world_probe:
-        if map_bytes_for_probe is not None and parsed_map is not None and stpc_result is not None:
-            print("  [WRLD] Exporting instance-hunting diagnostics …")
-            try:
-                probe = export_instance_hunt(
-                    out_dir=out_dir / "world_probe",
-                    map_bytes=map_bytes_for_probe,
-                    parsed_map=parsed_map,
-                    trak=trak_result.trak if trak_result else None,
-                    stpc_result=stpc_result,
-                )
-                print(f"  → world_probe/ ({len(probe.candidates):,} MAP Section 4 candidates)")
-            except Exception as exc:
-                print(f"  [WRLD] Probe export error: {exc}", file=sys.stderr)
-        elif verbose:
-            missing = []
-            if map_bytes_for_probe is None or parsed_map is None:
-                missing.append("MAP")
-            if stpc_result is None:
-                missing.append("STPC")
-            print(f"  [WRLD] skipped — missing {', '.join(missing)}")
-
     print(f"\n  Done — outputs in: {out_dir}\n")
     return True
 
@@ -300,7 +272,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-trak", action="store_true", help="skip TRAK CSV/OBJ/viewer export")
     parser.add_argument("--no-lights", action="store_true", help="skip LGHT light CSV export")
     parser.add_argument("--no-raw", action="store_true", help="do not export raw undecoded chunks")
-    parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
     parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
     parser.add_argument("--no-world", action="store_true", help="skip reconstructed TRAK + MAP-object + STPC world export")
     parser.add_argument("--no-world-rebuild", action="store_true", help=argparse.SUPPRESS)
@@ -357,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
             extract_trak=not args.no_trak,
             extract_lights=not args.no_lights,
             extract_raw=not args.no_raw,
-            extract_world_probe=args.world_probe,
+            extract_world_probe=False,
             extract_map_full=not args.no_map_full,
             extract_world=not (args.no_world or args.no_world_rebuild),
             texture_fields=not args.no_texture_fields,
