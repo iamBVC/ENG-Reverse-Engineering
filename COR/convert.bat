@@ -1,0 +1,1 @@
+python cor2img.py "%~1"
