@@ -264,9 +264,3 @@ This is a reverse-engineered utility for a legacy game image format. It is desig
 This project is an unofficial tool and is not affiliated with Disney, Argonaut Games, or any original publisher/developer of *The Emperor's New Groove*.
 
 Use it only with files you are legally allowed to inspect or modify.
-
-## License
-
-No license has been provided yet.
-
-Before publishing this repository, consider adding an explicit license such as MIT, GPL-3.0, or another license appropriate for your intended use.
