@@ -802,3 +802,34 @@ python wad_extractor.py level.wad --world-object-z-offset 1.5
 This is now the default, but the flag remains available for experiments. The correction is applied only to STPC object instances after the MAP object position, object yaw, local STPC Z conversion, and centered world mirror. `terrain.obj` is not moved by this offset.
 
 Current best explanation: this is probably an object-anchor/pivot correction from the STPC object-definition scripting layer, not a MAP position error. The MAP object XYZ fields align globally, and the executable contains a STPC definition resolver (`sub_553630`) that converts offsets inside object-definition bytecode to runtime pointers before executing that definition. Our exporter currently scans those definitions for mesh offsets, but it does not yet execute the nearby placement/anchor opcodes. The consistent `+1.5` correction likely represents one of those definition-level local placement constants or a collision/render pivot convention used by the engine.
+
+## Material diagnostics checkpoint
+
+The extractor now writes `materials/` for every level when TEXT/TRAK/STPC are available.
+
+Confirmed from the executable:
+
+```text
+TRAK/STPC triangle material_index -> dword_581154 + 20 * material_index
+```
+
+`dword_581154` is built from the trailing 8-byte table in the TEXT/TXET chunk.
+The runtime table is sparse and 20 bytes wide.  The exported file
+`materials/runtime_material_table_20.csv` shows both the original disk bytes and
+how the game expands them in memory.
+
+Useful files:
+
+```text
+materials/runtime_material_table_20.csv
+materials/trak_terrain_material_usage.csv
+materials/trak_materials_by_record.csv
+materials/stpc_material_usage.csv
+materials/stpc_materials_by_mesh.csv
+materials/texture_inventory.csv
+```
+
+`texture_inventory.csv` marks `texture_05.png` through `texture_09.png` as
+terrain-priority hints based on visual validation.  Texture/UV binding is still
+being reverse engineered, so the material CSVs are diagnostic rather than final
+textured OBJ output.
