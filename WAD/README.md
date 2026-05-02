@@ -10,8 +10,8 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can:
 
 - scan the WAD container and write a chunk manifest
 - extract level metadata such as the level name
-- decode the `TEXT` chunk into texture/control-map diagnostic PNGs
-- export the `TEXT` palette table and palette-field debug images
+- decode the `TEXT` chunk into real RGB555 RLE texture PNGs
+- export the remaining `TEXT` palette/metadata table and optional legacy diagnostics
 - parse the `MAP ` chunk into world-space tile XYZ data
 - generate MAP CSV files, OBJ marker meshes, a PNG grid, and an HTML map viewer
 - parse the `LGHT` chunk into `lights.csv`
@@ -104,19 +104,14 @@ extracted/t1l1m001/
     wfpc.bin
 
   textures/
-    texture_00_grey.png
-    texture_00_pal.png
+    texture_00.png
+    texture_01.png
+    texture_decode_stats.csv
     ...
 
   texture_fields/
-    texture_00_field0_meta0.png
-    texture_00_field1_meta1.png
-    texture_00_field2_meta2.png
-    texture_00_field3_marker.png
-    texture_00_field4_rgb_r.png
-    texture_00_field5_rgb_g.png
-    texture_00_field6_rgb_b.png
-    texture_00_field7_extra.png
+    texture_00_legacy_field0_meta0.png
+    texture_00_legacy_field1_meta1.png
     ...
 
   palette/
@@ -309,30 +304,13 @@ INFO VERS WFPC TEXT FONT SPRT NAME SMPC AMPC SRPC TRAK STPC MAP  LGHT LNFO LGPC
 
 The tag `MAP ` includes a trailing space because chunk tags are exactly four bytes.
 
-## LZSS compression
+## Compression notes
 
-The game uses an LZSS-style compression scheme in texture/control-map data.
-
-```text
-Read control byte b.
-
-If (b & 0x80) == 0:
-    literal run
-    copy next (b & 0x7F) bytes directly
-
-If (b & 0x80) != 0:
-    read byte c
-    w      = (b << 8) | c
-    offset = w & 0x0FFF
-    length = ((w >> 12) & 7) + 3
-    copy length bytes from dst[dp - offset]
-```
-
-Important detail: the currently confirmed decompressor uses a fixed back-reference source for each byte in the run.  It does not use a sliding `dst[dp - offset + i]` source.
+The project still includes an LZSS helper because some early reverse-engineering probes used it, but the main `TEXT`/`TXET` texture images are now decoded with the correct RGB555 RLE stream described below.
 
 ## `TEXT` chunk structure
 
-Despite the name, `TEXT` is not a text-string chunk.  It contains texture/control-map byte planes and a palette/metadata table.
+Despite the name, `TEXT` is not a text-string chunk.  It contains RGB555 compressed textures plus a palette/metadata table.
 
 Observed layout:
 
@@ -347,6 +325,24 @@ repeated texture_count times:
     u32 compressed_size
     bytes compressed_data
 
+Then the texture payload itself is decoded as a stream of little-endian 16-bit packets:
+
+```text
+packet < 0x8000:
+    literal packet
+    read packet RGB555 words
+
+packet & 0x8000:
+    repeat packet
+    count = 0x10000 - packet
+    read one RGB555 word and repeat it count times
+```
+
+Each RGB555 word is decoded as `xRRRRRGGGGGBBBBB` and expanded to 8-bit RGB by left-shifting each 5-bit channel by 3.
+
+After all texture records:
+
+```text
 u32 palette_entry_count
 repeated palette_entry_count times, 8 bytes each:
     byte 0  metadata A
@@ -361,9 +357,8 @@ repeated palette_entry_count times, 8 bytes each:
 
 Known uncertainty:
 
-- The direct `pixel_byte -> first 256 palette entries` mapping is only a diagnostic view.
-- Palette counts can exceed 256, while texture byte values are only 0..255.
-- The full material/palette remapping logic is not fully decoded yet.
+- The main exported texture PNGs are now decoded as RGB555 RLE.
+- The palette/metadata table is preserved, but its full material/texture binding role is not fully decoded yet.
 - Texture flags such as `0x81..0x87` likely encode type/format information, but the exact meanings are not fully confirmed.
 
 ## `MAP ` chunk structure
@@ -562,7 +557,7 @@ These are preserved in `raw/` for later analysis:
 | `WFPC` | `raw/wfpc.bin` | Not decoded |
 | `FONT` | `raw/font.bin` | Exported raw; glyph layout not decoded |
 | `MAP ` | `map/` outputs | Tile list/grid partially decoded; flags/type semantics still unknown |
-| `TEXT` | `textures/`, `palette/` | Compression and palette table parsed; material remap/field semantics still unknown |
+| `TEXT` | `textures/`, `palette/` | RGB555 RLE texture images decoded; palette/material binding semantics still partly unknown |
 | `LGHT` | `lights/lights.csv` | Light entries parsed; exact field semantics still unknown |
 
 ## What is left to do
@@ -572,7 +567,7 @@ Useful next reverse-engineering tasks:
 1. Validate MAP-object → STPC-definition → STPC-mesh references visually in `world/combined.obj`.
 2. Decode MAP object scale and the full STPC object-definition language, then apply it to `world/objects_all_candidates.obj`.
 2. Decode `MAP ` `flags` and `type_idx` values.
-3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` palette/texture data.
+3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` texture/material data.
 4. Decode TRAK Table C/D/E semantics and the 20-byte global table at `dword_581154` used by Table B material/global indices.
 5. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
 6. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
@@ -584,7 +579,7 @@ Useful next reverse-engineering tasks:
 wad_extractor.py          main command-line entry point
 
 eng_wad/binary.py         Reader, endian helpers, hexdump helper
-eng_wad/lzss.py           LZSS decompressor
+eng_wad/lzss.py           legacy/experimental LZSS helper
 eng_wad/wad.py            WAD chunk scanner/container utilities
 eng_wad/text_chunk.py     TEXT parser and texture/palette exports
 eng_wad/map_chunk.py      partial-safe MAP parser
