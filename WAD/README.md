@@ -803,33 +803,45 @@ This is now the default, but the flag remains available for experiments. The cor
 
 Current best explanation: this is probably an object-anchor/pivot correction from the STPC object-definition scripting layer, not a MAP position error. The MAP object XYZ fields align globally, and the executable contains a STPC definition resolver (`sub_553630`) that converts offsets inside object-definition bytecode to runtime pointers before executing that definition. Our exporter currently scans those definitions for mesh offsets, but it does not yet execute the nearby placement/anchor opcodes. The consistent `+1.5` correction likely represents one of those definition-level local placement constants or a collision/render pivot convention used by the engine.
 
-## Material diagnostics checkpoint
+## Material / UV checkpoint
 
-The extractor now writes `materials/` for every level when TEXT/TRAK/STPC are available.
+The trailing table after the `TEXT` texture records is now treated as the executable-confirmed runtime material source table, not as a color palette for the decoded RGB555 texture images.
 
-Confirmed from the executable:
-
-```text
-TRAK/STPC triangle material_index -> dword_581154 + 20 * material_index
-```
-
-`dword_581154` is built from the trailing 8-byte table in the TEXT/TXET chunk.
-The runtime table is sparse and 20 bytes wide.  The exported file
-`materials/runtime_material_table_20.csv` shows both the original disk bytes and
-how the game expands them in memory.
-
-Useful files:
+The game expands each 8-byte disk row into a 20-byte runtime material record at `dword_581154`:
 
 ```text
-materials/runtime_material_table_20.csv
-materials/trak_terrain_material_usage.csv
-materials/trak_materials_by_record.csv
-materials/stpc_material_usage.csv
-materials/stpc_materials_by_mesh.csv
-materials/texture_inventory.csv
++0x00 u16 flags
++0x02 u8  texture page index
++0x03 u8  extra/source/animation byte, often 0xFF
++0x04 u8  source x0
++0x08 u8  source x1
++0x0C u8  source y0
++0x10 u8  source y1
 ```
 
-`texture_inventory.csv` marks `texture_05.png` through `texture_09.png` as
-terrain-priority hints based on visual validation.  Texture/UV binding is still
-being reverse engineered, so the material CSVs are diagnostic rather than final
-textured OBJ output.
+`sub_407240` converts the source rectangle to UV floats as:
+
+```text
+u0 = x0 / texture_width
+u1 = (x1 + 1) / texture_width
+v0 = y0 / texture_height
+v1 = (y1 + 1) / texture_height
+```
+
+New outputs:
+
+```text
+materials/
+  runtime_material_table_20.csv
+  texture_inventory.csv
+  texture_material_usage_summary.csv
+  trak_terrain_material_usage.csv
+  stpc_material_usage.csv
+  summary.json
+
+world/
+  terrain_textured_probe.obj
+  textures/texture_XX.png
+```
+
+`terrain_textured_probe.obj` is an experimental UV validation export. Texture page and source rectangle are confirmed; per-triangle UV corner orientation is still being reverse-engineered.

@@ -18,7 +18,7 @@ from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
 from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
 from eng_wad.map_export import export_map_outputs
-from eng_wad.material_diagnostics import export_material_diagnostics
+from eng_wad.material_chunk import export_material_diagnostics
 from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
@@ -62,7 +62,6 @@ def extract_wad(
     extract_world_probe: bool = False,
     extract_map_full: bool = True,
     extract_world: bool = True,
-    extract_materials: bool = True,
     texture_fields: bool = True,
     stpc_alignment: int = 4,
     stpc_min_score: float = 0.85,
@@ -104,7 +103,7 @@ def extract_wad(
     stpc_result = None
     mapx = None
     stpc_bytes_for_world = None
-    text_result = None
+    text_chunk_for_materials = None
 
     info_lines = chunk_manifest_lines(wad_path, data, chunks)
     _write_level_metadata(data, by_tag, out_dir, info_lines)
@@ -115,8 +114,9 @@ def extract_wad(
     if extract_textures and "TEXT" in by_tag:
         print("  [TEXT] Parsing textures/palette …")
         try:
-            text_result = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
-            export_textures(text_result, out_dir, verbose=verbose, export_fields=texture_fields)
+            text = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
+            text_chunk_for_materials = text
+            export_textures(text, out_dir, verbose=verbose, export_fields=texture_fields)
         except Exception as exc:
             print(f"  [TEXT] Parse/export error: {exc}", file=sys.stderr)
     elif extract_textures:
@@ -215,20 +215,21 @@ def extract_wad(
             print(f"  [STPC] OBJ export error: {exc}", file=sys.stderr)
 
 
-    # MATERIALS: executable-informed dword_581154 diagnostics.
-    if extract_materials:
-        if text_result is not None or trak_result is not None or stpc_result is not None:
-            print("  [MAT ] Exporting material table/usage diagnostics …")
-            try:
-                export_material_diagnostics(
-                    text=text_result,
-                    trak=trak_result.trak if trak_result is not None else None,
-                    stpc=stpc_result,
-                    out_dir=out_dir / "materials",
-                )
-                print("  → materials/ (runtime_material_table_20.csv, TRAK/STPC usage CSVs)")
-            except Exception as exc:
-                print(f"  [MAT ] Material diagnostics error: {exc}", file=sys.stderr)
+    # MATERIALS: executable-informed TEXT trailing table export.  This decodes
+    # dword_581154-style 20-byte material rows and cross-references TRAK/STPC
+    # material usage.
+    if text_chunk_for_materials is not None:
+        print("  [MAT ] Exporting material/UV diagnostics …")
+        try:
+            export_material_diagnostics(
+                text=text_chunk_for_materials,
+                out_dir=out_dir / "materials",
+                trak=trak_result.trak if trak_result is not None else None,
+                stpc_result=stpc_result,
+            )
+            print("  → materials/ (runtime material table + terrain/STPC usage)")
+        except Exception as exc:
+            print(f"  [MAT ] Material export error: {exc}", file=sys.stderr)
 
 
     # WORLD REBUILD: experimental reconstruction using confirmed MAP object XYZ
@@ -243,6 +244,7 @@ def extract_wad(
                     trak=trak_result.trak,
                     stpc_bytes=stpc_bytes_for_world,
                     stpc_result=stpc_result,
+                    text_chunk=text_chunk_for_materials,
                     scan_bytes=world_def_scan_bytes,
                     scale=world_scale,
                     flip_z=world_flip_z,
@@ -322,7 +324,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
     parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
     parser.add_argument("--no-world", action="store_true", help="skip reconstructed TRAK + MAP-object + STPC world export")
-    parser.add_argument("--no-materials", action="store_true", help="skip dword_581154 material table/usage diagnostics")
     parser.add_argument("--no-world-rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--quiet", action="store_true", help="suppress per-record progress")
 
@@ -380,7 +381,6 @@ def main(argv: list[str] | None = None) -> int:
             extract_world_probe=args.world_probe,
             extract_map_full=not args.no_map_full,
             extract_world=not (args.no_world or args.no_world_rebuild),
-            extract_materials=not args.no_materials,
             texture_fields=not args.no_texture_fields,
             stpc_alignment=args.stpc_alignment,
             stpc_min_score=args.stpc_min_score,

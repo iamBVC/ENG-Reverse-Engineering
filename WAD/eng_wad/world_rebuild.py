@@ -42,6 +42,8 @@ from typing import Iterable
 from .map_full_chunk import MapFullExe, MapObjectRecord
 from .stpc_chunk import MeshCandidate, STPCExportResult
 from .trak_chunk import TrakFile
+from .text_chunk import TextChunk
+from .material_chunk import RuntimeMaterial, parse_runtime_materials, copy_textures_for_world
 
 
 # ---------------------------------------------------------------------------
@@ -725,16 +727,156 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
     return out
 
 
-def write_world_mtl(path: Path) -> None:
-    """Write simple placeholder materials for world probe OBJs."""
+def write_world_mtl(path: Path, materials: list[RuntimeMaterial] | None = None) -> None:
+    """Write world materials.
+
+    The ordinary terrain/object OBJs still use simple diffuse colours.  When a
+    material table is available, we also emit map_Kd bindings for material names
+    used by the textured terrain probe.
+    """
+    mat_by_i = {m.index: m for m in (materials or [])}
     with path.open("w", encoding="utf-8") as f:
-        f.write("# Placeholder materials for experimental WAD world reconstruction.\n")
+        f.write("# Materials for reconstructed WAD world exports.\n")
         f.write("newmtl trak_surface\nKd 0.55 0.55 0.55\nKa 0 0 0\n\n")
         f.write("newmtl stpc_mat_default\nKd 0.75 0.75 0.75\nKa 0 0 0\n\n")
         # A broad set is enough for most material ids without bloating too much.
-        for i in range(512):
+        for i in range(1024):
+            m = mat_by_i.get(i)
             shade = 0.25 + ((i * 37) % 100) / 160.0
-            f.write(f"newmtl stpc_mat_{i:04d}\nKd {shade:.3f} {min(1.0, shade+0.12):.3f} {max(0.0, shade-0.08):.3f}\nKa 0 0 0\n\n")
+            f.write(f"newmtl stpc_mat_{i:04d}\nKd {shade:.3f} {min(1.0, shade+0.12):.3f} {max(0.0, shade-0.08):.3f}\nKa 0 0 0\n")
+            if m is not None and not m.is_color_only:
+                f.write(f"# texture_index={m.texture_index} rect={m.x0},{m.y0}..{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
+            f.write("\n")
+            f.write(f"newmtl trak_mat_{i:04d}\nKd {shade:.3f} {shade:.3f} {shade:.3f}\nKa 0 0 0\n")
+            if m is not None and not m.is_color_only:
+                f.write(f"map_Kd textures/texture_{m.texture_index:02d}.png\n")
+                f.write(f"# material_rect_texels={m.x0},{m.y0},{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
+            f.write("\n")
+
+
+
+def _material_uvs_for_triangle(mat: RuntimeMaterial | None, *, tex_w: int = 256, tex_h: int = 256, flip_v_for_obj: bool = True) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Return a conservative per-triangle UV assignment for a material rectangle.
+
+    The EXE confirms the material rectangle and UV range, but not yet the exact
+    per-corner orientation bits for every terrain primitive.  This probe maps a
+    triangle onto the material rectangle using a stable default corner order.
+    """
+    if mat is None or mat.is_color_only:
+        return ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    u0, u1, v0, v1 = mat.uv_rect(tex_w, tex_h)
+    if flip_v_for_obj:
+        v0, v1 = 1.0 - v0, 1.0 - v1
+    # Default triangle corner order.  If textures appear rotated/flipped, the
+    # next target is the face flag/unknown field that selects this orientation.
+    return ((u0, v1), (u1, v1), (u0, v0))
+
+
+def write_textured_terrain_probe_obj(
+    *,
+    path: Path,
+    mapx: MapFullExe,
+    trak: TrakFile,
+    materials: list[RuntimeMaterial],
+    scale: float = 1.0,
+    flip_z: bool = False,
+    terrain_yaw_sign: int = 1,
+    mirror_terrain_z: bool = True,
+) -> Path:
+    """Write a first textured-terrain OBJ probe using confirmed material rects.
+
+    This is intentionally separate from terrain.obj.  terrain.obj is the trusted
+    geometry export; terrain_textured_probe.obj is for validating material/UV
+    binding.  The texture page and UV rectangle are confirmed from sub_407240;
+    per-face UV corner orientation is still experimental.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mat_by_i = {m.index: m for m in materials}
+
+    z_min = None
+    z_max = None
+    if mirror_terrain_z:
+        for tile_i, tile in enumerate(mapx.tiles):
+            if tile_i >= len(mapx.tile_trak_indices):
+                continue
+            rec_i = mapx.tile_trak_indices[tile_i]
+            if rec_i < 0 or rec_i >= len(trak.records):
+                continue
+            rec = trak.records[rec_i]
+            if not rec.table_a:
+                continue
+            if tile_i < len(mapx.tile_defs):
+                td = mapx.tile_defs[tile_i]
+                tz0 = -_fixed12_signed_from_u32(td.u32_24)
+                yaw_units0 = td.u32_04 & 0xFFFF
+            else:
+                tz0 = tile.z
+                yaw_units0 = 0
+            yaw0 = _angle4096_to_radians(yaw_units0, sign=terrain_yaw_sign) if yaw_units0 else 0.0
+            for vv in rec.table_a:
+                _, rz0 = _rotate_xz(vv.x, vv.z, yaw0) if yaw0 else (vv.x, vv.z)
+                zz = tz0 + rz0
+                z_min = zz if z_min is None else min(z_min, zz)
+                z_max = zz if z_max is None else max(z_max, zz)
+    terrain_z_mirror_center = ((z_min + z_max) * 0.5) if (mirror_terrain_z and z_min is not None and z_max is not None) else None
+
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write("mtllib world.mtl\n")
+        f.write("# Textured terrain probe. Texture page + material rectangle are EXE-confirmed.\n")
+        f.write("# Per-triangle UV corner orientation is still experimental.\n")
+        vbase = 1
+        vtbase = 1
+        for tile_i, tile in enumerate(mapx.tiles):
+            if tile_i >= len(mapx.tile_trak_indices):
+                continue
+            rec_i = mapx.tile_trak_indices[tile_i]
+            if rec_i < 0 or rec_i >= len(trak.records):
+                continue
+            rec = trak.records[rec_i]
+            if not rec.table_a or not rec.table_b:
+                continue
+            if tile_i < len(mapx.tile_defs):
+                td = mapx.tile_defs[tile_i]
+                tx = _fixed12_signed_from_u32(td.u32_16)
+                ty = _fixed12_signed_from_u32(td.u32_20)
+                tz = -_fixed12_signed_from_u32(td.u32_24)
+                yaw_units = td.u32_04 & 0xFFFF
+            else:
+                tx, ty, tz = tile.x, tile.y, tile.z
+                yaw_units = 0
+            yaw = _angle4096_to_radians(yaw_units, sign=terrain_yaw_sign) if yaw_units else 0.0
+            f.write(f"\no textured_map_tile_{tile_i:04d}_trak_{rec_i:03d}\n")
+            for v in rec.table_a:
+                rx, rz = _rotate_xz(v.x, v.z, yaw) if yaw else (v.x, v.z)
+                raw_z = tz + rz
+                out_z = (2.0 * terrain_z_mirror_center - raw_z) if terrain_z_mirror_center is not None else raw_z
+                f.write(_obj_vertex_line(tx + rx, ty + v.y, out_z, scale=scale, flip_z=flip_z))
+            for v in rec.table_a:
+                rnx, rnz = _rotate_xz(v.nx, v.nz, yaw) if yaw else (v.nx, v.nz)
+                if terrain_z_mirror_center is not None:
+                    rnz = -rnz
+                f.write(_obj_normal_line(rnx, v.ny, rnz, flip_z=flip_z))
+            current_mat = None
+            for tri in rec.table_b:
+                if not (tri.i0 < rec.a_count and tri.i1 < rec.a_count and tri.i2 < rec.a_count):
+                    continue
+                if len({tri.i0, tri.i1, tri.i2}) != 3:
+                    continue
+                mat = mat_by_i.get(tri.material_index)
+                if tri.material_index != current_mat:
+                    current_mat = tri.material_index
+                    f.write(f"usemtl trak_mat_{current_mat:04d}\n")
+                tex_w = tex_h = 256
+                uvs = _material_uvs_for_triangle(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=True)
+                for u, v in uvs:
+                    f.write(f"vt {u:.9g} {v:.9g}\n")
+                a = vbase + tri.i0
+                b = vbase + tri.i1
+                c = vbase + tri.i2
+                f.write(f"f {a}/{vtbase}/{a} {b}/{vtbase+1}/{b} {c}/{vtbase+2}/{c}\n")
+                vtbase += 3
+            vbase += rec.a_count
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +893,7 @@ def _collect_world_obj_assets(world_dir: Path) -> list[Path]:
     """
     preferred = [
         world_dir / "terrain.obj",
+        world_dir / "terrain_textured_probe.obj",
         world_dir / "objects_all_candidates.obj",
         world_dir / "objects_primary.obj",
         world_dir / "map_object_markers.obj",
@@ -989,6 +1132,7 @@ def export_world(
     trak: TrakFile,
     stpc_bytes: bytes,
     stpc_result: STPCExportResult,
+    text_chunk: TextChunk | None = None,
     scan_bytes: int = 2048,
     scale: float = 1.0,
     flip_z: bool = False,
@@ -1017,7 +1161,10 @@ def export_world(
     * Object scale and material/texture assignment.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    write_world_mtl(out_dir / "world.mtl")
+    materials = parse_runtime_materials(text_chunk) if text_chunk is not None else []
+    write_world_mtl(out_dir / "world.mtl", materials)
+    if text_chunk is not None:
+        copy_textures_for_world(out_dir.parent / "textures", out_dir / "textures")
 
     instances = build_world_object_instances(mapx)
     hits = scan_stpc_definition_for_mesh_offsets(
@@ -1048,6 +1195,24 @@ def export_world(
             terrain_yaw_sign=terrain_yaw_sign,
             write_per_tile_dir=None,
         )
+
+    textured_terrain_obj = None
+    if terrain_obj is not None and materials:
+        try:
+            textured_terrain_obj = write_textured_terrain_probe_obj(
+                path=out_dir / "terrain_textured_probe.obj",
+                mapx=mapx,
+                trak=trak,
+                materials=materials,
+                scale=scale,
+                flip_z=flip_z,
+                terrain_yaw_sign=terrain_yaw_sign,
+                mirror_terrain_z=mirror_terrain_z,
+            )
+        except Exception:
+            # Keep the stable geometry export even if the experimental textured
+            # probe hits an unexpected material row.
+            textured_terrain_obj = None
 
     terrain_z_min, terrain_z_max = _obj_bounds_z(terrain_obj) if terrain_obj else (None, None)
     object_z_mirror_center = None
@@ -1202,6 +1367,7 @@ def export_world(
         "objects_with_mesh_hits": len({h.object_index for h in hits}),
         "unique_meshes_referenced": len({h.mesh_index for h in hits}),
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
+        "terrain_textured_probe_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
         "mirror_terrain_z": mirror_terrain_z,
