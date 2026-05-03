@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .map_full_chunk import MapFullExe, MapObjectRecord
-from .stpc_chunk import MeshCandidate, STPCExportResult
+from .stpc_chunk import MeshCandidate, STPCExportResult, stpc_triangle_uvs
 from .trak_chunk import TrakFile
 from .text_chunk import TextChunk
 from .material_chunk import RuntimeMaterial, parse_runtime_materials, copy_textures_for_world
@@ -468,6 +468,7 @@ def _write_instanced_mesh_obj(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 0.0,
+    materials: list[RuntimeMaterial] | None = None,
 ) -> int:
     """Append one STPC mesh instance to an open OBJ file.
 
@@ -512,6 +513,9 @@ def _write_instanced_mesh_obj(
             rnz = -rnz
         f.write(_obj_normal_line(rnx, v.ny, rnz, flip_z=flip_z))
     current_mat: int | None = None
+    mat_by_i = {m.index: m for m in (materials or [])}
+    vt_index = getattr(f, "_eng_next_vt_index", 1)
+    normal_base = vertex_base
     for tri in mesh.triangles:
         if not (tri.i0 < mesh.vertex_count and tri.i1 < mesh.vertex_count and tri.i2 < mesh.vertex_count):
             continue
@@ -520,10 +524,19 @@ def _write_instanced_mesh_obj(
         if tri.material != current_mat:
             current_mat = tri.material
             f.write(f"usemtl stpc_mat_{current_mat:04d}\n")
+        uv0, uv1, uv2 = stpc_triangle_uvs(mat_by_i.get(tri.material), tri.flags)
+        f.write(f"vt {uv0[0]:.9g} {uv0[1]:.9g}\n")
+        f.write(f"vt {uv1[0]:.9g} {uv1[1]:.9g}\n")
+        f.write(f"vt {uv2[0]:.9g} {uv2[1]:.9g}\n")
         a = vertex_base + tri.i0
         b = vertex_base + tri.i1
         c = vertex_base + tri.i2
-        f.write(f"f {a}//{a} {b}//{b} {c}//{c}\n")
+        na = normal_base + tri.i0
+        nb = normal_base + tri.i1
+        nc = normal_base + tri.i2
+        f.write(f"f {a}/{vt_index}/{na} {b}/{vt_index + 1}/{nb} {c}/{vt_index + 2}/{nc}\n")
+        vt_index += 3
+    setattr(f, "_eng_next_vt_index", vt_index)
     return vertex_base + mesh.vertex_count
 
 
@@ -544,6 +557,7 @@ def write_instanced_stpc_objs(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 0.0,
+    materials: list[RuntimeMaterial] | None = None,
 ) -> Path | None:
     """Write combined and single-hit STPC instance OBJ files.
 
@@ -579,7 +593,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{inst.object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
 
     # Single-hit files: exactly one STPC mesh per OBJ file.
     by_hit_dir = out_dir / "objects_by_hit"
@@ -599,7 +613,7 @@ def write_instanced_stpc_objs(
                 object_z_sign=object_z_sign, local_z_sign=local_z_sign,
                 apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign,
                 object_z_mirror_center=object_z_mirror_center,
-                object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset,
+                object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials,
             )
 
     # Primary-only file: first/earliest hit per object.  This is often the most
@@ -618,7 +632,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{object_index:03d}_primary_mesh_{mesh.index:03d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
 
     if write_per_object:
         grouped_dir = out_dir / "diagnostics" / "objects_grouped_by_object"
@@ -642,8 +656,8 @@ def write_instanced_stpc_objs(
                     if mesh is None:
                         continue
                     name = f"object_{object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
-    return combined
+                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+    return primary
 
 
 
@@ -677,23 +691,30 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
     second file to keep the combined OBJ valid.
     """
     terrain = world_dir / "terrain.obj"
-    inst = world_dir / "objects_all_candidates.obj"
+    primary = world_dir / "objects_primary.obj"
+    all_candidates = world_dir / "objects_all_candidates.obj"
+    inst = primary if primary.exists() else all_candidates
     if not inst.exists() and not terrain.exists():
         return None
     out = world_dir / "combined.obj"
 
     vertex_offset = 0
+    texture_offset = 0
     normal_offset = 0
 
     def copy_obj(src: Path, dst, *, add_offsets: bool) -> tuple[int, int]:
-        nonlocal vertex_offset, normal_offset
+        nonlocal vertex_offset, texture_offset, normal_offset
         local_v = 0
+        local_vt = 0
         local_n = 0
         for line in src.read_text(encoding="utf-8", errors="replace").splitlines():
             if line.startswith("mtllib"):
                 continue
             if line.startswith("v "):
                 local_v += 1
+                dst.write(line + "\n")
+            elif line.startswith("vt "):
+                local_vt += 1
                 dst.write(line + "\n")
             elif line.startswith("vn "):
                 local_n += 1
@@ -703,28 +724,39 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
                 new_parts = []
                 for p in parts:
                     bits = p.split("/")
-                    # Supports v//n emitted by our exporters.
                     vi = int(bits[0]) + vertex_offset
-                    if len(bits) >= 3 and bits[2]:
-                        ni = int(bits[2]) + normal_offset
-                        new_parts.append(f"{vi}//{ni}")
+                    if len(bits) >= 3:
+                        vt = int(bits[1]) + texture_offset if bits[1] else None
+                        ni = int(bits[2]) + normal_offset if bits[2] else None
+                        if vt is not None and ni is not None:
+                            new_parts.append(f"{vi}/{vt}/{ni}")
+                        elif ni is not None:
+                            new_parts.append(f"{vi}//{ni}")
+                        elif vt is not None:
+                            new_parts.append(f"{vi}/{vt}")
+                        else:
+                            new_parts.append(str(vi))
+                    elif len(bits) == 2 and bits[1]:
+                        vt = int(bits[1]) + texture_offset
+                        new_parts.append(f"{vi}/{vt}")
                     else:
                         new_parts.append(str(vi))
                 dst.write("f " + " ".join(new_parts) + "\n")
             else:
                 dst.write(line + "\n")
         vertex_offset += local_v
+        texture_offset += local_vt
         normal_offset += local_n
-        return local_v, local_n
+        return local_v, local_vt, local_n
 
     with out.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
-        f.write("# Combined reconstructed world: TRAK terrain + translated STPC object candidates.\n")
+        f.write("# Combined reconstructed world: TRAK terrain + primary STPC object instances.\n")
         if include_terrain and terrain.exists():
             f.write("\no terrain\n")
             copy_obj(terrain, f, add_offsets=True)
         if inst.exists():
-            f.write("\n# --- STPC translated candidate instances ---\n")
+            f.write("\n# --- STPC primary object instances ---\n")
             copy_obj(inst, f, add_offsets=True)
     return out
 
@@ -892,6 +924,7 @@ def export_world(
         object_x_offset=object_x_offset,
         object_y_offset=object_y_offset,
         object_z_offset=object_z_offset,
+        materials=materials,
     )
     world_combined = write_world_combined_obj(out_dir)
 
@@ -992,11 +1025,11 @@ def export_world(
         "stpc_object_yaw_sign": stpc_object_yaw_sign,
         "terrain_tiles_written": terrain_tiles_written,
         "terrain_tiles_skipped": terrain_tiles_skipped,
-        "objects_all_candidates_obj": str(combined_obj.name) if combined_obj else None,
+        "objects_all_candidates_obj": "objects_all_candidates.obj" if hits else None,
         "objects_by_hit_folder": "objects_by_hit/",
-        "objects_primary_obj": "objects_primary.obj" if hits else None,
+        "objects_primary_obj": str(combined_obj.name) if combined_obj else None,
         "combined_obj": str(world_combined.name) if world_combined else None,
-        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale, materials, and full object-definition semantics are still unresolved; use objects_by_hit/ and diagnostics/ for validation.",
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale and full object-definition semantics are still unresolved; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")

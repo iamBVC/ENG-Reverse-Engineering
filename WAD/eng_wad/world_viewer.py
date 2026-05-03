@@ -20,8 +20,8 @@ def _collect_world_obj_assets(world_dir: Path) -> list[Path]:
     preferred = [
         world_dir / "terrain.obj",
         world_dir / "terrain_textured.obj",
-        world_dir / "objects_all_candidates.obj",
         world_dir / "objects_primary.obj",
+        world_dir / "objects_all_candidates.obj",
         world_dir / "map_object_markers.obj",
         world_dir / "combined.obj",
     ]
@@ -57,7 +57,7 @@ def write_world_viewer_html(path: Path, obj_assets: list[Path]) -> None:
             text = obj_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        default_visible = rel in {"terrain.obj", "objects_all_candidates.obj"}
+        default_visible = rel in {"terrain.obj", "objects_primary.obj"}
         embedded.append({"name": rel, "text": text, "visible": default_visible})
 
     payload = json.dumps(embedded, separators=(",", ":"))

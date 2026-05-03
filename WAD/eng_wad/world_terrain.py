@@ -86,6 +86,8 @@ def write_world_mtl(
             f.write(f"newmtl stpc_mat_{i:04d}\nKd {shade:.3f} {min(1.0, shade+0.12):.3f} {max(0.0, shade-0.08):.3f}\nKa 0 0 0\n")
             if m is not None and not m.is_color_only:
                 tex_i = _remap_texture_index(material_index=i, raw_texture_index=m.texture_index, texture_count=texture_count)
+                if tex_i is not None:
+                    f.write(f"map_Kd {texture_prefix}/texture_{tex_i:02d}.png\n")
                 f.write(f"# raw_texture_page={m.texture_index} texture={tex_i} rect={m.x0},{m.y0}..{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
             f.write("\n")
             f.write(f"newmtl trak_mat_{i:04d}\nKd {shade:.3f} {shade:.3f} {shade:.3f}\nKa 0 0 0\n")

@@ -495,29 +495,98 @@ def iter_material_ids(meshes: Iterable[MeshCandidate]) -> list[int]:
     return sorted(mats)
 
 
-def write_mtl(material_ids: Iterable[int], path: Path) -> None:
-    """
-    Write a simple OBJ material library.
+def _material_by_index(materials) -> dict[int, object]:
+    """Return a loose index -> material map without importing material_chunk.
 
-    The STPC triangle material field is not fully decoded yet.  For now, each
-    unique material ID gets a deterministic diffuse colour so OBJ viewers can
-    visually separate groups.
+    stpc_chunk is imported by material_chunk, so this module intentionally uses
+    duck typing for RuntimeMaterial-like objects.
+    """
+    return {int(getattr(m, "index")): m for m in (materials or []) if hasattr(m, "index")}
+
+
+def _material_texture_index(mat: object | None, texture_count: int | None) -> int | None:
+    if mat is None or bool(getattr(mat, "is_color_only", False)):
+        return None
+    raw = int(getattr(mat, "texture_index", -1)) & 0xFF
+    if texture_count is not None and not (0 <= raw < texture_count):
+        return None
+    return raw
+
+
+def _material_uv_rect(mat: object | None, *, flip_v_for_obj: bool = True) -> tuple[float, float, float, float]:
+    if mat is None or bool(getattr(mat, "is_color_only", False)) or not hasattr(mat, "uv_rect"):
+        u0, u1, v0, v1 = 0.0, 1.0, 0.0, 1.0
+    else:
+        u0, u1, v0, v1 = getattr(mat, "uv_rect")()
+    if flip_v_for_obj:
+        v0, v1 = 1.0 - v0, 1.0 - v1
+    return u0, u1, v0, v1
+
+
+def stpc_triangle_uvs(mat: object | None, face_flags: int, *, flip_v_for_obj: bool = True) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Return the EXE-style UV triplet for one STPC/TRAK triangle.
+
+    STPC mesh records carry the same 28-byte triangle layout as TRAK and the
+    renderer resolves triangle +0x08 to a 20-byte runtime material.  The exact
+    per-triangle UV selector is driven by the same confirmed flag bits used by
+    sub_556510: 0x0800, 0x0010, and 0x0020.
+    """
+    u0, u1, v0, v1 = _material_uv_rect(mat, flip_v_for_obj=flip_v_for_obj)
+    swap_u = bool(face_flags & 0x0020)
+    if face_flags & 0x0800:
+        if face_flags & 0x0010:
+            return (
+                (u1 if swap_u else u0, v0),
+                (u0 if swap_u else u1, v0),
+                (u0 if swap_u else u1, v1),
+            )
+        return (
+            (u0 if swap_u else u1, v1),
+            (u1 if swap_u else u0, v1),
+            (u1 if swap_u else u0, v0),
+        )
+    return (
+        (u0 if swap_u else u1, v1),
+        (u1 if swap_u else u0, v1),
+        (u0 if swap_u else u1, v0),
+    )
+
+
+def write_mtl(
+    material_ids: Iterable[int],
+    path: Path,
+    *,
+    materials=None,
+    texture_count: int | None = None,
+    texture_prefix: str = "../textures",
+    material_prefix: str = "mat",
+) -> None:
+    """Write an OBJ material library for STPC meshes.
+
+    When RuntimeMaterial rows from TEXT are available, material IDs are bound to
+    the decoded texture pages.  Otherwise the MTL falls back to deterministic
+    diffuse colours so the geometry is still easy to inspect.
     """
     ids = list(material_ids)
+    mat_by_i = _material_by_index(materials)
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write("# Auto-generated placeholder MTL for STPC OBJ export\n")
-        f.write("# Material IDs come from the STPC triangle material_or_texture_id field.\n\n")
-        for idx, mat_id in enumerate(ids):
-            # Deterministic pseudo-colour in 0..1 range.  These are not original
-            # game texture colours; they are only viewer-friendly placeholders.
+        f.write("# Auto-generated MTL for STPC OBJ export\n")
+        f.write("# Uses TEXT runtime material table when available; otherwise diffuse fallback colours.\n\n")
+        for mat_id in ids:
+            m = mat_by_i.get(mat_id)
             r = ((mat_id * 37 + 80) % 255) / 255.0
             g = ((mat_id * 67 + 120) % 255) / 255.0
             b = ((mat_id * 97 + 160) % 255) / 255.0
-            f.write(f"newmtl mat_{mat_id:04d}\n")
+            f.write(f"newmtl {material_prefix}_{mat_id:04d}\n")
             f.write(f"Kd {r:.6f} {g:.6f} {b:.6f}\n")
             f.write("Ka 0.000000 0.000000 0.000000\n")
             f.write("Ks 0.000000 0.000000 0.000000\n")
-            f.write("d 1.000000\n\n")
+            f.write("d 1.000000\n")
+            tex_i = _material_texture_index(m, texture_count)
+            if tex_i is not None:
+                f.write(f"map_Kd {texture_prefix}/texture_{tex_i:02d}.png\n")
+                f.write(f"# raw_texture_page={getattr(m, 'texture_index', '')} material_rect={getattr(m, 'x0', '')},{getattr(m, 'y0', '')},{getattr(m, 'x1', '')},{getattr(m, 'y1', '')} flags=0x{int(getattr(m, 'flags', 0)):04X}\n")
+            f.write("\n")
 
 
 def write_obj(
@@ -527,6 +596,8 @@ def write_obj(
     scale: float = 1.0,
     flip_z: bool = False,
     mtl_name: str | None = None,
+    materials=None,
+    material_prefix: str = "mat",
 ) -> None:
     """Write one STPC mesh as a Wavefront OBJ file."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
@@ -549,6 +620,8 @@ def write_obj(
             f.write(f"vn {v.nx:.9g} {v.ny:.9g} {nz:.9g}\n")
 
         current_mat: int | None = None
+        mat_by_i = _material_by_index(materials)
+        vt_index = 1
 
         for tri in mesh.triangles:
             if not (tri.i0 < mesh.vertex_count and tri.i1 < mesh.vertex_count and tri.i2 < mesh.vertex_count):
@@ -558,15 +631,21 @@ def write_obj(
 
             if tri.material != current_mat:
                 current_mat = tri.material
-                f.write(f"usemtl mat_{current_mat:04d}\n")
+                f.write(f"usemtl {material_prefix}_{current_mat:04d}\n")
 
-            # OBJ indices are 1-based.  The same index is used for vertex and
-            # normal because STPC stores one normal per vertex.
+            uv0, uv1, uv2 = stpc_triangle_uvs(mat_by_i.get(tri.material), tri.flags)
+            f.write(f"vt {uv0[0]:.9g} {uv0[1]:.9g}\n")
+            f.write(f"vt {uv1[0]:.9g} {uv1[1]:.9g}\n")
+            f.write(f"vt {uv2[0]:.9g} {uv2[1]:.9g}\n")
+
+            # OBJ indices are 1-based.  Normals are per-source vertex; UVs are
+            # per-face because the EXE derives them from triangle flags/material.
             a = tri.i0 + 1
             b = tri.i1 + 1
             c = tri.i2 + 1
 
-            f.write(f"f {a}//{a} {b}//{b} {c}//{c}\n")
+            f.write(f"f {a}/{vt_index}/{a} {b}/{vt_index + 1}/{b} {c}/{vt_index + 2}/{c}\n")
+            vt_index += 3
 
 
 def write_combined_obj(
@@ -576,6 +655,8 @@ def write_combined_obj(
     scale: float = 1.0,
     flip_z: bool = False,
     mtl_name: str | None = None,
+    materials=None,
+    material_prefix: str = "mat",
 ) -> None:
     """Write all detected STPC meshes into one OBJ file."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
@@ -585,6 +666,9 @@ def write_combined_obj(
             f.write(f"mtllib {mtl_name}\n")
 
         vertex_base = 1
+        normal_base = 1
+        vt_base = 1
+        mat_by_i = _material_by_index(materials)
 
         for mesh in meshes:
             f.write(f"\no stpc_mesh_{mesh.index:03d}_off_{mesh.offset:08X}\n")
@@ -607,14 +691,24 @@ def write_combined_obj(
 
                 if tri.material != current_mat:
                     current_mat = tri.material
-                    f.write(f"usemtl mat_{current_mat:04d}\n")
+                    f.write(f"usemtl {material_prefix}_{current_mat:04d}\n")
+
+                uv0, uv1, uv2 = stpc_triangle_uvs(mat_by_i.get(tri.material), tri.flags)
+                f.write(f"vt {uv0[0]:.9g} {uv0[1]:.9g}\n")
+                f.write(f"vt {uv1[0]:.9g} {uv1[1]:.9g}\n")
+                f.write(f"vt {uv2[0]:.9g} {uv2[1]:.9g}\n")
 
                 a = vertex_base + tri.i0
                 b = vertex_base + tri.i1
                 c = vertex_base + tri.i2
-                f.write(f"f {a}//{a} {b}//{b} {c}//{c}\n")
+                na = normal_base + tri.i0
+                nb = normal_base + tri.i1
+                nc = normal_base + tri.i2
+                f.write(f"f {a}/{vt_base}/{na} {b}/{vt_base + 1}/{nb} {c}/{vt_base + 2}/{nc}\n")
+                vt_base += 3
 
             vertex_base += mesh.vertex_count
+            normal_base += mesh.vertex_count
 
 
 def write_manifest(meshes: list[MeshCandidate], path: Path) -> None:
@@ -739,6 +833,8 @@ def export_stpc_meshes_from_bytes(
     write_combined: bool = True,
     write_debug: bool = False,
     write_materials: bool = True,
+    materials=None,
+    texture_count: int | None = None,
     verbose: bool = False,
 ) -> STPCExportResult:
     """
@@ -768,13 +864,13 @@ def export_stpc_meshes_from_bytes(
     mtl_name: str | None = None
     if write_materials and meshes:
         mtl_path = out_dir / "stpc_materials.mtl"
-        write_mtl(iter_material_ids(meshes), mtl_path)
+        write_mtl(iter_material_ids(meshes), mtl_path, materials=materials, texture_count=texture_count)
         mtl_name = mtl_path.name
 
     mesh_obj_paths: list[Path] = []
     for mesh in meshes:
         obj_path = out_dir / f"mesh_{mesh.index:03d}_off_{mesh.offset:08X}.obj"
-        write_obj(mesh, obj_path, scale=scale, flip_z=flip_z, mtl_name=mtl_name)
+        write_obj(mesh, obj_path, scale=scale, flip_z=flip_z, mtl_name=mtl_name, materials=materials)
         mesh_obj_paths.append(obj_path)
 
         if verbose:
@@ -789,7 +885,7 @@ def export_stpc_meshes_from_bytes(
     combined_obj_path: Path | None = None
     if write_combined and meshes:
         combined_obj_path = out_dir / "combined.obj"
-        write_combined_obj(meshes, combined_obj_path, scale=scale, flip_z=flip_z, mtl_name=mtl_name)
+        write_combined_obj(meshes, combined_obj_path, scale=scale, flip_z=flip_z, mtl_name=mtl_name, materials=materials)
 
     faces_debug_path: Path | None = None
     if write_debug:

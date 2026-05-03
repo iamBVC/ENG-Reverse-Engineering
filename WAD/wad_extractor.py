@@ -18,7 +18,7 @@ from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
 from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
 from eng_wad.map_export import export_map_outputs
-from eng_wad.material_chunk import export_material_diagnostics
+from eng_wad.material_chunk import export_material_diagnostics, parse_runtime_materials
 from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
@@ -219,6 +219,8 @@ def extract_wad(
                 scale=stpc_scale,
                 flip_z=stpc_flip_z,
                 write_debug=stpc_debug_faces,
+                materials=parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else None,
+                texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
                 verbose=verbose,
             )
             print(f"  → stpc/ ({len(stpc_result.meshes)} meshes, manifest.csv, combined.obj)")

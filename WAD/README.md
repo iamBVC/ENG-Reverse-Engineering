@@ -260,7 +260,7 @@ Exact hits where an STPC object definition contains a decoded STPC mesh-record o
 
 ### `world/objects_primary.obj`
 
-One earliest mesh-reference hit per MAP object. This is the cleanest object export for quick inspection.
+One earliest mesh-reference hit per MAP object. This is the cleanest object export for quick inspection and is now the object source used by `world/combined.obj`.
 
 ### `world/objects_all_candidates.obj`
 
@@ -272,7 +272,7 @@ One OBJ per exact STPC mesh-reference hit. Each file contains exactly one STPC m
 
 ### `world/combined.obj`
 
-The reconstructed terrain plus all translated STPC candidate instances in one OBJ.
+The reconstructed terrain plus `objects_primary.obj` in one OBJ. `objects_all_candidates.obj` is still written as a diagnostic, but it is no longer the default combined-world source.
 
 ### `world/world_viewer.html`
 
@@ -496,12 +496,11 @@ The runtime usually scans the combined `group0 + group1 + group2` entry array.  
 
 ### `STPC` chunk status
 
-`STPC` static polygon exports still use a validated scanner because the high-level STPC container is not fully table-decoded yet.  The mesh records it finds match the same 24-byte vertex and 28-byte triangle format, and their first `0x6C` bytes are now understood as the same culling/bounds-style header.
+`STPC` static polygon exports still use a validated scanner because the high-level STPC container is not fully table-decoded yet.  The mesh records it finds match the same 24-byte vertex and 28-byte triangle format, and their first `0x6C` bytes are now understood as the same culling/bounds-style header. STPC OBJ export now writes `vt` coordinates per face using the same material-rectangle selector bits confirmed in `sub_556510` (`0x0800`, `0x0010`, `0x0020`) and writes `map_Kd` texture bindings when the TEXT material table is available.
 
 Known remaining STPC uncertainty:
 
 - the high-level STPC container/table of contents
-- object-local texture coordinates for STPC meshes
 - exact names for `GeometryRecord84 +0x00/+0x04/+0x08/+0x7E`
 - full semantic split of collision group0/group1/group2
 
@@ -573,7 +572,7 @@ Useful next reverse-engineering tasks:
 1. Validate MAP-object → STPC-definition → STPC-mesh references visually in `world/combined.obj`.
 2. Decode MAP object scale and the full STPC object-definition language, then apply it to `world/objects_all_candidates.obj`.
 2. Decode `MAP ` `flags` and `type_idx` values.
-3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` texture/material data.
+3. Validate the current EXE-derived STPC triangle UV/material mapping across more levels; texture pages now bind through the decoded TEXT runtime material table.
 4. Finish naming TRAK/STPC header fields `+0x00/+0x04/+0x08/+0x7E` and the exact semantic split of collision groups 0/1/2.
 5. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
 6. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
@@ -723,7 +722,7 @@ world/diagnostics/objects_grouped_by_object/
 
 contains grouped candidate hits per MAP object. These files may intentionally contain multiple meshes and should be treated as diagnostic.
 
-Known limitation: the current visual reference is `terrain.obj`. The exporter therefore mirrors STPC object instances around the same centered world Z axis used by the validated terrain orientation. STPC object yaw is applied experimentally from `small_04`; scale, materials, and full STPC object-definition semantics are still unresolved.
+Known limitation: the current visual reference is `terrain.obj`. The exporter therefore mirrors STPC object instances around the same centered world Z axis used by the validated terrain orientation. STPC object yaw is applied experimentally from `small_04`; scale and full STPC object-definition semantics are still unresolved. STPC OBJ faces now include per-face UVs derived from the EXE-confirmed material-rectangle flag path, and `world.mtl` maps `stpc_mat_####` entries to decoded TEXT textures when available.
 
 ## World rebuild transform update
 
