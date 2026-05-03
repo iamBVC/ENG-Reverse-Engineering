@@ -83,11 +83,6 @@ def extract_wad(
     world_object_x_offset: float = 0.0,
     world_object_y_offset: float = 0.0,
     world_object_z_offset: float = 1.5,
-    world_terrain_uv_variant: str = "default",
-    world_write_terrain_uv_variants: bool = True,
-    world_write_terrain_uv_deep_tests: bool = True,
-    world_terrain_texture_remap: str = "direct",
-    world_write_terrain_texture_index_variants: bool = True,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -263,11 +258,6 @@ def extract_wad(
                     object_x_offset=world_object_x_offset,
                     object_y_offset=world_object_y_offset,
                     object_z_offset=world_object_z_offset,
-                    world_terrain_uv_variant=world_terrain_uv_variant,
-                    write_terrain_uv_variants=world_write_terrain_uv_variants,
-                    write_terrain_uv_deep_tests=world_write_terrain_uv_deep_tests,
-                    world_terrain_texture_remap=world_terrain_texture_remap,
-                    write_terrain_texture_index_variants=world_write_terrain_texture_index_variants,
                 )
                 print(
                     f"  → world/ ({len(world.object_instances)} MAP objects, "
@@ -360,11 +350,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-object-x-offset", type=float, default=0.0, help="final world-space X offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-y-offset", type=float, default=0.0, help="final world-space Y offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-z-offset", type=float, default=1.5, help="final world-space Z offset applied only to STPC object instances after all conversion/mirroring; default 1.5 is the visually validated object/terrain alignment correction")
-    parser.add_argument("--world-terrain-uv-variant", choices=("default", "flip_u", "flip_v", "flip_uv", "rot90_cw", "rot90_ccw", "rot180", "diag_alt", "rect_tl_tr_bl", "rect_tr_br_bl", "rect_tl_br_bl", "rect_tl_tr_br", "flags_low2_rect", "unknown_low2_rect", "material_flags_2_3_rect", "material_flags_3_4_rect", "vertex_xz_bbox", "vertex_zx_bbox"), default="default", help="UV corner-order/selection variant used for world/terrain_textured_probe.obj")
-    parser.add_argument("--no-world-terrain-uv-variants", action="store_true", help="skip writing world/terrain_uv_variants/ textured OBJ comparison set")
-    parser.add_argument("--no-world-terrain-uv-deep-tests", action="store_true", help="skip writing world/terrain_uv_deep_tests/ flag/projection UV comparison set")
-    parser.add_argument("--world-terrain-texture-remap", choices=("direct", "shift_p1", "shift_m1", "shift_p2", "shift_m2", "shift_p3", "shift_m3", "shift_p4", "shift_m4", "shift_p5", "shift_m5", "shift_p8", "shift_m8", "terrain_05_09_mod_raw", "terrain_05_09_mod_raw_minus3", "material_index_mod_texture_count", "material_index_05_09_mod"), default="direct", help="diagnostic remap from runtime texture page id to exported texture_NN.png for textured terrain")
-    parser.add_argument("--no-world-terrain-texture-index-variants", action="store_true", help="skip writing world/terrain_texture_index_variants/ texture-page remap comparison set")
 
     args = parser.parse_args(argv)
 
@@ -419,11 +404,6 @@ def main(argv: list[str] | None = None) -> int:
             world_object_x_offset=args.world_object_x_offset,
             world_object_y_offset=args.world_object_y_offset,
             world_object_z_offset=args.world_object_z_offset,
-            world_terrain_uv_variant=args.world_terrain_uv_variant,
-            world_write_terrain_uv_variants=not args.no_world_terrain_uv_variants,
-            world_write_terrain_uv_deep_tests=not args.no_world_terrain_uv_deep_tests,
-            world_terrain_texture_remap=args.world_terrain_texture_remap,
-            world_write_terrain_texture_index_variants=not args.no_world_terrain_texture_index_variants,
             verbose=not args.quiet,
         )
         if not ok:

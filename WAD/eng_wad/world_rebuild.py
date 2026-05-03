@@ -601,7 +601,7 @@ def write_instanced_stpc_objs(
             )
 
     # Primary-only file: first/earliest hit per object.  This is often the most
-    # useful visual probe while the STPC object-definition script is unknown.
+    # useful visual export while the STPC object-definition script is unknown.
     first_by_object: dict[int, StpcMeshReferenceHit] = {}
     for hit in sorted(hits, key=lambda h: (h.object_index, h.hit_relative_offset, h.mesh_index)):
         first_by_object.setdefault(hit.object_index, hit)
@@ -727,68 +727,21 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
     return out
 
 
-TERRAIN_TEXTURE_REMAP_VARIANTS = (
-    "direct",
-    "shift_p1",
-    "shift_m1",
-    "shift_p2",
-    "shift_m2",
-    "shift_p3",
-    "shift_m3",
-    "shift_p4",
-    "shift_m4",
-    "shift_p5",
-    "shift_m5",
-    "shift_p8",
-    "shift_m8",
-    "terrain_05_09_mod_raw",
-    "terrain_05_09_mod_raw_minus3",
-    "material_index_mod_texture_count",
-    "material_index_05_09_mod",
-)
-
-
 def _remap_texture_index(
     *,
     material_index: int,
     raw_texture_index: int,
     texture_count: int,
-    mode: str = "direct",
 ) -> int | None:
-    """Map a runtime material texture-page id to an exported TEXT PNG index.
+    """Map runtime material texture-page id to exported TEXT PNG index.
 
-    The EXE-proven field at runtime material +0x02 indexes dword_58114C, the
-    runtime texture-page table.  The first probe assumed that this page id was
-    identical to the raw TEXT record index.  Visual feedback shows that this may
-    be wrong, so the exporter can now write controlled remap variants without
-    changing geometry or UV rectangles.
+    Direct mapping was visually validated for terrain after earlier texture-index
+    diagnostics looked worse than the default.
     """
     if texture_count <= 0:
         return None
-
     raw = raw_texture_index & 0xFF
-    if mode == "direct":
-        mapped = raw
-    elif mode.startswith("shift_p"):
-        mapped = raw + int(mode.removeprefix("shift_p"))
-    elif mode.startswith("shift_m"):
-        mapped = raw - int(mode.removeprefix("shift_m"))
-    elif mode == "terrain_05_09_mod_raw":
-        mapped = 5 + (raw % 5)
-    elif mode == "terrain_05_09_mod_raw_minus3":
-        mapped = 5 + ((raw - 3) % 5)
-    elif mode == "material_index_mod_texture_count":
-        mapped = material_index
-    elif mode == "material_index_05_09_mod":
-        mapped = 5 + (material_index % 5)
-    else:
-        mapped = raw
-
-    # Direct mode preserves invalid ids as missing texture paths so bad data is
-    # visible in diagnostics.  Experimental remap modes wrap to available PNGs.
-    if mode == "direct":
-        return mapped if 0 <= mapped < texture_count else None
-    return mapped % texture_count
+    return raw if 0 <= raw < texture_count else None
 
 
 def write_world_mtl(
@@ -797,24 +750,21 @@ def write_world_mtl(
     *,
     texture_prefix: str = "textures",
     texture_count: int | None = None,
-    texture_remap_mode: str = "direct",
 ) -> None:
     """Write world materials.
 
     The ordinary terrain/object OBJs still use simple diffuse colours.  When a
     material table is available, we also emit map_Kd bindings for material names
-    used by the textured terrain probe.
+    used by the textured terrain export.
 
-    ``texture_remap_mode`` is intentionally diagnostic.  The executable shows
-    material +0x02 indexes the runtime page table dword_58114C; it may not be a
-    direct TEXT-record number.
+    Terrain texture lookup uses the direct runtime page id, which was the
+    visually validated path after texture-index diagnostics were removed.
     """
     mat_by_i = {m.index: m for m in (materials or [])}
     if texture_count is None:
         texture_count = 256
     with path.open("w", encoding="utf-8") as f:
         f.write("# Materials for reconstructed WAD world exports.\n")
-        f.write(f"# texture_remap_mode={texture_remap_mode}\n")
         f.write("newmtl trak_surface\nKd 0.55 0.55 0.55\nKa 0 0 0\n\n")
         f.write("newmtl stpc_mat_default\nKd 0.75 0.75 0.75\nKa 0 0 0\n\n")
         # A broad set is enough for most material ids without bloating too much.
@@ -823,79 +773,19 @@ def write_world_mtl(
             shade = 0.25 + ((i * 37) % 100) / 160.0
             f.write(f"newmtl stpc_mat_{i:04d}\nKd {shade:.3f} {min(1.0, shade+0.12):.3f} {max(0.0, shade-0.08):.3f}\nKa 0 0 0\n")
             if m is not None and not m.is_color_only:
-                tex_i = _remap_texture_index(material_index=i, raw_texture_index=m.texture_index, texture_count=texture_count, mode=texture_remap_mode)
-                f.write(f"# raw_texture_page={m.texture_index} remapped_texture={tex_i} rect={m.x0},{m.y0}..{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
+                tex_i = _remap_texture_index(material_index=i, raw_texture_index=m.texture_index, texture_count=texture_count)
+                f.write(f"# raw_texture_page={m.texture_index} texture={tex_i} rect={m.x0},{m.y0}..{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
             f.write("\n")
             f.write(f"newmtl trak_mat_{i:04d}\nKd {shade:.3f} {shade:.3f} {shade:.3f}\nKa 0 0 0\n")
             if m is not None and not m.is_color_only:
-                tex_i = _remap_texture_index(material_index=i, raw_texture_index=m.texture_index, texture_count=texture_count, mode=texture_remap_mode)
+                tex_i = _remap_texture_index(material_index=i, raw_texture_index=m.texture_index, texture_count=texture_count)
                 if tex_i is not None:
                     f.write(f"map_Kd {texture_prefix}/texture_{tex_i:02d}.png\n")
-                f.write(f"# raw_texture_page={m.texture_index} remapped_texture={tex_i} material_rect_texels={m.x0},{m.y0},{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
+                f.write(f"# raw_texture_page={m.texture_index} texture={tex_i} material_rect_texels={m.x0},{m.y0},{m.x1},{m.y1} flags=0x{m.flags:04X}\n")
             f.write("\n")
 
 
 
-
-TERRAIN_UV_VARIANTS = (
-    "default",
-    "flip_u",
-    "flip_v",
-    "flip_uv",
-    "rot90_cw",
-    "rot90_ccw",
-    "rot180",
-    "diag_alt",
-)
-
-# Deeper UV probes.  The first set chooses one of the four possible right-triangle
-# halves inside the material rectangle.  The second set lets TRAK/material bits
-# select the half per face.  The last two derive UVs from the triangle's local
-# X/Z shape, which is useful if the game projects terrain UVs rather than using
-# a fixed corner ordering.
-TERRAIN_UV_DEEP_TESTS = (
-    "rect_tl_tr_bl",
-    "rect_tr_br_bl",
-    "rect_tl_br_bl",
-    "rect_tl_tr_br",
-    "flags_low2_rect",
-    "unknown_low2_rect",
-    "material_flags_2_3_rect",
-    "material_flags_3_4_rect",
-    "vertex_xz_bbox",
-    "vertex_zx_bbox",
-)
-
-
-def _apply_terrain_uv_variant(
-    uvs: tuple[tuple[float, float], tuple[float, float], tuple[float, float]],
-    variant: str,
-) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
-    """Return one experimental UV corner-order variant.
-
-    The EXE confirms which texture page and rectangle each material uses, but
-    the terrain triangle records still need one final corner-order convention.
-    These variants keep the same confirmed rectangle and only change which
-    corner is assigned to each triangle vertex.
-    """
-    a, b, c = uvs
-    if variant == "default":
-        return (a, b, c)
-    if variant == "flip_u":
-        return (b, a, c)
-    if variant == "flip_v":
-        return (c, b, a)
-    if variant == "flip_uv":
-        return (b, c, a)
-    if variant == "rot90_cw":
-        return (c, a, b)
-    if variant == "rot90_ccw":
-        return (b, c, a)
-    if variant == "rot180":
-        return (c, a, b)
-    if variant == "diag_alt":
-        return (a, c, b)
-    return (a, b, c)
 
 def _uv_rect_corners(
     mat: RuntimeMaterial | None,
@@ -918,58 +808,71 @@ def _uv_rect_corners(
     return tl, tr, bl, br
 
 
-def _rect_half_uvs(
+def _terrain_sub_556510_uvs(
     mat: RuntimeMaterial | None,
-    selector: int,
+    face_flags: int,
     *,
     tex_w: int = 256,
     tex_h: int = 256,
     flip_v_for_obj: bool = True,
 ) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
-    """Choose one of four triangle halves of the material rectangle."""
-    tl, tr, bl, br = _uv_rect_corners(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    choices = (
-        (tl, tr, bl),  # upper/left half
-        (tr, br, bl),  # lower/right half sharing TR-BL diagonal
-        (tl, br, bl),  # lower/left half sharing TL-BR diagonal
-        (tl, tr, br),  # upper/right half sharing TL-BR diagonal
-    )
-    return choices[selector & 3]
+    """Return the terrain UV triplet reconstructed from EXE sub_556510.
 
+    The renderer does *not* use BRender's generic quad flag selector for these
+    terrain faces.  In sub_556510, after the material pointer has been resolved
+    from TRAK Table B entry +0x08, the code writes per-vertex UVs directly into
+    the temporary render vertex buffer:
 
-def _geometry_projected_uvs(
-    rec,
-    tri,
-    mat: RuntimeMaterial | None,
-    *,
-    tex_w: int = 256,
-    tex_h: int = 256,
-    flip_v_for_obj: bool = True,
-    swap_axes: bool = False,
-) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
-    """Map triangle local X/Z extents into the material rectangle.
+        output vertex 0: floats at +0x18/+0x1C
+        output vertex 1: floats at +0x38/+0x3C
+        output vertex 2: floats at +0x58/+0x5C
 
-    This is diagnostic only.  If a geometry-projected probe looks better than
-    fixed rectangle halves, the game is probably deriving terrain UVs from a
-    projection or from additional per-vertex fields we have not decoded yet.
+    The source values are the runtime material floats:
+
+        material +0x04 = u0
+        material +0x08 = u1
+        material +0x0C = v0
+        material +0x10 = v1
+
+    and the selector bits are TRAK face flags:
+
+        0x0800  chooses the upper/lower branch
+        0x0010  chooses the alternate top-row branch inside 0x0800
+        0x0020  swaps U endpoints inside each branch
+
+    This intentionally mirrors the pseudocode literally, including the fact that
+    triangle vertices are consumed in file order i0, i1, i2.
     """
-    tl, tr, bl, br = _uv_rect_corners(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    u_min, v_top = tl
-    u_max, _ = tr
-    _, v_bottom = bl
-    verts = [rec.table_a[tri.i0], rec.table_a[tri.i1], rec.table_a[tri.i2]]
-    a_vals = [v.z if swap_axes else v.x for v in verts]
-    b_vals = [v.x if swap_axes else v.z for v in verts]
-    amin, amax = min(a_vals), max(a_vals)
-    bmin, bmax = min(b_vals), max(b_vals)
-    da = (amax - amin) or 1.0
-    db = (bmax - bmin) or 1.0
-    out = []
-    for av, bv in zip(a_vals, b_vals):
-        u = u_min + ((av - amin) / da) * (u_max - u_min)
-        v = v_bottom + ((bv - bmin) / db) * (v_top - v_bottom)
-        out.append((u, v))
-    return tuple(out)  # type: ignore[return-value]
+    if mat is None or mat.is_color_only:
+        u0, u1, v0, v1 = 0.0, 1.0, 0.0, 1.0
+    else:
+        u0, u1, v0, v1 = mat.uv_rect(tex_w, tex_h)
+    if flip_v_for_obj:
+        v0, v1 = 1.0 - v0, 1.0 - v1
+
+    swap_u = bool(face_flags & 0x0020)
+    if face_flags & 0x0800:
+        if face_flags & 0x0010:
+            # sub_556510 LABEL_232 path with V fixed to material +0x0C for
+            # vertices 0/1 and +0x10 for vertex 2.
+            return (
+                (u1 if swap_u else u0, v0),
+                (u0 if swap_u else u1, v0),
+                (u0 if swap_u else u1, v1),
+            )
+        # 0x0800 set, 0x0010 clear.
+        return (
+            (u0 if swap_u else u1, v1),
+            (u1 if swap_u else u0, v1),
+            (u1 if swap_u else u0, v0),
+        )
+
+    # 0x0800 clear.
+    return (
+        (u0 if swap_u else u1, v1),
+        (u1 if swap_u else u0, v1),
+        (u0 if swap_u else u1, v0),
+    )
 
 
 def _material_uvs_for_triangle(
@@ -978,48 +881,23 @@ def _material_uvs_for_triangle(
     tex_w: int = 256,
     tex_h: int = 256,
     flip_v_for_obj: bool = True,
-    variant: str = "default",
     tri=None,
-    rec=None,
 ) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
-    """Return a per-triangle UV assignment for a material rectangle.
+    """Return terrain UVs using the EXE-proven sub_556510 mapping.
 
-    ``default`` preserves the old probe.  Additional variants test whether TRAK
-    face flags, the unknown triangle u16, material flags, or local X/Z geometry
-    choose the triangle half/orientation inside the material rectangle.
+    Visual validation confirmed this is the correct path for textured terrain:
+    TRAK face flags 0x0800, 0x0010, and 0x0020 select the three UVs from
+    the runtime material rectangle.  Older diagnostic UV variants were removed
+    from the normal exporter after this mapping was confirmed.
     """
-    # Historical default used by terrain_textured_probe.obj.
+    if tri is not None:
+        return _terrain_sub_556510_uvs(mat, tri.flags, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
+
+    # Fallback for unexpected calls without a TRAK triangle.
     tl, tr, bl, br = _uv_rect_corners(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    base = (bl, br, tl)
+    return (bl, br, tl)
 
-    if variant in TERRAIN_UV_VARIANTS:
-        return _apply_terrain_uv_variant(base, variant)
-
-    if variant == "rect_tl_tr_bl":
-        return (tl, tr, bl)
-    if variant == "rect_tr_br_bl":
-        return (tr, br, bl)
-    if variant == "rect_tl_br_bl":
-        return (tl, br, bl)
-    if variant == "rect_tl_tr_br":
-        return (tl, tr, br)
-    if variant == "flags_low2_rect" and tri is not None:
-        return _rect_half_uvs(mat, tri.flags & 3, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    if variant == "unknown_low2_rect" and tri is not None:
-        return _rect_half_uvs(mat, tri.unknown & 3, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    if variant == "material_flags_2_3_rect" and mat is not None:
-        return _rect_half_uvs(mat, (mat.flags >> 2) & 3, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    if variant == "material_flags_3_4_rect" and mat is not None:
-        return _rect_half_uvs(mat, (mat.flags >> 3) & 3, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj)
-    if variant == "vertex_xz_bbox" and tri is not None and rec is not None:
-        return _geometry_projected_uvs(rec, tri, mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj, swap_axes=False)
-    if variant == "vertex_zx_bbox" and tri is not None and rec is not None:
-        return _geometry_projected_uvs(rec, tri, mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=flip_v_for_obj, swap_axes=True)
-
-    return base
-
-
-def write_textured_terrain_probe_obj(
+def write_textured_terrain_obj(
     *,
     path: Path,
     mapx: MapFullExe,
@@ -1029,15 +907,13 @@ def write_textured_terrain_probe_obj(
     flip_z: bool = False,
     terrain_yaw_sign: int = 1,
     mirror_terrain_z: bool = True,
-    uv_variant: str = "default",
     mtl_name: str = "world.mtl",
 ) -> Path:
-    """Write a first textured-terrain OBJ probe using confirmed material rects.
+    """Write the default textured terrain OBJ.
 
-    This is intentionally separate from terrain.obj.  terrain.obj is the trusted
-    geometry export; terrain_textured_probe.obj is for validating material/UV
-    binding.  The texture page and UV rectangle are confirmed from sub_407240;
-    per-face UV corner orientation is still experimental.
+    The UV mapping follows the visually confirmed terrain path reconstructed
+    from sub_556510: each TRAK face writes UVs directly from the resolved
+    runtime material rectangle using face flag bits 0x0800, 0x0010, and 0x0020.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     mat_by_i = {m.index: m for m in materials}
@@ -1071,9 +947,8 @@ def write_textured_terrain_probe_obj(
 
     with path.open("w", encoding="utf-8", newline="\n") as f:
         f.write(f"mtllib {mtl_name}\n")
-        f.write("# Textured terrain probe. Texture page + material rectangle are EXE-confirmed.\n")
-        f.write(f"# UV variant: {uv_variant}\n")
-        f.write("# Per-triangle UV corner orientation is still experimental.\n")
+        f.write("# Textured terrain export. Texture page + material rectangle are EXE-confirmed.\n")
+        f.write("# UV mapping: terrain renderer sub_556510.\n")
         vbase = 1
         vtbase = 1
         for tile_i, tile in enumerate(mapx.tiles):
@@ -1117,7 +992,7 @@ def write_textured_terrain_probe_obj(
                     current_mat = tri.material_index
                     f.write(f"usemtl trak_mat_{current_mat:04d}\n")
                 tex_w = tex_h = 256
-                uvs = _material_uvs_for_triangle(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=True, variant=uv_variant, tri=tri, rec=rec)
+                uvs = _material_uvs_for_triangle(mat, tex_w=tex_w, tex_h=tex_h, flip_v_for_obj=True, tri=tri)
                 for u, v in uvs:
                     f.write(f"vt {u:.9g} {v:.9g}\n")
                 a = vbase + tri.i0
@@ -1130,228 +1005,6 @@ def write_textured_terrain_probe_obj(
 
 
 
-def write_terrain_uv_variant_objs(
-    *,
-    out_dir: Path,
-    mapx: MapFullExe,
-    trak: TrakFile,
-    materials: list[RuntimeMaterial],
-    scale: float = 1.0,
-    flip_z: bool = False,
-    terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
-    texture_count: int = 0,
-    texture_remap_mode: str = "direct",
-) -> Path:
-    """Write textured terrain OBJ variants with working MTL/PNG paths.
-
-    Earlier variant exports reused a parent MTL path.  Many OBJ viewers resolve
-    ``map_Kd`` paths relative to the OBJ, not the MTL, so the textures could
-    appear missing even though the OBJ had vt/usemtl records.  This folder gets
-    its own MTL whose texture paths are explicitly relative to the variant OBJ
-    files: ``../textures/texture_XX.png``.
-    """
-    variants_dir = out_dir / "terrain_uv_variants"
-    variants_dir.mkdir(parents=True, exist_ok=True)
-
-    # Keep the variant folder self-contained.  Some OBJ viewers resolve map_Kd
-    # relative to the OBJ, some relative to the MTL, and some reject parent
-    # directory references such as ../textures entirely.  The working
-    # terrain_textured_probe.obj lives beside world.mtl and uses
-    # textures/texture_XX.png, so mirror that layout here: each variant folder
-    # gets its own textures/ directory and MTL entries that never leave the
-    # folder.
-    copy_textures_for_world(out_dir / "textures", variants_dir / "textures")
-    write_world_mtl(variants_dir / "world_uv_variants.mtl", materials, texture_prefix="textures", texture_count=texture_count, texture_remap_mode=texture_remap_mode)
-
-    rows = []
-    for variant in TERRAIN_UV_VARIANTS:
-        obj_path = variants_dir / f"terrain_textured_{variant}.obj"
-        write_textured_terrain_probe_obj(
-            path=obj_path,
-            mapx=mapx,
-            trak=trak,
-            materials=materials,
-            scale=scale,
-            flip_z=flip_z,
-            terrain_yaw_sign=terrain_yaw_sign,
-            mirror_terrain_z=mirror_terrain_z,
-            uv_variant=variant,
-            mtl_name="world_uv_variants.mtl",
-        )
-        rows.append({
-            "variant": variant,
-            "obj": obj_path.name,
-            "mtl": "world_uv_variants.mtl",
-            "texture_path_style": "textures/texture_XX.png",
-        })
-
-    _write_csv(variants_dir / "uv_variants.csv", ["variant", "obj", "mtl", "texture_path_style"], rows)
-    return variants_dir
-
-
-def write_terrain_uv_deep_test_objs(
-    *,
-    out_dir: Path,
-    mapx: MapFullExe,
-    trak: TrakFile,
-    materials: list[RuntimeMaterial],
-    scale: float = 1.0,
-    flip_z: bool = False,
-    terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
-    texture_count: int = 0,
-    texture_remap_mode: str = "direct",
-) -> Path:
-    """Write a second, stronger UV diagnostic set.
-
-    These tests do not change material texture pages.  They only vary how each
-    terrain triangle chooses a sub-rectangle corner order.  The set includes
-    fixed rectangle halves, TRAK flag-driven selection, material-flag-driven
-    selection, and local X/Z projection tests.
-    """
-    deep_dir = out_dir / "terrain_uv_deep_tests"
-    deep_dir.mkdir(parents=True, exist_ok=True)
-    copy_textures_for_world(out_dir / "textures", deep_dir / "textures")
-    write_world_mtl(
-        deep_dir / "world_uv_deep_tests.mtl",
-        materials,
-        texture_prefix="textures",
-        texture_count=texture_count,
-        texture_remap_mode=texture_remap_mode,
-    )
-
-    rows = []
-    for variant in TERRAIN_UV_DEEP_TESTS:
-        obj_path = deep_dir / f"terrain_textured_{variant}.obj"
-        write_textured_terrain_probe_obj(
-            path=obj_path,
-            mapx=mapx,
-            trak=trak,
-            materials=materials,
-            scale=scale,
-            flip_z=flip_z,
-            terrain_yaw_sign=terrain_yaw_sign,
-            mirror_terrain_z=mirror_terrain_z,
-            uv_variant=variant,
-            mtl_name="world_uv_deep_tests.mtl",
-        )
-        rows.append({
-            "variant": variant,
-            "obj": obj_path.name,
-            "mtl": "world_uv_deep_tests.mtl",
-            "texture_remap_mode": texture_remap_mode,
-            "notes": "direct texture pages; only UV selection/orientation changes",
-        })
-
-    _write_csv(deep_dir / "uv_deep_tests.csv", ["variant", "obj", "mtl", "texture_remap_mode", "notes"], rows)
-    (deep_dir / "README_uv_deep_tests.txt").write_text(
-        "Open these OBJ files if the simple terrain_uv_variants/ set all looks wrong.\n"
-        "They test triangle-half selection and flag-driven UV selection while keeping the default texture pages.\n"
-        "If flags_low2_rect or unknown_low2_rect looks better, the corresponding TRAK triangle field likely controls UV orientation.\n"
-        "If vertex_xz_bbox or vertex_zx_bbox looks better, UVs are probably projected from geometry or stored in an undecoded per-vertex field.\n",
-        encoding="utf-8",
-    )
-    return deep_dir
-
-
-def write_terrain_texture_index_variant_objs(
-    *,
-    out_dir: Path,
-    mapx: MapFullExe,
-    trak: TrakFile,
-    materials: list[RuntimeMaterial],
-    scale: float = 1.0,
-    flip_z: bool = False,
-    terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
-    texture_count: int = 0,
-    uv_variant: str = "default",
-) -> Path:
-    """Write terrain OBJ variants that only change material->texture-page mapping.
-
-    These files are for testing whether runtime material byte +0x02 maps
-    directly to TEXT texture_NN.png or through some dword_58114C page remap.
-    Geometry, material rectangles, and UV corner order stay fixed.
-    """
-    variants_root = out_dir / "terrain_texture_index_variants"
-    variants_root.mkdir(parents=True, exist_ok=True)
-
-    rows: list[dict] = []
-    material_rows: list[dict] = []
-
-    for mode in TERRAIN_TEXTURE_REMAP_VARIANTS:
-        mode_dir = variants_root / mode
-        mode_dir.mkdir(parents=True, exist_ok=True)
-        copy_textures_for_world(out_dir / "textures", mode_dir / "textures")
-        write_world_mtl(
-            mode_dir / "world_texture_remap.mtl",
-            materials,
-            texture_prefix="textures",
-            texture_count=texture_count,
-            texture_remap_mode=mode,
-        )
-        obj_path = mode_dir / "terrain_textured.obj"
-        write_textured_terrain_probe_obj(
-            path=obj_path,
-            mapx=mapx,
-            trak=trak,
-            materials=materials,
-            scale=scale,
-            flip_z=flip_z,
-            terrain_yaw_sign=terrain_yaw_sign,
-            mirror_terrain_z=mirror_terrain_z,
-            uv_variant=uv_variant,
-            mtl_name="world_texture_remap.mtl",
-        )
-        rows.append({
-            "texture_remap_mode": mode,
-            "folder": mode,
-            "obj": "terrain_textured.obj",
-            "mtl": "world_texture_remap.mtl",
-            "uv_variant": uv_variant,
-        })
-
-        # Keep a compact audit for the most-used terrain materials.
-        counts: dict[int, int] = {}
-        for rec in trak.records:
-            for tri in rec.table_b:
-                counts[tri.material_index] = counts.get(tri.material_index, 0) + 1
-        mat_by_i = {m.index: m for m in materials}
-        for mat_i, count in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:80]:
-            m = mat_by_i.get(mat_i)
-            if m is None:
-                continue
-            mapped = _remap_texture_index(material_index=mat_i, raw_texture_index=m.texture_index, texture_count=texture_count, mode=mode)
-            material_rows.append({
-                "texture_remap_mode": mode,
-                "material_index": mat_i,
-                "terrain_triangles": count,
-                "raw_texture_page": m.texture_index,
-                "mapped_texture_png": mapped if mapped is not None else "",
-                "rect": f"{m.x0},{m.y0},{m.x1},{m.y1}",
-                "flags_hex": f"0x{m.flags:04X}",
-            })
-
-    _write_csv(variants_root / "texture_index_variants.csv", ["texture_remap_mode", "folder", "obj", "mtl", "uv_variant"], rows)
-    _write_csv(variants_root / "texture_index_variant_material_audit.csv", [
-        "texture_remap_mode", "material_index", "terrain_triangles", "raw_texture_page",
-        "mapped_texture_png", "rect", "flags_hex",
-    ], material_rows)
-    (variants_root / "README_texture_index_variants.txt").write_text(
-        "These variants test whether runtime material +0x02 maps directly to TEXT texture_NN.png.\n"
-        "Open each <mode>/terrain_textured.obj. Geometry and UV rectangles are identical; only map_Kd texture PNG indices change.\n"
-        "If one folder has the correct terrain images, that reveals the missing dword_58114C page remap.\n",
-        encoding="utf-8",
-    )
-    return variants_root
-
-
-# ---------------------------------------------------------------------------
-# HTML viewer
-# ---------------------------------------------------------------------------
-
-
 def _collect_world_obj_assets(world_dir: Path) -> list[Path]:
     """Collect generated world OBJ files for the standalone viewer.
 
@@ -1361,7 +1014,7 @@ def _collect_world_obj_assets(world_dir: Path) -> list[Path]:
     """
     preferred = [
         world_dir / "terrain.obj",
-        world_dir / "terrain_textured_probe.obj",
+        world_dir / "terrain_textured.obj",
         world_dir / "objects_all_candidates.obj",
         world_dir / "objects_primary.obj",
         world_dir / "map_object_markers.obj",
@@ -1616,11 +1269,6 @@ def export_world(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 1.5,
-    world_terrain_uv_variant: str = "default",
-    write_terrain_uv_variants: bool = True,
-    write_terrain_uv_deep_tests: bool = True,
-    world_terrain_texture_remap: str = "direct",
-    write_terrain_texture_index_variants: bool = True,
 ) -> WorldRebuildResult:
     """Export the reconstructed level world into `out_dir`.
 
@@ -1636,7 +1284,7 @@ def export_world(
     out_dir.mkdir(parents=True, exist_ok=True)
     materials = parse_runtime_materials(text_chunk) if text_chunk is not None else []
     texture_count = len(text_chunk.textures) if text_chunk is not None else 0
-    write_world_mtl(out_dir / "world.mtl", materials, texture_count=texture_count, texture_remap_mode=world_terrain_texture_remap)
+    write_world_mtl(out_dir / "world.mtl", materials, texture_count=texture_count)
     if text_chunk is not None:
         copy_textures_for_world(out_dir.parent / "textures", out_dir / "textures")
 
@@ -1673,8 +1321,8 @@ def export_world(
     textured_terrain_obj = None
     if terrain_obj is not None and materials:
         try:
-            textured_terrain_obj = write_textured_terrain_probe_obj(
-                path=out_dir / "terrain_textured_probe.obj",
+            textured_terrain_obj = write_textured_terrain_obj(
+                path=out_dir / "terrain_textured.obj",
                 mapx=mapx,
                 trak=trak,
                 materials=materials,
@@ -1682,67 +1330,15 @@ def export_world(
                 flip_z=flip_z,
                 terrain_yaw_sign=terrain_yaw_sign,
                 mirror_terrain_z=mirror_terrain_z,
-                uv_variant=world_terrain_uv_variant,
                 mtl_name="world.mtl",
             )
         except Exception:
             # Keep the stable geometry export even if the experimental textured
-            # probe hits an unexpected material row.
+            # export hits an unexpected material row.
             textured_terrain_obj = None
 
-    terrain_uv_variants_dir = None
-    if terrain_obj is not None and materials and write_terrain_uv_variants:
-        try:
-            terrain_uv_variants_dir = write_terrain_uv_variant_objs(
-                out_dir=out_dir,
-                mapx=mapx,
-                trak=trak,
-                materials=materials,
-                scale=scale,
-                flip_z=flip_z,
-                terrain_yaw_sign=terrain_yaw_sign,
-                mirror_terrain_z=mirror_terrain_z,
-                texture_count=texture_count,
-                texture_remap_mode=world_terrain_texture_remap,
-            )
-        except Exception:
-            terrain_uv_variants_dir = None
-
-    terrain_uv_deep_tests_dir = None
-    if terrain_obj is not None and materials and write_terrain_uv_deep_tests:
-        try:
-            terrain_uv_deep_tests_dir = write_terrain_uv_deep_test_objs(
-                out_dir=out_dir,
-                mapx=mapx,
-                trak=trak,
-                materials=materials,
-                scale=scale,
-                flip_z=flip_z,
-                terrain_yaw_sign=terrain_yaw_sign,
-                mirror_terrain_z=mirror_terrain_z,
-                texture_count=texture_count,
-                texture_remap_mode=world_terrain_texture_remap,
-            )
-        except Exception:
-            terrain_uv_deep_tests_dir = None
-
-    terrain_texture_index_variants_dir = None
-    if terrain_obj is not None and materials and write_terrain_texture_index_variants:
-        try:
-            terrain_texture_index_variants_dir = write_terrain_texture_index_variant_objs(
-                out_dir=out_dir,
-                mapx=mapx,
-                trak=trak,
-                materials=materials,
-                scale=scale,
-                flip_z=flip_z,
-                terrain_yaw_sign=terrain_yaw_sign,
-                mirror_terrain_z=mirror_terrain_z,
-                texture_count=texture_count,
-                uv_variant=world_terrain_uv_variant,
-            )
-        except Exception:
-            terrain_texture_index_variants_dir = None
+    # UV/texture-index comparison folders were removed after terrain_textured.obj
+    # was validated against the EXE sub_556510 terrain renderer.
 
     terrain_z_min, terrain_z_max = _obj_bounds_z(terrain_obj) if terrain_obj else (None, None)
     object_z_mirror_center = None
@@ -1897,12 +1493,8 @@ def export_world(
         "objects_with_mesh_hits": len({h.object_index for h in hits}),
         "unique_meshes_referenced": len({h.mesh_index for h in hits}),
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
-        "terrain_textured_probe_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
-        "terrain_textured_uv_variant": world_terrain_uv_variant,
-        "terrain_texture_remap": world_terrain_texture_remap,
-        "terrain_uv_variants_dir": str(terrain_uv_variants_dir.name) if terrain_uv_variants_dir else None,
-        "terrain_uv_deep_tests_dir": str(terrain_uv_deep_tests_dir.name) if terrain_uv_deep_tests_dir else None,
-        "terrain_texture_index_variants_dir": str(terrain_texture_index_variants_dir.name) if terrain_texture_index_variants_dir else None,
+        "terrain_textured_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
+        "terrain_uv_mapping": "validated sub_556510 terrain UV mapping",
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
         "mirror_terrain_z": mirror_terrain_z,
@@ -1936,9 +1528,9 @@ def export_world(
 
 
 # Backwards-compatible name used by earlier project patches.
-def export_world_rebuild_probe(**kwargs):
+def export_world_rebuild_export(**kwargs):
     return export_world(**kwargs)
 
 # Backwards-compatible internal name.
-def write_world_combined_probe_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
+def write_world_combined_export_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
     return write_world_combined_obj(world_dir, include_terrain=include_terrain)
