@@ -30,8 +30,10 @@ Texture payload format:
         packet is a repeat count encoded as 0x10000 - packet, followed by one
         RGB555 word repeated that many times.
 
-    RGB555 words are xRRRRRGGGGGBBBBB.  Values are expanded to 8-bit RGB by
-    left-shifting each 5-bit channel by 3, matching the known Java extractor.
+    RGB555 words are xRRRRRGGGGGBBBBB.  Values are expanded to 8-bit channels by
+    left-shifting each 5-bit channel by 3.  The exporter can write them as RGB
+    or BGR; BGR is the current default diagnostic output because visual testing
+    showed the previous RGB export had too much blue where red was expected.
 
 After all texture records there may still be a palette/metadata table.  The
 palette is preserved because it may be used by materials or other texture modes,
@@ -117,7 +119,19 @@ def rgb555_to_rgb(word: int) -> tuple[int, int, int]:
     return r, g, b
 
 
-def decompress_rgb555_rle(src: bytes, pixel_count: int) -> tuple[bytes, dict[str, int]]:
+def _order_rgb_channels(r: int, g: int, b: int, channel_order: str) -> tuple[int, int, int]:
+    """Return channels in the requested export order.
+
+    The source word is decoded as RGB555, but some game/runtime paths appear to
+    treat the 16-bit word as BGR555.  Keeping this as an exporter option lets us
+    compare both interpretations without touching the proven RLE decoder.
+    """
+    if channel_order.lower() == "bgr":
+        return b, g, r
+    return r, g, b
+
+
+def decompress_rgb555_rle(src: bytes, pixel_count: int, *, channel_order: str = "bgr") -> tuple[bytes, dict[str, int]]:
     """Decode the TEXT/TXET RGB555 RLE stream to packed RGB bytes.
 
     Returns (rgb_bytes, stats).  The output is padded/truncated to exactly
@@ -141,7 +155,7 @@ def decompress_rgb555_rle(src: bytes, pixel_count: int) -> tuple[bytes, dict[str
             word = int.from_bytes(src[sp:sp + 2], "little")
             sp += 2
             count = 0x10000 - packet
-            r, g, b = rgb555_to_rgb(word)
+            r, g, b = _order_rgb_channels(*rgb555_to_rgb(word), channel_order)
             repeat_packets += 1
             repeat_pixels += count
             for _ in range(count):
@@ -159,7 +173,7 @@ def decompress_rgb555_rle(src: bytes, pixel_count: int) -> tuple[bytes, dict[str
                     break
                 word = int.from_bytes(src[sp:sp + 2], "little")
                 sp += 2
-                r, g, b = rgb555_to_rgb(word)
+                r, g, b = _order_rgb_channels(*rgb555_to_rgb(word), channel_order)
                 p = op * 3
                 out[p:p + 3] = bytes((r, g, b))
                 op += 1
@@ -172,6 +186,7 @@ def decompress_rgb555_rle(src: bytes, pixel_count: int) -> tuple[bytes, dict[str
         "repeat_packets": repeat_packets,
         "literal_pixels_declared": literal_pixels,
         "repeat_pixels_declared": repeat_pixels,
+        "channel_order": channel_order,
     }
     return bytes(out), stats
 
@@ -210,8 +225,20 @@ def save_field_image(
     Image.frombytes("L", (width, height), bytes(raw)).save(out_path)
 
 
-def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, export_fields: bool = True) -> None:
-    """Export TEXT textures, palette files, and optional palette-field diagnostics."""
+def export_textures(
+    text: TextChunk,
+    out_dir: Path,
+    *,
+    verbose: bool = True,
+    export_fields: bool = True,
+    texture_channel_order: str = "bgr",
+) -> None:
+    """Export TEXT textures, material-table bytes, and optional diagnostics.
+
+    ``texture_channel_order`` may be ``"bgr"`` or ``"rgb"``.  BGR is the
+    current default because visual feedback showed the older RGB export was
+    blue/red swapped for terrain textures.
+    """
     Image = _require_pillow()
 
     textures_dir = out_dir / "textures"
@@ -226,7 +253,7 @@ def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, exp
 
     for tex in text.textures:
         target = tex.width * tex.height
-        rgb, stats = decompress_rgb555_rle(tex.comp_data, target)
+        rgb, stats = decompress_rgb555_rle(tex.comp_data, target, channel_order=texture_channel_order)
 
         Image.frombytes("RGB", (tex.width, tex.height), rgb).save(
             textures_dir / f"texture_{tex.index:02d}.png"
@@ -244,6 +271,7 @@ def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, exp
             stats["bytes_total"],
             stats["literal_packets"],
             stats["repeat_packets"],
+            stats["channel_order"],
         ])
 
         # Keep optional legacy diagnostics, but do not confuse them with the real
@@ -269,7 +297,8 @@ def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, exp
             print(
                 f"  texture_{tex.index:02d}: {tex.width}×{tex.height} "
                 f"flags=0x{tex.flags:04X} comp={tex.comp_size:,}B "
-                f"decoded={stats['pixels_decoded']:,}/{target:,} pixels"
+                f"decoded={stats['pixels_decoded']:,}/{target:,} pixels "
+                f"channels={stats['channel_order']}"
             )
 
     with (textures_dir / "texture_decode_stats.csv").open("w", newline="", encoding="utf-8") as f:
@@ -277,7 +306,7 @@ def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, exp
         w.writerow([
             "texture_index", "flags", "width", "height", "compressed_size",
             "pixels_decoded", "pixels_expected", "bytes_consumed", "bytes_total",
-            "literal_packets", "repeat_packets",
+            "literal_packets", "repeat_packets", "channel_order",
         ])
         w.writerows(decode_rows)
 
@@ -300,5 +329,5 @@ def export_textures(text: TextChunk, out_dir: Path, *, verbose: bool = True, exp
         for i in range(text.pal_count):
             w.writerow([i, *text.pal_raw[i * 8:(i + 1) * 8]])
 
-    print(f"  → textures/ ({len(text.textures)} RGB555 RLE texture records)")
+    print(f"  → textures/ ({len(text.textures)} RGB555 RLE texture records, channel_order={texture_channel_order})")
     print(f"  → palette/palette.png, palette.bin, palette_debug.csv")

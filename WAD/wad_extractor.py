@@ -63,6 +63,7 @@ def extract_wad(
     extract_map_full: bool = True,
     extract_world: bool = True,
     texture_fields: bool = True,
+    texture_channel_order: str = "bgr",
     stpc_alignment: int = 4,
     stpc_min_score: float = 0.85,
     stpc_scale: float = 1.0,
@@ -84,6 +85,9 @@ def extract_wad(
     world_object_z_offset: float = 1.5,
     world_terrain_uv_variant: str = "default",
     world_write_terrain_uv_variants: bool = True,
+    world_write_terrain_uv_deep_tests: bool = True,
+    world_terrain_texture_remap: str = "direct",
+    world_write_terrain_texture_index_variants: bool = True,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -118,7 +122,7 @@ def extract_wad(
         try:
             text = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
             text_chunk_for_materials = text
-            export_textures(text, out_dir, verbose=verbose, export_fields=texture_fields)
+            export_textures(text, out_dir, verbose=verbose, export_fields=texture_fields, texture_channel_order=texture_channel_order)
         except Exception as exc:
             print(f"  [TEXT] Parse/export error: {exc}", file=sys.stderr)
     elif extract_textures:
@@ -261,6 +265,9 @@ def extract_wad(
                     object_z_offset=world_object_z_offset,
                     world_terrain_uv_variant=world_terrain_uv_variant,
                     write_terrain_uv_variants=world_write_terrain_uv_variants,
+                    write_terrain_uv_deep_tests=world_write_terrain_uv_deep_tests,
+                    world_terrain_texture_remap=world_terrain_texture_remap,
+                    write_terrain_texture_index_variants=world_write_terrain_texture_index_variants,
                 )
                 print(
                     f"  → world/ ({len(world.object_instances)} MAP objects, "
@@ -320,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--no-tex", action="store_true", help="skip TEXT texture/palette extraction")
     parser.add_argument("--no-texture-fields", action="store_true", help="skip diagnostic palette-field images")
+    parser.add_argument("--texture-channel-order", choices=("bgr", "rgb"), default="bgr", help="channel order for exported TEXT PNGs; default bgr fixes the observed blue/red swap, rgb preserves the older extractor output")
     parser.add_argument("--no-map", action="store_true", help="skip MAP parsing and map viewer exports")
     parser.add_argument("--no-stpc-obj", action="store_true", help="skip STPC OBJ mesh export")
     parser.add_argument("--no-trak", action="store_true", help="skip TRAK CSV/OBJ/viewer export")
@@ -352,8 +360,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-object-x-offset", type=float, default=0.0, help="final world-space X offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-y-offset", type=float, default=0.0, help="final world-space Y offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-z-offset", type=float, default=1.5, help="final world-space Z offset applied only to STPC object instances after all conversion/mirroring; default 1.5 is the visually validated object/terrain alignment correction")
-    parser.add_argument("--world-terrain-uv-variant", choices=("default", "flip_u", "flip_v", "flip_uv", "rot90_cw", "rot90_ccw", "rot180", "diag_alt"), default="default", help="UV corner-order variant used for world/terrain_textured_probe.obj")
+    parser.add_argument("--world-terrain-uv-variant", choices=("default", "flip_u", "flip_v", "flip_uv", "rot90_cw", "rot90_ccw", "rot180", "diag_alt", "rect_tl_tr_bl", "rect_tr_br_bl", "rect_tl_br_bl", "rect_tl_tr_br", "flags_low2_rect", "unknown_low2_rect", "material_flags_2_3_rect", "material_flags_3_4_rect", "vertex_xz_bbox", "vertex_zx_bbox"), default="default", help="UV corner-order/selection variant used for world/terrain_textured_probe.obj")
     parser.add_argument("--no-world-terrain-uv-variants", action="store_true", help="skip writing world/terrain_uv_variants/ textured OBJ comparison set")
+    parser.add_argument("--no-world-terrain-uv-deep-tests", action="store_true", help="skip writing world/terrain_uv_deep_tests/ flag/projection UV comparison set")
+    parser.add_argument("--world-terrain-texture-remap", choices=("direct", "shift_p1", "shift_m1", "shift_p2", "shift_m2", "shift_p3", "shift_m3", "shift_p4", "shift_m4", "shift_p5", "shift_m5", "shift_p8", "shift_m8", "terrain_05_09_mod_raw", "terrain_05_09_mod_raw_minus3", "material_index_mod_texture_count", "material_index_05_09_mod"), default="direct", help="diagnostic remap from runtime texture page id to exported texture_NN.png for textured terrain")
+    parser.add_argument("--no-world-terrain-texture-index-variants", action="store_true", help="skip writing world/terrain_texture_index_variants/ texture-page remap comparison set")
 
     args = parser.parse_args(argv)
 
@@ -388,6 +399,7 @@ def main(argv: list[str] | None = None) -> int:
             extract_map_full=not args.no_map_full,
             extract_world=not (args.no_world or args.no_world_rebuild),
             texture_fields=not args.no_texture_fields,
+            texture_channel_order=args.texture_channel_order,
             stpc_alignment=args.stpc_alignment,
             stpc_min_score=args.stpc_min_score,
             stpc_scale=args.stpc_scale,
@@ -409,6 +421,9 @@ def main(argv: list[str] | None = None) -> int:
             world_object_z_offset=args.world_object_z_offset,
             world_terrain_uv_variant=args.world_terrain_uv_variant,
             world_write_terrain_uv_variants=not args.no_world_terrain_uv_variants,
+            world_write_terrain_uv_deep_tests=not args.no_world_terrain_uv_deep_tests,
+            world_terrain_texture_remap=args.world_terrain_texture_remap,
+            world_write_terrain_texture_index_variants=not args.no_world_terrain_texture_index_variants,
             verbose=not args.quiet,
         )
         if not ok:

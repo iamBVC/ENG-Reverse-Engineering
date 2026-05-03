@@ -877,3 +877,69 @@ map_Kd textures/texture_XX.png
 ```
 
 This mirrors the working `world/terrain_textured_probe.obj` behavior while keeping the UV variants easy to open independently.
+
+## Terrain texture-index remap diagnostics
+
+If `terrain_textured_probe.obj` has plausible UV rectangles but the wrong terrain images,
+use the generated texture-index remap variants:
+
+```text
+world/terrain_texture_index_variants/
+  direct/terrain_textured.obj
+  shift_p1/terrain_textured.obj
+  shift_m1/terrain_textured.obj
+  ...
+  terrain_05_09_mod_raw/terrain_textured.obj
+  terrain_05_09_mod_raw_minus3/terrain_textured.obj
+  material_index_mod_texture_count/terrain_textured.obj
+  material_index_05_09_mod/terrain_textured.obj
+  texture_index_variants.csv
+  texture_index_variant_material_audit.csv
+```
+
+These variants keep geometry, UV rectangles, and UV corner order identical.  They only
+change how runtime material byte `+0x02` is mapped to exported `textures/texture_XX.png`.
+This is useful because the executable shows that `+0x02` indexes the runtime texture-page
+table `dword_58114C`; it may not always equal the raw TEXT record index.
+
+You can also force the main textured terrain probe to use one remap:
+
+```bash
+python wad_extractor.py t1l1m001.wad --world-terrain-texture-remap shift_p2
+```
+
+To skip the large comparison set:
+
+```bash
+python wad_extractor.py t1l1m001.wad --no-world-terrain-texture-index-variants
+```
+
+## Current texture/terrain UV diagnostic notes
+
+Texture PNG export now defaults to `--texture-channel-order bgr`, which swaps
+red/blue compared with the older RGB output.  Use `--texture-channel-order rgb`
+if you need to compare against the previous files.
+
+The terrain texture page mapping remains direct by default.  Since texture index
+remap probes looked worse than direct mapping, the next diagnostics focus on UV
+construction rather than texture set remapping.
+
+New UV diagnostic output:
+
+```text
+world/terrain_uv_deep_tests/
+  terrain_textured_rect_tl_tr_bl.obj
+  terrain_textured_rect_tr_br_bl.obj
+  terrain_textured_rect_tl_br_bl.obj
+  terrain_textured_rect_tl_tr_br.obj
+  terrain_textured_flags_low2_rect.obj
+  terrain_textured_unknown_low2_rect.obj
+  terrain_textured_material_flags_2_3_rect.obj
+  terrain_textured_material_flags_3_4_rect.obj
+  terrain_textured_vertex_xz_bbox.obj
+  terrain_textured_vertex_zx_bbox.obj
+```
+
+These files keep the same direct material texture pages but test deeper UV
+selection rules: fixed rectangle halves, TRAK triangle flag bits, the unknown
+TRAK triangle u16, material flag bits, and local X/Z projection.
