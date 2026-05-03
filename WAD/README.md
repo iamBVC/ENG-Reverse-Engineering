@@ -1021,3 +1021,88 @@ TRAK face flags:
 The exporter applies this mapping directly to `world/terrain_textured.obj`.
 There are no UV-variant command-line flags anymore because this mapping is the
 validated default.
+
+## Latest executable-backed reverse-engineering updates
+
+This project now includes a dedicated reverse-engineering handoff document:
+
+```text
+REVERSE_ENGINEERING_BIBLE.md
+```
+
+That file is the canonical long-form reference for the current state of the WAD reverse engineering. It documents the known chunks, the relevant decompiled functions, function inputs/outputs, runtime globals, structs, field offsets, data conversions, and remaining uncertainties.
+
+### MAP object / actor bootstrap update
+
+The `MAP ` object table is now decoded through the actual executable path:
+
+```text
+sub_42AC50      reads packed MapObjectDisk58 records
+sub_54CFC0      converts MapObjectRuntime72 records into SpawnParams + Transform32
+sub_54BFC0      allocates and initializes Actor340 runtime actors
+```
+
+New/updated `map_full/` outputs:
+
+```text
+objects_58_disk.csv       packed 58-byte MAP object records with EXE-backed names
+objects_72_runtime.csv    runtime-expanded 72-byte object records
+actors_spawn_preview.csv  predicted Actor340 spawn inputs from each object
+object_spawn_points.obj   confirmed fixed12 object position markers
+```
+
+Important object facts:
+
+- Disk object records are 58 bytes.
+- Runtime object records are 72 bytes.
+- Object position fields are 12.12 fixed-point.
+- Object rotations are 16-bit disk units shifted left by 12 before being copied to `Actor340` transforms.
+- `flags & 0x0002` means the object is skipped during initial actor bootstrap.
+- `script_offset` becomes `dword_6D9DBC + script_offset`, so object script/data lives inside the loaded `STPC/CPTS` blob.
+
+### Actor340 runtime struct update
+
+The runtime actor pool is now documented in `docs/REVERSE_ENGINEERING_BIBLE.md`.
+
+Confirmed highlights:
+
+- Actor stride is `0x154` / 340 bytes.
+- `dword_6D9DC0` is the actor pool base.
+- `dword_6D9E38` is the active actor list head.
+- `dword_6D9E3C` is the free actor list head.
+- `sub_54CEF0` resets actor defaults.
+- `sub_54BC30` builds the actor 3x4 transform matrix from rotation, position, and scale.
+- `sub_54D180` is the actor script VM loop.
+- `sub_54BC00` and `sub_54BBD0` are script stack pop/push helpers.
+
+### LGHT update
+
+The `LGHT` parser now follows the executable-confirmed typed disk layout:
+
+- type `1`: directional light
+- type `2`: point/ranged light
+- type `4`: special/negative point light, converted to runtime type `2`
+
+`lights/lights.csv` includes decoded colors, runtime color conversion, normalized directions, positions, inner/outer radii, squared radii, and inverse radius range.
+
+### Geometry / TRAK / STPC update
+
+Core geometry records are now documented as:
+
+```text
+GeometryRecord84  132-byte direct geometry record used by dword_5846EC / TRAK
+GeometryRecord8C  140-byte extended geometry record used by CPTS/STPC transform-group paths
+```
+
+Confirmed fields include:
+
+- `+0x0C..+0x6B`: 8 culling/bounds points used by `sub_402840`
+- `+0x6C`: vertex count
+- `+0x6E`: triangle count
+- `+0x70`: `Vertex24 *`
+- `+0x74`: `Triangle28 *`
+- `+0x78/+0x7A/+0x7C`: collision group counts
+- `+0x80`: `CollisionEntry32 *`
+
+`TRAK` collision/contact entries are decoded as 32-byte plane/edge-test records in `trak/table_cde_entries.csv`.
+

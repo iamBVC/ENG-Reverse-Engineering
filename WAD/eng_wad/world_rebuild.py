@@ -60,19 +60,23 @@ class WorldObjectInstance:
     world_x: float
     world_y: float
     world_z: float
-    small_00: int
-    small_04: int
-    small_08: int
-    field_16: int
+    rot_x_units: int
+    rot_y_units: int
+    rot_z_units: int
+    actor_rot_x_fixed: int
+    actor_rot_y_fixed: int
+    actor_rot_z_fixed: int
+    local_count: int
     section2_index_or_sentinel: int
-    field_1e: int
-    field_22: int
-    field_26_angle_candidate: int
-    field_2a: int
+    stack_word_count: int
+    stack_arg_count: int
+    spawn_flags: int
+    extra_count: int
     section4_index_or_sentinel: int
-    field_32: int
-    field_36: int
-    field_38: int
+    spawn_aux: int
+    flags: int
+    skip_initial_spawn: bool
+    extra_u16: int
 
 
 @dataclass
@@ -204,19 +208,23 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
             world_x=_fixed12(o.u32_16),
             world_y=_fixed12(o.u32_20),
             world_z=_fixed12(o.u32_24),
-            small_00=o.small_00,
-            small_04=o.small_04,
-            small_08=o.small_08,
-            field_16=o.u32_36,
-            section2_index_or_sentinel=o.section2_index_or_sentinel,
-            field_1e=o.u32_44,
-            field_22=o.u32_48,
-            field_26_angle_candidate=o.u32_52,
-            field_2a=o.u32_56,
-            section4_index_or_sentinel=o.section4_index_or_sentinel,
-            field_32=o.u32_64,
-            field_36=o.u16_68,
-            field_38=o.u16_70,
+            rot_x_units=o.rot_x_units,
+            rot_y_units=o.rot_y_units,
+            rot_z_units=o.rot_z_units,
+            actor_rot_x_fixed=o.actor_rot_x_fixed,
+            actor_rot_y_fixed=o.actor_rot_y_fixed,
+            actor_rot_z_fixed=o.actor_rot_z_fixed,
+            local_count=o.local_count,
+            section2_index_or_sentinel=o.section2_index_raw,
+            stack_word_count=o.stack_word_count,
+            stack_arg_count=o.stack_arg_count,
+            spawn_flags=o.spawn_flags,
+            extra_count=o.extra_count,
+            section4_index_or_sentinel=o.section4_index_raw,
+            spawn_aux=o.spawn_aux_raw,
+            flags=o.flags,
+            skip_initial_spawn=o.skip_initial_spawn,
+            extra_u16=o.extra_u16,
         ))
     return out
 
@@ -931,9 +939,11 @@ def export_world(
     # CSV: all MAP object placements.
     _write_csv(out_dir / "map_object_instances.csv", [
         "object_index","stpc_def_offset","stpc_def_offset_hex","world_x","world_y","world_z",
-        "mesh_hit_count","mesh_indices","small_00","small_04","small_08","field_16",
-        "section2_index_or_sentinel","field_1e","field_22","field_26_angle_candidate",
-        "field_26_hex","field_2a","section4_index_or_sentinel","field_32","field_36","field_38",
+        "mesh_hit_count","mesh_indices",
+        "rot_x_units","rot_y_units","rot_z_units","actor_rot_x_fixed","actor_rot_y_fixed","actor_rot_z_fixed",
+        "local_count","section2_index_or_sentinel","stack_word_count","stack_arg_count",
+        "spawn_flags","spawn_flags_hex","extra_count","section4_index_or_sentinel",
+        "spawn_aux","spawn_aux_hex","flags","flags_hex","skip_initial_spawn","extra_u16",
     ], (
         {
             "object_index": o.object_index,
@@ -944,20 +954,26 @@ def export_world(
             "world_z": o.world_z,
             "mesh_hit_count": len(hits_by_object.get(o.object_index, [])),
             "mesh_indices": " ".join(str(h.mesh_index) for h in hits_by_object.get(o.object_index, [])),
-            "small_00": o.small_00,
-            "small_04": o.small_04,
-            "small_08": o.small_08,
-            "field_16": o.field_16,
+            "rot_x_units": o.rot_x_units,
+            "rot_y_units": o.rot_y_units,
+            "rot_z_units": o.rot_z_units,
+            "actor_rot_x_fixed": o.actor_rot_x_fixed,
+            "actor_rot_y_fixed": o.actor_rot_y_fixed,
+            "actor_rot_z_fixed": o.actor_rot_z_fixed,
+            "local_count": o.local_count,
             "section2_index_or_sentinel": o.section2_index_or_sentinel,
-            "field_1e": o.field_1e,
-            "field_22": o.field_22,
-            "field_26_angle_candidate": o.field_26_angle_candidate,
-            "field_26_hex": _hex(o.field_26_angle_candidate),
-            "field_2a": o.field_2a,
+            "stack_word_count": o.stack_word_count,
+            "stack_arg_count": o.stack_arg_count,
+            "spawn_flags": o.spawn_flags,
+            "spawn_flags_hex": _hex(o.spawn_flags),
+            "extra_count": o.extra_count,
             "section4_index_or_sentinel": o.section4_index_or_sentinel,
-            "field_32": o.field_32,
-            "field_36": o.field_36,
-            "field_38": o.field_38,
+            "spawn_aux": o.spawn_aux,
+            "spawn_aux_hex": _hex(o.spawn_aux),
+            "flags": o.flags,
+            "flags_hex": f"0x{o.flags:04X}",
+            "skip_initial_spawn": o.skip_initial_spawn,
+            "extra_u16": o.extra_u16,
         } for o in instances
     ))
 
