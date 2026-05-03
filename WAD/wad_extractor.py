@@ -23,6 +23,7 @@ from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
 from eng_wad.trak_chunk import export_trak_from_bytes
+from eng_wad.trak_viewer import write_map_placed_trak_viewer_html
 from eng_wad.world_rebuild import export_world
 from eng_wad.wad import chunk_bytes, chunk_manifest_lines, read_wad
 
@@ -187,6 +188,15 @@ def extract_wad(
             try:
                 mapx = parse_map_full_exe(map_bytes_for_probe, trak_result.trak)
                 export_map_full_exe(mapx, out_dir / "map_full")
+                if trak_result is not None:
+                    write_map_placed_trak_viewer_html(
+                        trak_result.trak,
+                        mapx,
+                        out_dir / "trak" / "viewer.html",
+                        terrain_yaw_sign=world_terrain_yaw_sign,
+                        mirror_terrain_z=world_mirror_terrain_z,
+                    )
+                    print("  → trak/viewer.html (MAP-placed TRAK terrain)")
                 print(
                     f"  → map_full/ ({mapx.tile_count} tiles, "
                     f"objects={len(mapx.objects)}, colors={sum(c.byte_size + c.extra_byte_size for c in mapx.colors):,} bytes)"

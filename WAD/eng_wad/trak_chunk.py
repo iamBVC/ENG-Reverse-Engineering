@@ -624,114 +624,15 @@ def write_per_record_surface_objs(trak: TrakFile, out_dir: Path, *, scale: float
     return written
 
 def write_viewer_html(trak: TrakFile, path: Path) -> None:
-    """Write a self-contained browser viewer for decoded TRAK triangle surfaces.
+    """Write the local-coordinate TRAK viewer from an external HTML template.
 
-    Earlier versions displayed only record centers, which could appear blank when
-    the fixed zoom did not match the level's coordinate range.  This viewer uses
-    actual Table A/B triangles and automatically fits the whole decoded surface
-    set to the canvas.  It is still a lightweight 2D/isometric preview, not a
-    full WebGL renderer.
+    The main extractor overwrites `trak/viewer.html` with a MAP-placed version
+    once MAP_FULL has been parsed.  This local version remains useful when a
+    raw TRAK chunk is exported without MAP context.
     """
-    triangles = []
-    centers = []
-    for r in trak.records:
-        centers.append({
-            "rec": r.index,
-            "x": r.center[0], "y": r.center[1], "z": r.center[2],
-            "a": r.a_count, "b": r.b_count, "c": r.c_count, "d": r.d_count, "e": r.e_count,
-        })
-        for t, va, vb, vc in _valid_table_b_triangles(r):
-            cy = (va.y + vb.y + vc.y) / 3.0
-            triangles.append({
-                "rec": r.index,
-                "tri": t.index,
-                "mat": t.material_index,
-                "flags": t.flags,
-                "cy": cy,
-                "p": [[va.x, va.y, va.z], [vb.x, vb.y, vb.z], [vc.x, vc.y, vc.z]],
-            })
+    from .trak_viewer import write_local_trak_viewer_html
 
-    payload_triangles = json.dumps(triangles)
-    payload_centers = json.dumps(centers)
-    html_text = f"""<!doctype html>
-<html><head><meta charset='utf-8'><title>TRAK surface viewer</title>
-<style>
-body {{ margin:0; background:#101010; color:#eee; font-family:system-ui, sans-serif; overflow:hidden; }}
-#bar {{ position:fixed; left:0; top:0; right:0; padding:8px 12px; background:#222; z-index:2; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }}
-canvas {{ display:block; width:100vw; height:100vh; }}
-#tip {{ position:fixed; display:none; pointer-events:none; background:#000d; border:1px solid #888; padding:6px; font:12px monospace; white-space:pre; z-index:3; }}
-button {{ margin-right:2px; }} label {{ font-size:13px; }}
-</style></head><body>
-<div id='bar'>
-  <button onclick="mode='top';fit();draw()">Top-down fit</button>
-  <button onclick="mode='iso';fit();draw()">Isometric fit</button>
-  <button onclick="showTris=!showTris;draw()">Toggle surfaces</button>
-  <button onclick="showCenters=!showCenters;draw()">Toggle centers</button>
-  <span>Wheel zoom, drag pan. Surfaces are decoded TRAK Table A/B triangles. Color = height.</span>
-</div>
-<canvas id='c'></canvas><div id='tip'></div>
-<script>
-const tris = {payload_triangles};
-const centers = {payload_centers};
-const c = document.getElementById('c'), ctx = c.getContext('2d'), tip = document.getElementById('tip');
-let mode='iso', zoom=1, ox=0, oy=0, drag=false, lx=0, ly=0, showTris=true, showCenters=true, projected=[];
-const allPts = tris.flatMap(t => t.p).concat(centers.map(p => [p.x,p.y,p.z]));
-const minY = Math.min(...allPts.map(p=>p[1])), maxY = Math.max(...allPts.map(p=>p[1]));
-function rawProjectPoint(p) {{
-  const x=p[0], y=p[1], z=p[2];
-  if (mode === 'iso') return [(x-z)*0.75, (-y*0.70 + (x+z)*0.35)];
-  return [x, z];
-}}
-function fit() {{
-  const pts = allPts.map(rawProjectPoint);
-  const minX=Math.min(...pts.map(p=>p[0])), maxX=Math.max(...pts.map(p=>p[0]));
-  const minP=Math.min(...pts.map(p=>p[1])), maxP=Math.max(...pts.map(p=>p[1]));
-  const sx = c.width / Math.max(1e-6, maxX-minX);
-  const sy = c.height / Math.max(1e-6, maxP-minP);
-  zoom = Math.min(sx, sy) * 0.82;
-  ox = -((minX+maxX)/2) * zoom;
-  oy = -((minP+maxP)/2) * zoom + 20;
-}}
-function project(p) {{ const q=rawProjectPoint(p); return [c.width/2 + ox + q[0]*zoom, c.height/2 + oy + q[1]*zoom]; }}
-function colorForY(y, alpha) {{ const t=(y-minY)/Math.max(0.0001,maxY-minY); return `hsla(${{220-220*t}},80%,55%,${{alpha}})`; }}
-function draw() {{
-  ctx.clearRect(0,0,c.width,c.height); ctx.fillStyle='#101010'; ctx.fillRect(0,0,c.width,c.height);
-  projected=[];
-  if (showTris) {{
-    // Draw low-to-high so the isometric preview is more readable.
-    const ordered = [...tris].sort((a,b)=>a.cy-b.cy);
-    for (const t of ordered) {{
-      const a=project(t.p[0]), b=project(t.p[1]), d=project(t.p[2]);
-      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(d[0],d[1]); ctx.closePath();
-      ctx.fillStyle=colorForY(t.cy, 0.40); ctx.fill();
-      ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1; ctx.stroke();
-      const cx=(a[0]+b[0]+d[0])/3, cy=(a[1]+b[1]+d[1])/3;
-      projected.push([cx, cy, t]);
-    }}
-  }}
-  if (showCenters) {{
-    ctx.fillStyle='#ffd34d';
-    for (const p of centers) {{
-      const q=project([p.x,p.y,p.z]);
-      ctx.beginPath(); ctx.arc(q[0],q[1],3.5,0,Math.PI*2); ctx.fill();
-    }}
-  }}
-}}
-function resize() {{ c.width=innerWidth; c.height=innerHeight; fit(); draw(); }}
-addEventListener('resize', resize); resize();
-c.onwheel=e=>{{ e.preventDefault(); const m=e.deltaY<0?1.12:0.89; zoom*=m; draw(); }};
-c.onmousedown=e=>{{ drag=true; lx=e.clientX; ly=e.clientY; }};
-c.onmouseup=()=>drag=false; c.onmouseleave=()=>{{drag=false; tip.style.display='none';}};
-c.onmousemove=e=>{{
-  if (drag) {{ ox+=e.clientX-lx; oy+=e.clientY-ly; lx=e.clientX; ly=e.clientY; draw(); return; }}
-  let best=null, bd=1e9;
-  for (const q of projected) {{ const d=(q[0]-e.clientX)**2+(q[1]-e.clientY)**2; if (d<bd) {{bd=d; best=q;}} }}
-  if (best && bd<144) {{ const t=best[2]; tip.style.display='block'; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px';
-    tip.textContent=`record ${{t.rec}} triangle ${{t.tri}}\nmaterial=${{t.mat}} flags=0x${{t.flags.toString(16).padStart(4,'0')}}\nheight=${{t.cy.toFixed(3)}}`; }}
-  else tip.style.display='none';
-}};
-</script></body></html>"""
-    path.write_text(html_text, encoding="utf-8")
+    write_local_trak_viewer_html(trak, path)
 
 
 # ---------------------------------------------------------------------------

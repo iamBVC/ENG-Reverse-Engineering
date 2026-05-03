@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WAD Standalone World Viewer</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101014;color:#e8e8e8;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#ui{position:fixed;left:12px;top:12px;max-height:calc(100vh - 24px);width:360px;overflow:auto;background:#181820e8;border:1px solid #3a3a46;border-radius:12px;box-shadow:0 8px 28px #000a;padding:12px;z-index:2}
+#ui h1{font-size:15px;margin:0 0 8px}
+#ui .row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+#ui button{background:#2b2b38;color:#fff;border:1px solid #55566b;border-radius:8px;padding:5px 9px;cursor:pointer}
+#ui button:hover{background:#38384a}
+#assetList{margin-top:8px;border-top:1px solid #333442;padding-top:8px}
+.asset{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:center;font:12px ui-monospace,Menlo,Consolas,monospace;padding:3px 0;border-bottom:1px solid #252530}
+.asset small{color:#aaa}
+#status{font:12px ui-monospace,Menlo,Consolas,monospace;color:#cfcfd8;white-space:pre-wrap;margin-top:8px}
+#help{font-size:12px;color:#b9b9c5;line-height:1.35;margin-top:8px}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>WAD standalone 3D world viewer</h1>
+  <div class="row">
+    <button id="fitBtn">Fit</button>
+    <button id="topBtn">Top</button>
+    <button id="isoBtn">Iso</button>
+    <button id="allBtn">All</button>
+    <button id="noneBtn">None</button>
+  </div>
+  <div id="assetList"></div>
+  <div id="status">Parsing embedded OBJ data…</div>
+  <div id="help">No local server is needed. Drag left mouse to orbit, right/middle drag to pan, wheel to zoom. Each checkbox toggles one generated OBJ file. By default, terrain.obj and objects_all_candidates.obj are visible; duplicate aggregate/single-hit files are loaded but hidden.</div>
+</div>
+<canvas id="glcanvas"></canvas>
+<script>
+const EMBEDDED_OBJS = __EMBEDDED_OBJS__;
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', {antialias:true, preserveDrawingBuffer:false});
+const assetList = document.getElementById('assetList');
+const statusEl = document.getElementById('status');
+if (!gl) { statusEl.textContent = 'WebGL is not available in this browser.'; throw new Error('no webgl'); }
+
+const vsSource = `
+attribute vec3 aPosition;
+attribute vec3 aNormal;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+uniform vec3 uColor;
+uniform vec3 uLightDir;
+varying vec3 vColor;
+void main() {
+  vec3 n = normalize((uModel * vec4(aNormal, 0.0)).xyz);
+  float d = max(dot(n, normalize(uLightDir)), 0.0);
+  vColor = uColor * (0.35 + 0.65 * d);
+  gl_Position = uMVP * vec4(aPosition, 1.0);
+}`;
+const fsSource = `
+precision mediump float;
+varying vec3 vColor;
+void main() { gl_FragColor = vec4(vColor, 1.0); }`;
+function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER, vsSource));
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fsSource));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const loc = {
+  aPosition: gl.getAttribLocation(prog, 'aPosition'),
+  aNormal: gl.getAttribLocation(prog, 'aNormal'),
+  uMVP: gl.getUniformLocation(prog, 'uMVP'),
+  uModel: gl.getUniformLocation(prog, 'uModel'),
+  uColor: gl.getUniformLocation(prog, 'uColor'),
+  uLightDir: gl.getUniformLocation(prog, 'uLightDir')
+};
+
+function parseOBJ(text) {
+  const verts = [[0,0,0]];
+  const outP = [];
+  const outN = [];
+  const lines = text.split(/\r?\n/);
+  for (const line0 of lines) {
+    const line = line0.trim();
+    if (!line || line[0] === '#') continue;
+    const p = line.split(/\s+/);
+    if (p[0] === 'v' && p.length >= 4) {
+      verts.push([parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3])]);
+    } else if (p[0] === 'f' && p.length >= 4) {
+      const ids = p.slice(1).map(tok => {
+        const raw = tok.split('/')[0];
+        let i = parseInt(raw, 10);
+        if (i < 0) i = verts.length + i;
+        return i;
+      }).filter(i => Number.isFinite(i) && i > 0 && i < verts.length);
+      for (let k=1; k+1<ids.length; k++) {
+        const tri = [verts[ids[0]], verts[ids[k]], verts[ids[k+1]]];
+        const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
+        const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
+        let nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+        const nl = Math.hypot(nx,ny,nz) || 1; nx/=nl; ny/=nl; nz/=nl;
+        for (const v of tri) { outP.push(v[0],v[1],v[2]); outN.push(nx,ny,nz); }
+      }
+    }
+  }
+  return {positions:new Float32Array(outP), normals:new Float32Array(outN), vertexCount:outP.length/3};
+}
+function makeBuffer(data) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW); return b; }
+const palette = [[0.56,0.56,0.58],[0.95,0.62,0.28],[0.35,0.65,1.0],[0.55,0.9,0.55],[0.9,0.5,0.75],[0.85,0.8,0.45],[0.6,0.5,0.95],[0.45,0.85,0.85]];
+const assets = [];
+let globalMin=[ Infinity, Infinity, Infinity], globalMax=[-Infinity,-Infinity,-Infinity];
+function addBounds(pos) { for(let i=0;i<pos.length;i+=3){ const x=pos[i],y=pos[i+1],z=pos[i+2]; if(x<globalMin[0])globalMin[0]=x; if(y<globalMin[1])globalMin[1]=y; if(z<globalMin[2])globalMin[2]=z; if(x>globalMax[0])globalMax[0]=x; if(y>globalMax[1])globalMax[1]=y; if(z>globalMax[2])globalMax[2]=z; } }
+for (let i=0;i<EMBEDDED_OBJS.length;i++) {
+  const e = EMBEDDED_OBJS[i];
+  const geom = parseOBJ(e.text);
+  const asset = {name:e.name, vertexCount:geom.vertexCount, visible:e.visible, color:palette[i%palette.length], posBuf:makeBuffer(geom.positions), normBuf:makeBuffer(geom.normals)};
+  assets.push(asset);
+  if (geom.vertexCount) addBounds(geom.positions);
+}
+
+function buildUI() {
+  assetList.innerHTML = '';
+  for (const a of assets) {
+    const row = document.createElement('label'); row.className='asset';
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=a.visible;
+    cb.oninput = () => { a.visible = cb.checked; requestAnimationFrame(draw); };
+    const name = document.createElement('span'); name.textContent = a.name;
+    const count = document.createElement('small'); count.textContent = a.vertexCount.toLocaleString() + ' vtx';
+    row.appendChild(cb); row.appendChild(name); row.appendChild(count); assetList.appendChild(row);
+  }
+}
+buildUI();
+
+function mat4Identity() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
+function mat4Mul(a,b) { const o=new Array(16); for(let c=0;c<4;c++) for(let r=0;r<4;r++) o[c*4+r]=a[0*4+r]*b[c*4+0]+a[1*4+r]*b[c*4+1]+a[2*4+r]*b[c*4+2]+a[3*4+r]*b[c*4+3]; return o; }
+function perspective(fovy, aspect, near, far) { const f=1/Math.tan(fovy/2), nf=1/(near-far); return [f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]; }
+function lookAt(eye,center,up) {
+  let zx=eye[0]-center[0],zy=eye[1]-center[1],zz=eye[2]-center[2]; let zl=Math.hypot(zx,zy,zz)||1; zx/=zl; zy/=zl; zz/=zl;
+  let xx=up[1]*zz-up[2]*zy,xy=up[2]*zx-up[0]*zz,xz=up[0]*zy-up[1]*zx; let xl=Math.hypot(xx,xy,xz)||1; xx/=xl; xy/=xl; xz/=xl;
+  let yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  return [xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0, -(xx*eye[0]+xy*eye[1]+xz*eye[2]), -(yx*eye[0]+yy*eye[1]+yz*eye[2]), -(zx*eye[0]+zy*eye[1]+zz*eye[2]), 1];
+}
+let center=[0,0,0], radius=50, yaw=-0.8, pitch=0.75, distance=120, pan=[0,0,0];
+function fit() {
+  if (!Number.isFinite(globalMin[0])) return;
+  center=[(globalMin[0]+globalMax[0])/2,(globalMin[1]+globalMax[1])/2,(globalMin[2]+globalMax[2])/2];
+  const sx=globalMax[0]-globalMin[0], sy=globalMax[1]-globalMin[1], sz=globalMax[2]-globalMin[2];
+  radius=Math.max(sx,sy,sz,1); distance=radius*1.9; pan=[0,0,0];
+}
+function setTop() { yaw=0; pitch=Math.PI/2-0.001; draw(); }
+function setIso() { yaw=-0.78; pitch=0.72; draw(); }
+fit();
+function resize() { const dpr=window.devicePixelRatio||1; canvas.width=Math.floor(innerWidth*dpr); canvas.height=Math.floor(innerHeight*dpr); gl.viewport(0,0,canvas.width,canvas.height); draw(); }
+addEventListener('resize', resize);
+function cameraEye() { const cp=Math.cos(pitch), sp=Math.sin(pitch), cy=Math.cos(yaw), sy=Math.sin(yaw); return [center[0]+pan[0]+distance*cp*sy, center[1]+pan[1]+distance*sp, center[2]+pan[2]+distance*cp*cy]; }
+function draw() {
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.clearColor(0.06,0.06,0.08,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const aspect = canvas.width/Math.max(1,canvas.height); const proj=perspective(45*Math.PI/180, aspect, Math.max(0.01, radius/1000), radius*20+distance*5);
+  const target=[center[0]+pan[0],center[1]+pan[1],center[2]+pan[2]]; const view=lookAt(cameraEye(), target, [0,1,0]); const mvp=mat4Mul(proj, view); const model=mat4Identity();
+  gl.uniformMatrix4fv(loc.uMVP,false,new Float32Array(mvp)); gl.uniformMatrix4fv(loc.uModel,false,new Float32Array(model)); gl.uniform3f(loc.uLightDir, -0.35, 0.8, 0.45);
+  let tris=0, shown=0;
+  for (const a of assets) { if(!a.visible || !a.vertexCount) continue; shown++; tris += a.vertexCount/3; gl.uniform3f(loc.uColor,a.color[0],a.color[1],a.color[2]);
+    gl.bindBuffer(gl.ARRAY_BUFFER,a.posBuf); gl.enableVertexAttribArray(loc.aPosition); gl.vertexAttribPointer(loc.aPosition,3,gl.FLOAT,false,0,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,a.normBuf); gl.enableVertexAttribArray(loc.aNormal); gl.vertexAttribPointer(loc.aNormal,3,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.TRIANGLES,0,a.vertexCount);
+  }
+  statusEl.textContent = `${shown} / ${assets.length} OBJ files visible\n${Math.round(tris).toLocaleString()} triangles drawn\nBounds: X ${globalMin[0].toFixed(2)}..${globalMax[0].toFixed(2)}  Y ${globalMin[1].toFixed(2)}..${globalMax[1].toFixed(2)}  Z ${globalMin[2].toFixed(2)}..${globalMax[2].toFixed(2)}`;
+}
+let dragging=false, button=0, lastX=0, lastY=0;
+canvas.addEventListener('mousedown', e => { dragging=true; button=e.button; lastX=e.clientX; lastY=e.clientY; });
+addEventListener('mouseup', () => dragging=false);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('mousemove', e => { if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; if(button===0){ yaw -= dx*0.006; pitch = Math.max(-1.45, Math.min(1.45, pitch - dy*0.006)); } else { const k=distance/600; pan[0]-=dx*k*Math.cos(yaw); pan[2]+=dx*k*Math.sin(yaw); pan[1]+=dy*k; } draw(); });
+canvas.addEventListener('wheel', e => { e.preventDefault(); distance *= e.deltaY < 0 ? 0.9 : 1.1; distance=Math.max(radius*0.03,distance); draw(); }, {passive:false});
+document.getElementById('fitBtn').onclick=()=>{fit();draw();};
+document.getElementById('topBtn').onclick=setTop;
+document.getElementById('isoBtn').onclick=setIso;
+document.getElementById('allBtn').onclick=()=>{for(const a of assets)a.visible=true; buildUI(); draw();};
+document.getElementById('noneBtn').onclick=()=>{for(const a of assets)a.visible=false; buildUI(); draw();};
+resize(); draw();
+</script>
+</body>
+</html>
