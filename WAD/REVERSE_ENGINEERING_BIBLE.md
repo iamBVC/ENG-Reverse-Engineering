@@ -825,15 +825,326 @@ Fallback d-pad values:
 2. Exact meaning of `MapObjectDisk58.flags` bits besides `0x0002` skip-initial-spawn.
 3. Exact meaning of `section2` and `section4` records beyond their object references and linked-list structure.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
-5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` remain unnamed.
-6. STPC object-definition structure and script VM opcodes need more work to replace mesh-reference scanning with exact instance binding.
+5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
+6. STPC object-definition structure and script VM opcodes partially decoded (see below); mesh-reference scanning still used for full instance binding.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 
 ## Recommended next reverse-engineering targets
 
-1. Callers of `sub_5531D0`, `sub_553230`, and `sub_5533F0`, because they also call `sub_54BFC0` and probably represent scripted actor spawning/cloning variants.
-2. Script VM opcode handlers in `funcs_54D1AB` and `funcs_54D1B8`, especially handlers that read/write actor fields `+16`, `+20`, `+296`, `+300`, `+332`, and transform fields.
-3. Consumers of `MapObjectRuntime72 +0x28` and `+0x3C` to name Section2 and Section4.
-4. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
-5. Functions reading `GeometryRecord84 +0x00/+0x04/+0x08/+0x7E`.
+1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — schemas not yet read.
+2. Consumers of `MapObjectRuntime72 +0x28` and `+0x3C` to name Section2 and Section4.
+3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
+4. `sub_553920`–`sub_5539E0` (opcodes 0x37–0x3B) and `sub_553A10`–`sub_553B00` (0x3D–0x43) — likely geometry/transform opcodes worth decoding next.
+5. `sub_550E60` and `sub_5509F0` — called by multiple opcodes as the primary function-dispatch path; understanding them would clarify ~10 opcodes at once.
+
+---
+
+## STPC / CPTS container top-level layout (confirmed from `sub_42AB50`)
+
+`sub_42AB50` loads the packed STPC blob into `dword_6D9DBC`.  The blob is read all at once with `sub_415A90`, then `sub_42AB50` walks a cursor through the buffer to relocate nested records.
+
+```text
+STPC blob layout (all little-endian):
+
+  u32   section1_count        // number of GeometryRecord8C mesh records
+  section1_count × 140 bytes  // GeometryRecord8C records (cursor-relocated by sub_41F770)
+
+  u32   section2_count        // number of GeometryAnimRecord32 animation records
+  section2_count × 32 bytes   // animation records (cursor-relocated by sub_41F8B0)
+
+  // Section 3 is conditional: only present when (dword_6DA330 & 0x01) is set.
+  // In tested PC WADs this flag is always 0, so section 3 is absent.
+  u32   section3_count
+  section3_count entries, each:
+      u32  sub_size
+      u32  sub_count            // multiply by 8 for allocation
+      sub_count × ? bytes       // relocatable sub-records (sub_41F770 again)
+
+  // Variable geometry data (vertices / triangles / collision) for ALL
+  // GeometryRecord8C records follows immediately after the record array.
+  // sub_41F770 relocates the pointer slots at +0x70, +0x74, +0x80, +0x88
+  // inside each record to point into this trailing data block.
+```
+
+Confirmed from `t1l1m001` STPC binary:
+
+- `section1_count` = 33 (0x21)
+- 33 × 140 = 4620 bytes of record headers → section 2 starts at file offset 4624 (0x1210)
+- `section2_count` follows at offset 0x1210
+- Section 3 absent (`dword_6DA330` bit 0 not set for PC WADs)
+
+When `script_offset` in a MAP object is resolved by `sub_553630`:
+
+```c
+// positive offset → absolute runtime pointer into STPC blob
+if (script_offset >= 0)
+    runtime_ptr = dword_6D9DBC + script_offset;
+
+// negative offset → index into global object pool dword_6DA324
+else {
+    idx = ~script_offset;               // = -(script_offset + 1)
+    if (idx < dword_6DA31C)
+        runtime_ptr = dword_6DA324[idx];
+    else
+        runtime_ptr = NULL;
+}
+```
+
+A `script_offset` of zero resolves to the very start of the STPC blob (`dword_6D9DBC`), which is the first GeometryRecord8C record header.  Use an existing object's `script_offset` as a template rather than guessing.
+
+---
+
+## GeometryRecord84 unknown fields — binary observations
+
+From `t1l1m001` STPC (`section1_count=33`):
+
+| Field | Offset | Record 0 raw value | Interpreted |
+|---:|---:|---|---|
+| `unknown_00` | +0x00 | `0x00000000` | u32 = 0 |
+| `unknown_04` | +0x04 | `0xBCCCCCBD` | float ≈ −0.025 |
+| `unknown_08` | +0x08 | `0x80000000` | float = −0.0 |
+| `vertex_count` | +0x6C | `0x0010` | 16 |
+| `triangle_count` | +0x6E | `0x001A` | 26 |
+| `coll_group0` | +0x78 | `0x0002` | 2 |
+| `coll_group1` | +0x7A | `0x0000` | 0 |
+| `coll_group2` | +0x7C | `0x0000` | 0 |
+| `unknown_7E` | +0x7E | `0x000B` | u16 = 11 |
+
+From `t1l1m001` TRAK (`record_count=127`):
+
+| Field | Record 0 | Record 1 |
+|---:|---|---|
+| `unknown_00` | 0 | 0x3B0F5C2C (noise) |
+| `unknown_04` | float ≈ −2.75 | float ≈ −2.76 |
+| `unknown_08` | float = −0.0 | float ≈ +0.51 |
+| `vertex_count` | 4 | 10 |
+| `triangle_count` | 0 | 8 |
+
+Observations:
+
+- `unknown_00`: Consistently 0 in record 0; appears as noise/uninitialized in later records.  Possibly a sort key or padding not written by `sub_5563F0`.
+- `unknown_04` / `unknown_08`: Small floats that differ per record and appear correlated with geometry height range.  Candidate meanings: Y-axis culling bias, LOD distance near/far planes, or bounding-sphere center/radius.  They are read and compared by `sub_401000` in float comparisons adjacent to the frustum culler — but the exact role is not yet confirmed.
+- `unknown_7E` (STPC only): Value 11 in the first STPC record; 0 in TRAK records.  Not obviously a count of any known sub-structure.  May be a render-batch hint or a sub-type discriminator used by `sub_41FB30`.
+
+---
+
+## Script VM — opcode table and dispatch
+
+The main VM loop `sub_54D180` fetches 32-bit little-endian instruction words from `[actor+0x00]` (the script PC):
+
+```text
+bits  0–15   opcode index (0x00 – 0x44 → funcs_54D1AB; above 0x44 → funcs_54D1B8)
+bits 16–31   signed 16-bit immediate argument (sign-extended to 32 bits)
+```
+
+Opcodes 0x00–0x44 pass both `(actor, imm16)` to the handler (callee cleans 8 bytes).
+Opcodes above 0x44 pass only `actor` (callee cleans 4 bytes).
+
+### Complete `funcs_54D1AB` table (opcodes 0x00–0x44, confirmed from asm line 438973)
+
+```text
+opcode  handler         notes (from sub analysis)
+──────  ──────────────  ──────────────────────────────────────────────────────
+0x00    nullsub_2       no-op
+0x01    sub_54FA50      set/clear bit 0x01000000 in actor+0xE8 (imm16≠0 → set)
+0x02    sub_553850      stream scanner: reads count, then u16 values; skips +4
+                          extra bytes when (u16 + 0x0101) == 0x0146 or 0x01EB
+0x03    sub_5537F0      similar scanner; increments dword_6D9DB8 by 0x0C
+                          (likely script stack-depth tracker)
+0x04    sub_553710      load value from locals array [actor+0xF4][imm16], push
+0x05    sub_5537B0      load from [actor+0xF4 + imm16*4], push via sub_54BBD0
+0x06    sub_5536B0      load from global object table dword_6D9E8C[imm16*4], push
+0x07    sub_552AB0      call sub_550E60(actor, imm16)
+0x08    sub_5536F0      push address of [actor+0xF4 + imm16*4] (load-address variant)
+0x09    sub_553790      push address via [actor+0x00 + imm16*4] (script-area relative)
+0x0A    sub_553690      (unknown)
+0x0B    sub_552AD0      (unknown)
+0x0C    sub_54FC40      (unknown)
+0x0D    sub_54DBE0      zero the memory cell at actor+0xF8+imm16*16
+0x0E    sub_54DC20      set high bit (0x80000000) of cell at actor+0xF8+imm16*16
+0x0F    sub_54DC00      clear high bit (AND 0x7FFFFFFF) of same cell
+0x10    sub_553D40      advance cursor at [esi] by imm16*4; set actor flag bit 0x02
+0x11    sub_553D10      advance cursor at [esi] by imm16*4 (no flag change)
+0x12    sub_553E10      conditional advance: if sub_54BC00==0, advance + set 0x02
+0x13    sub_553EB0      conditional advance: if sub_54BC00≠0, advance (no flag)
+0x14    sub_553E50      advance if sub_54BC00==0, no flag
+0x15    sub_553E80      advance if sub_54BC00≠0, no flag
+0x16    sub_553D80      add imm16*4 to integer at dereferenced pointer
+0x17    sub_550060      array search: walks indexed structure, matches 16-bit keys
+0x18    sub_553750      load array element value from [actor+0x0C]→[0xF4][imm16*4]
+0x19    sub_553770      push address of same array element (LEA variant of 0x18)
+0x1A    sub_552AF0      function call via sub_550E60 with actor+0x0C context
+0x1B    sub_553730      function call via sub_5509F0; return value pushed
+0x1C    sub_552D20      guarded call: executes sub_550E60 only if dword_6D9E1C≠0
+0x1D    sub_552D50      guarded call (variant); same guard, different path
+0x1E    sub_552B60      (unknown)
+0x1F    sub_552B90      (unknown)
+0x20    sub_552C40      (unknown)
+0x21    sub_552C70      (unknown)
+0x22    sub_54D200      (unknown)
+0x23    sub_54D220      (unknown)
+0x24    sub_552BD0      (unknown)
+0x25    sub_552C00      (unknown)
+0x26    sub_552B10      (unknown)
+0x27    sub_552B30      (unknown)
+0x28    sub_552CB0      (unknown)
+0x29    sub_552CE0      (unknown)
+0x2A    sub_54E8E0      (unknown)
+0x2B    sub_553DA0      (unknown)
+0x2C    nullsub_2       no-op
+0x2D    nullsub_2       no-op
+0x2E    nullsub_2       no-op
+0x2F    sub_54F720      (unknown)
+0x30    sub_54FA80      (unknown)
+0x31    sub_54E090      (unknown)
+0x32    sub_54DD90      (unknown)
+0x33    sub_54DD30      (unknown)
+0x34    sub_54DD60      (unknown)
+0x35    nullsub_2       no-op
+0x36    nullsub_2       no-op
+0x37    sub_553920      (unknown)
+0x38    sub_553950      (unknown)
+0x39    sub_553980      (unknown)
+0x3A    sub_5539B0      (unknown)
+0x3B    sub_5539E0      (unknown)
+0x3C    sub_54D240      (unknown)
+0x3D    sub_553A10      (unknown)
+0x3E    sub_553A40      (unknown)
+0x3F    sub_553A60      (unknown)
+0x40    sub_553A90      (unknown)
+0x41    sub_553AC0      (unknown)
+0x42    sub_553AE0      (unknown)
+0x43    sub_553B00      (unknown)
+0x44    sub_553610      (unknown — last entry in table)
+```
+
+### Script VM actor fields used by known opcodes
+
+| Actor field | Opcode(s) | Role |
+|---|---|---|
+| `+0x00` (script_pc) | VM loop, 0x09 | instruction pointer; also used as base for 0x09 offset |
+| `+0xE8` (flags0) | 0x01, VM loop | bit 0x12 = halt/pause; bit 0x01000000 toggled by 0x01 |
+| `+0xF4` (mem_base) | 0x04, 0x05, 0x08, 0x18, 0x19 | locals array base pointer |
+| `+0xF8` | 0x0D, 0x0E, 0x0F | cell array base (16-byte stride) |
+
+### Actor spawn variants
+
+Three confirmed callers of the main spawn function `sub_54BFC0`:
+
+| Function | Lines | Behavior |
+|---|---|---|
+| `sub_5531D0` | ~385520 | Simple clone, spawn_keep_owner=0 |
+| `sub_553230` | ~385565 | Simple clone, spawn_keep_owner=1 |
+| `sub_5533F0` | ~385772 | Complex: decompresses transform matrix from geometry record; uses fixed-point FPU math to convert float positions to actor coordinates before spawning |
+
+`sub_553170` (called from both `sub_5531D0` and `sub_553230`) reads 6 sequential u32 values from the STPC object-definition stream and populates the spawn-state runtime block.
+
+---
+
+## MAP Section4 disk format (partially confirmed from `sub_42AC50`)
+
+The 34-byte disk records are read in this order and expanded to 48-byte runtime records:
+
+```text
+Disk offset   Size   Runtime offset   Notes
+0x00          u32    +0x08 area?      first field (role unknown)
+0x04          u32    +0x0C area?      second field (role unknown)
+0x08          u16    +0x08            small_a (zero-extended to u32)
+0x0A          u16    +0x0C            small_b (zero-extended to u32)
+0x0C          u16    +0x10            small_c (zero-extended to u32)
+[gap ~10 bytes — exact byte accounting not yet confirmed]
+0x18          u32    +0x18            field_18
+0x1C          u32    +0x1C            field_1C
+0x20          u32    +0x20            field_20
+0x28          u32    +0x28            field_28
+0x2C          u32    +0x2C            field_2C
+```
+
+Runtime slots +0x00 (next) and +0x04 (prev) are built by the loader's linked-list stitcher, not read from disk.
+
+In `t1l1m001`, most MAP objects have `section4_index = 0xFFFFFFFF` (sentinel → NULL).  Only a few objects (e.g., index 4) reference a valid Section4 entry.
+
+---
+
+## Practical notes for WAD editing / object placement
+
+This section consolidates what is needed to add or clone a MAP object.
+
+### Adding a new MAP object (minimal viable approach)
+
+1. **Choose a template** — Pick an existing `MapObjectDisk58` from `map_full/objects_58_disk.csv` whose `script_offset` points to the object type you want to place.
+2. **Copy all fields verbatim** from the template except position and rotation.
+3. **Set position** (12.12 fixed-point):
+   ```python
+   pos_x_fixed12 = int(world_x * 4096)
+   pos_y_fixed12 = int(world_y * 4096)
+   pos_z_fixed12 = int(world_z * 4096)
+   ```
+4. **Set rotation** (4096 units per full turn, 16-bit, range 0–4095):
+   ```python
+   rot_y_units = int(yaw_degrees * 4096 / 360) & 0xFFFF
+   ```
+5. **Increment `object_count`** in the MAP header.
+6. **Update `object_count_b`** to the same value (both must agree for the actor pool allocation in `sub_54D0D0`).
+7. **Leave `section2_index` = `0xFFFFFFFF`** and **`section4_index` = `0xFFFFFFFF`** unless you need linked-list data (safe to omit for cloned objects).
+8. **Leave `flags` = `0x0000`** (all flags 0 in tested level).
+9. **Do NOT set `flags & 0x0002`** — that bit skips initial spawn.
+
+### Known `script_offset` values from `t1l1m001`
+
+| `script_offset` hex | Observed objects | Notes |
+|---|---|---|
+| `0x004210E2` | object 0 | local_count=1, stack_word_count=13 |
+| `0x00421F96` | objects 1–3 | local_count=0, stack_word_count=9, spawn_flags=0x8000 |
+| `0x004224EE` | object 4 | local_count=5, stack_word_count=12, spawn_flags=0x8000 |
+
+`spawn_flags=0x8000` (bit 15) appears in multiple objects; its render/logic role is not yet named but is safe to copy from a template.
+
+### Rebuilding the WAD chunk
+
+After modifying the MAP object table, the chunk must be re-serialized following the exact confirmed read order from `sub_42AC50`:
+
+```text
+u32  tile_count
+u32  grid_width
+u32  grid_height
+MapTile24 tiles[tile_count]
+
+u32  section2_count
+u32  section2_data[section2_count]
+
+u32  section3_count
+Section3Disk90 section3[section3_count]
+
+u32  section4_count
+Section4Disk34 section4[section4_count]
+
+u32  section5_32x8[32][2]      // 256-byte lookup table: 32 records × 32 bytes
+u32  grid[grid_width * grid_height]
+TileDefDisk24 tile_defs[tile_count]
+u32  tile_trak_record_index[tile_count]
+
+// if dword_6DA330 & 0x10000:
+u32  optional20_count
+OptionalRecord20 optional20[optional20_count]
+
+MapVertexColors colors[tile_count]
+
+u32  object_count
+u32  object_count_b            // must equal object_count
+MapObjectDisk58 objects[object_count]
+
+// if dword_6DA330 & 0x10:
+u32  final_optional_dword
+u16  final_u16
+```
+
+The WAD container wrapper:
+```text
++0x00  u32  total_file_size - 4
++0x04  chunks until EOF:
+         char[4]  tag (stored reversed: "MAP " → stored as " PAM")
+         u32      chunk_data_size
+         bytes    chunk_data
+```
 
