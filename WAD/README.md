@@ -134,6 +134,7 @@ extracted/t1l1m001/
 
   lights/
     lights.csv
+    summary.txt
 
   trak/
     summary.txt
@@ -524,28 +525,160 @@ Known remaining TRAK uncertainty:
 
 ## `LGHT` chunk structure
 
-`LGHT` contains light entries.
+`LGHT` is now mostly decoded from the PC executable path.  In the WAD dispatcher, the little-endian chunk tag `1279739988` / `0x4C474854` is `LGHT`, and it is loaded by `sub_42C180`.  The loader creates 112-byte runtime light objects with `sub_41B8A0` and stores their pointers in the world container.
 
-Observed layout:
+World/container fields:
 
-```text
-u32 count
-repeated entries:
-    u8 type
-    u8 red
-    u8 green
-    u8 blue
-    f32 f0
-    f32 f1
-    f32 f2
-    f32 f3
-    f32 f4
+```c
+struct MapWorld_LightFields {
+    uint32_t light_count;      // world + 0x5C / +92
+    RuntimeLight112 **lights;  // world + 0x60 / +96
+};
 ```
 
-Known uncertainty:
+### Disk layout
 
-- The meaning of `f0..f4` depends on light type and is not fully decoded.
-- They may encode direction, position, radius, falloff, or intensity depending on the light.
+The chunk starts with a 32-bit count, then packed type-dependent records.
+
+```c
+#pragma pack(push, 1)
+
+struct LGHT_Header {
+    uint32_t light_count;
+};
+
+struct LGHT_Type1_Directional {
+    uint8_t type;      // 1
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+
+    float dir_x;
+    float dir_y;
+    float dir_z;      // runtime negates z, then normalizes dir_x/dir_y/-dir_z
+}; // 16 bytes
+
+struct LGHT_Type2_Point {
+    uint8_t type;      // 2
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+
+    float x;
+    float y;
+    float z;          // runtime negates z
+
+    float inner_radius;
+    float outer_radius;
+
+    uint8_t falloff_or_mode;
+}; // 25 bytes, packed
+
+struct LGHT_Type4_NegativePoint {
+    uint8_t type;      // 4 on disk; constructor creates runtime type 2
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+
+    float x;
+    float y;
+    float z;          // runtime negates z
+
+    float inner_radius;
+    float outer_radius;
+
+    uint8_t falloff_or_mode;
+}; // 25 bytes, packed
+
+#pragma pack(pop)
+```
+
+### Color conversion
+
+For type `1` and type `2`, `sub_42C180` converts each RGB byte to runtime intensity with:
+
+```c
+float channel = (2.0f * byte_value) / 255.0f;
+```
+
+So disk color bytes cover approximately `0.0..2.0` intensity.  For disk type `4`, the loader reads the same point-light payload but converts color to negative/special values before creating a runtime type-2 light:
+
+```c
+runtime_channel = -((channel + 1.0f) * 0.5f);
+```
+
+Type `4` is therefore best described as a **negative/special point light** until the lighting evaluator is fully named.
+
+### Runtime light object
+
+`sub_41B8A0` allocates 112 bytes for each light.  `sub_41BEE0` copies base color to current/effective color and can convert it to grayscale when color rendering is disabled.
+
+```c
+#pragma pack(push, 1)
+struct RuntimeLight112 {
+    float color_r;             // +0x00 current/effective
+    float color_g;             // +0x04 current/effective
+    float color_b;             // +0x08 current/effective
+    float color_a_or_unused;   // +0x0C copied from +0x1C
+
+    float base_r;              // +0x10 constructor r
+    float base_g;              // +0x14 constructor g
+    float base_b;              // +0x18 constructor b
+    float base_a_or_unused;    // +0x1C
+
+    // runtime type 2 positional light current position
+    float pos_x_current;       // +0x20
+    float pos_y_current;       // +0x24
+    float pos_z_current;       // +0x28
+
+    // runtime type 1 normalized direction
+    float dir_x;               // +0x2C
+    float dir_y;               // +0x30
+    float dir_z;               // +0x34
+
+    // runtime type 2 base/original position
+    float pos_x_base;          // +0x38
+    float pos_y_base;          // +0x3C
+    float pos_z_base;          // +0x40
+
+    // runtime type 1 copied normalized direction
+    float dir_x_base;          // +0x44
+    float dir_y_base;          // +0x48
+    float dir_z_base;          // +0x4C
+
+    // runtime type 2 radius/falloff
+    float outer_radius_sq;     // +0x50
+    float inner_radius_sq;     // +0x54
+    float outer_radius;        // +0x58
+    float inner_radius;        // +0x5C
+    float inv_radius_range;    // +0x60 = 1.0 / (outer_radius - inner_radius) when non-zero
+    uint32_t falloff_or_mode;  // +0x64 final disk byte from type 2/4
+
+    uint32_t type;             // +0x68, 1=directional, 2=point/ranged
+    uint8_t active_or_flags;   // +0x6C, constructor clears to 0
+    uint8_t unknown_6D[3];
+}; // 112 bytes
+#pragma pack(pop)
+```
+
+`sub_41BD70`, `sub_41BF80`, `sub_41BFA0`, and `sub_41BFC0` are simple active-light linked-list helpers.
+
+### Current LGHT outputs
+
+`lights/lights.csv` now includes both raw disk values and runtime-derived values:
+
+- `kind`: `directional`, `point`, `negative_point`, or `unknown`
+- disk RGB bytes and runtime intensities
+- type-1 direction and normalized runtime direction
+- type-2/type-4 position, runtime-negated Z, inner/outer radii, squared radii, and inverse radius range
+- `falloff_or_mode`, the final byte of type-2/type-4 records
+
+`lights/summary.txt` summarizes counts by light kind and repeats the executable-backed interpretation.
+
+Known remaining LGHT uncertainty:
+
+- The final byte in type `2`/`4` is still named `falloff_or_mode`; it should be renamed once the lighting evaluator using runtime offset `+0x64` is reversed.
+- `RuntimeLight112 +0x0C/+0x1C` are copied by `sub_41BEE0`, but are not initialized by the constructor pseudocode we have.
 
 ## Chunks and files not fully decoded yet
 
@@ -563,7 +696,7 @@ These are preserved in `raw/` for later analysis:
 | `FONT` | `raw/font.bin` | Exported raw; glyph layout not decoded |
 | `MAP ` | `map/` outputs | Tile list/grid partially decoded; flags/type semantics still unknown |
 | `TEXT` | `textures/`, `palette/` | RGB555 RLE texture images decoded; palette/material binding semantics still partly unknown |
-| `LGHT` | `lights/lights.csv` | Light entries parsed; exact field semantics still unknown |
+| `LGHT` | `lights/lights.csv`, `lights/summary.txt` | Directional, point, and negative/special point records decoded from `sub_42C180` / `sub_41B8A0`; final type-2/type-4 byte still named `falloff_or_mode` |
 
 ## What is left to do
 
@@ -574,9 +707,10 @@ Useful next reverse-engineering tasks:
 2. Decode `MAP ` `flags` and `type_idx` values.
 3. Validate the current EXE-derived STPC triangle UV/material mapping across more levels; texture pages now bind through the decoded TEXT runtime material table.
 4. Finish naming TRAK/STPC header fields `+0x00/+0x04/+0x08/+0x7E` and the exact semantic split of collision groups 0/1/2.
-5. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
-6. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
-7. Build a real 3D viewer that loads `MAP ` marker data, `STPC` render geometry, and `TRAK` sector/surface data together.
+5. Reverse the runtime lighting evaluator that reads `RuntimeLight112 +0x64` so `falloff_or_mode` can be named precisely.
+6. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
+7. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
+8. Build a real 3D viewer that loads `MAP ` marker data, `STPC` render geometry, `TRAK` sector/surface data, and decoded `LGHT` lights together.
 
 ## Module overview
 
