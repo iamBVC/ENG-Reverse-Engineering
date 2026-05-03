@@ -14,6 +14,7 @@ from pathlib import Path
 
 from eng_wad.binary import Reader, u32
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
+from eng_wad.smpc_chunk import export_all as export_smpc, parse as parse_smpc
 from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
 from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
@@ -59,6 +60,7 @@ def extract_wad(
     extract_stpc_obj: bool = True,
     extract_trak: bool = True,
     extract_lights: bool = True,
+    extract_sounds: bool = True,
     extract_raw: bool = True,
     extract_world_probe: bool = False,
     extract_map_full: bool = True,
@@ -144,6 +146,16 @@ def extract_wad(
             export_lights(lights, out_dir / "lights")
         except Exception as exc:
             print(f"  [LGHT] Parse/export error: {exc}", file=sys.stderr)
+
+    # SMPC: level sounds.  Exports .cvg blobs, manifest CSV, and raw audio bins.
+    if extract_sounds and "SMPC" in by_tag:
+        print("  [SMPC] Parsing sounds …")
+        try:
+            smpc = parse_smpc(chunk_bytes(data, by_tag["SMPC"]))
+            export_smpc(smpc, out_dir / "sounds")
+            print(f"  [SMPC] → sounds/  ({smpc.sound_count} sounds)")
+        except Exception as exc:
+            print(f"  [SMPC] Parse/export error: {exc}", file=sys.stderr)
 
     # Raw exports: keep source bytes for chunks that are not fully decoded yet.
     if extract_raw:
@@ -334,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-stpc-obj", action="store_true", help="skip STPC OBJ mesh export")
     parser.add_argument("--no-trak", action="store_true", help="skip TRAK CSV/OBJ/viewer export")
     parser.add_argument("--no-lights", action="store_true", help="skip LGHT light CSV export")
+    parser.add_argument("--no-sounds", action="store_true", help="skip SMPC sound export")
     parser.add_argument("--no-raw", action="store_true", help="do not export raw undecoded chunks")
     parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
     parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
@@ -391,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
             extract_stpc_obj=not args.no_stpc_obj,
             extract_trak=not args.no_trak,
             extract_lights=not args.no_lights,
+            extract_sounds=not args.no_sounds,
             extract_raw=not args.no_raw,
             extract_world_probe=args.world_probe,
             extract_map_full=not args.no_map_full,
