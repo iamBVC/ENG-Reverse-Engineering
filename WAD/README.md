@@ -399,123 +399,129 @@ Known uncertainty:
 - Tile definitions are exported as raw integer fields, but their semantic meaning is not confirmed.
 - MAP does not appear to contain final render geometry by itself; it likely references/organizes geometry from other chunks such as `STPC`.
 
-## `STPC` chunk structure
+## `STPC` / `TRAK` geometry structures
 
-`STPC` contains static polygon geometry.  The exporter scans for validated mesh records and writes OBJ files.
-
-Recognized mesh record layout:
+The executable has now confirmed the shared render/collision geometry record used by TRAK and by STPC-like static meshes.  The two important loader functions are:
 
 ```text
-+0x00  u32/f32   unknown block field
-+0x04  f32       unknown / local bound field
-+0x08  f32       unknown / local bound field
-+0x0C  8 x vec3  local bounding/corner vectors, 96 bytes
-+0x6C  u32       packed counts:
-                  low 16 bits  = vertex_count
-                  high 16 bits = triangle_count
-+0x70  u32       unknown
-+0x74  u32       unknown
-+0x78  u32       unknown
-+0x7C  u32       unknown
-+0x80  u32       unknown
-+0x84  u32       repeated vertex_count
-+0x88  u32       unknown
-+0x8C  vertices  vertex_count * 24 bytes:
-                  f32 x, y, z
-                  f32 nx, ny, nz
-...    triangles triangle_count * 28 bytes:
-                  u16 face_flags
-                  u16 i0, i1, i2
-                  u16 material_or_texture_id
-                  u16 unknown
-                  f32 plane_nx, plane_ny, plane_nz, plane_d
+sub_42AAC0 -> sub_5563F0  // TRAK, 0x84-byte runtime geometry records
+sub_42AB50 -> sub_41F770  // extended 0x8C-byte records used by packed/scene data
 ```
 
-Known uncertainty:
+### `GeometryRecord84` / runtime record
 
-- The full STPC container is not decoded yet.
-- Mesh records are found with a validated scanner, not a complete table-driven parser.
-- Unknown bytes between mesh records may contain collision data, BSP/spatial partitioning, visibility, batching, material lookup tables, or other render metadata.
-- OBJ material IDs are diagnostic placeholders; texture/material binding is not fully decoded.
+`sub_5563F0` confirms the normal runtime record is `0x84` bytes.  `sub_402840` confirms that most of the first `0x6C` bytes are culling bounds.
+
+```text
++0x00  u32/f32   unknown metadata
++0x04  f32       unknown header float
++0x08  f32       unknown header float
++0x0C  8 x vec3  culling/bounds points used by sub_402840 frustum tests
++0x6C  u16       vertex_count
++0x6E  u16       triangle_count
++0x70  u32       vertices pointer slot, overwritten by loader
++0x74  u32       triangles pointer slot, overwritten by loader
++0x78  u16       collision/contact group 0 count
++0x7A  u16       collision/contact group 1 count
++0x7C  u16       collision/contact group 2 count
++0x7E  u16       still unknown
++0x80  u32       collision/contact entries pointer slot, overwritten by loader
+```
+
+After the fixed record table, `sub_5563F0` lays out the variable data for every record in order:
+
+```text
+vertices:          vertex_count * 24 bytes
+triangles:         triangle_count * 28 bytes
+collision entries: (group0 + group1 + group2) * 32 bytes
+```
+
+### Vertex and triangle records
+
+```c
+struct Vertex24 {
+    float x, y, z;
+    float nx, ny, nz;
+};
+
+struct Triangle28Disk {
+    uint16_t flags;
+    uint16_t i0, i1, i2;
+    uint16_t material_index; // runtime: dword_581154 + 20 * material_index
+    uint16_t material_pad;
+    float plane_nx, plane_ny, plane_nz, plane_d;
+};
+```
+
+Confirmed triangle flag notes from `sub_556510` / `sub_41FB30`:
+
+```text
+0x0008 = render batch/material-state break marker
+0x0010 = terrain UV branch bit
+0x0020 = terrain UV swap/filter bit
+0x0400 = backface/plane-cull override
+0x0800 = terrain UV branch bit
+```
+
+Bits `0x0001` and `0x0002` are render/material/effect related but still conservatively named in CSV output.
+
+### Collision/contact entry records
+
+The C/D/E entries are no longer raw unknown data.  `sub_4036D0`, `sub_403AD0`, `sub_4042F0`, and `sub_4046E0` use them as compact collision/contact polygons.
+
+```c
+struct CollisionEntry32 {
+    uint8_t  flags;       // bit0: 0 = 3 edges, 1 = 4 edges
+    uint8_t  surface_id;  // 17/18 conditionally skipped, 30 invalid/no contact
+    int8_t   normal_x_q32;
+    int8_t   normal_y_q32;
+    int8_t   normal_z_q32;
+    int8_t   unknown_05;
+    int16_t  plane_d;
+    uint8_t  edge_data[24]; // 3 or 4 x 6-byte edge equations
+};
+```
+
+The runtime usually scans the combined `group0 + group1 + group2` entry array.  The tool now decodes these into `trak/table_cde_entries.csv` with signed plane coefficients, surface IDs, edge counts, and per-edge values.
+
+### Extended `GeometryRecord8C`
+
+`sub_41F770` confirms an extended `0x8C` form used by packed/scene data.  It starts with the same `GeometryRecord84`, then adds transform-group data used by the `sub_41FB30` skinned/multi-transform path:
+
+```text
++0x84  u16  base_vertex_count
++0x86  u16  transform_group_count
++0x88  u32  transform_group_vertex_counts pointer slot
+```
+
+### `STPC` chunk status
+
+`STPC` static polygon exports still use a validated scanner because the high-level STPC container is not fully table-decoded yet.  The mesh records it finds match the same 24-byte vertex and 28-byte triangle format, and their first `0x6C` bytes are now understood as the same culling/bounds-style header.
+
+Known remaining STPC uncertainty:
+
+- the high-level STPC container/table of contents
+- object-local texture coordinates for STPC meshes
+- exact names for `GeometryRecord84 +0x00/+0x04/+0x08/+0x7E`
+- full semantic split of collision group0/group1/group2
 
 ## `TRAK` chunk structure
 
-`TRAK` is now structurally decoded from the game executable loader.  In the WAD file the tag bytes are stored reversed as `KART`, but the chunk name shown by this tool is `TRAK`.
+`TRAK` is structurally decoded from the executable loader.  In the WAD file the tag bytes are stored reversed as `KART`, but the chunk name shown by this tool is `TRAK`.  It is not a simple camera spline: it is the level/world geometry record table used for rendering and collision.
 
-The loader path observed in the executable is:
+Outputs now include:
 
-```text
-sub_42AAC0
-  reads the whole TRAK chunk
-  reads first uint32 as record_count
-  calls sub_5563F0(&cursor, record_count, &dword_5846EC)
+- `trak/table_b_surfaces.obj` — all decoded render triangles from Table A/B.
+- `trak/per_record_surfaces/` — one OBJ per geometry record/sector.
+- `trak/table_cde_entries.csv` — decoded collision/contact plane entries.
+- `trak/record_header_vectors_diagnostic.obj` — culling/bounds vectors from the record header.
+- `trak/viewer.html` — local/MAP-placed interactive preview, depending on whether MAP_FULL was available.
 
-sub_5563F0
-  treats the first table as record_count records of 0x84 bytes
-  assigns three runtime pointers inside each record
-  rewrites a field in every Table B entry into a pointer to dword_581154 + 20 * index
-```
+Known remaining TRAK uncertainty:
 
-Confirmed packed layout:
-
-```text
-u32 record_count
-
-repeated record_count times, 0x84 bytes each:
-    +0x00  vec3 center
-    +0x0C  vec3 corners[8]
-    +0x6C  u16 table_a_count
-    +0x6E  u16 table_b_count
-    +0x70  u32 runtime_table_a_pointer_slot, overwritten by game loader
-    +0x74  u32 runtime_table_b_pointer_slot, overwritten by game loader
-    +0x78  u16 table_c_count
-    +0x7A  u16 table_d_count
-    +0x7C  u16 table_e_count
-    +0x7E  u16 padding_or_unused
-    +0x80  u32 runtime_table_cde_pointer_slot, overwritten by game loader
-
-then, for every record in order:
-    Table A:   table_a_count * 24 bytes
-    Table B:   table_b_count * 28 bytes
-    Table CDE: (table_c_count + table_d_count + table_e_count) * 32 bytes
-```
-
-Table A decodes as point/normal data:
-
-```text
-f32 x, y, z
-f32 nx, ny, nz
-```
-
-Table B decodes as indexed triangle/plane/material-like data:
-
-```text
-u16 flags
-u16 i0, i1, i2
-u16 material_or_global_table_index
-u16 unknown
-f32 plane_nx, plane_ny, plane_nz, plane_d
-```
-
-Table C/D/E entries are located and exported, but their field meanings are still unknown.
-
-Current interpretation:
-
-- TRAK is probably not a free camera spline.
-- It looks more like level spatial sectors, navigation/collision surfaces, camera constraints, or track graph data.
-- `trak/table_b_surfaces.obj` exports all decoded Table A/B triangle surfaces as one combined OBJ.
-- `trak/per_record_surfaces/` exports one OBJ per TRAK record/sector, which is easier to inspect than the combined mesh.
-- `trak/record_aabbs.obj` exports visible diagnostic bounding boxes derived from decoded Table A vertices.
-- `trak/record_centers.obj` exports visible center markers.
-- `trak/record_header_vectors_diagnostic.obj` preserves the raw 8-vector record-header diagnostic, but those vectors are not treated as final geometry.
-- `trak/viewer.html` previews the decoded Table A/B triangle surfaces with auto-fit, height coloring, pan/zoom, and hover details.
-
-Known uncertainty:
-
-- The exact gameplay role of TRAK is not confirmed.
-- Table C/D/E semantics are not decoded.
-- The 20-byte global table at `dword_581154`, referenced by Table B material/global indices, is not decoded yet.
-- The Table B `flags`, `unknown`, and material/global table index meanings are not fully decoded.
+- exact names for header fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E`
+- exact semantic split between the three collision entry count groups
+- some triangle flag bits beyond the confirmed render/UV/culling bits
 
 ## `LGHT` chunk structure
 
@@ -548,7 +554,7 @@ These are preserved in `raw/` for later analysis:
 
 | Chunk | Raw output | Current status |
 |---|---|---|
-| `STPC` | `raw/stpc.bin` | Static mesh records decoded; full container, material binding, collision/BSP unknown |
+| `STPC` | `raw/stpc.bin` | Static mesh records decoded; culling header and triangle flags documented; full container/material binding still partial |
 | `SMPC` | `raw/smpc.bin` | Not decoded; likely sprite/mesh compressed or related geometry data |
 | `SRPC` | `raw/srpc.bin` | Not decoded; likely sound/resource config |
 | `TRAK` | `raw/trak.bin`, `trak/` | Main record table and A/B/CDE table packing decoded; A/B exported as surfaces; C/D/E semantics still unknown |
@@ -568,7 +574,7 @@ Useful next reverse-engineering tasks:
 2. Decode MAP object scale and the full STPC object-definition language, then apply it to `world/objects_all_candidates.obj`.
 2. Decode `MAP ` `flags` and `type_idx` values.
 3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` texture/material data.
-4. Decode TRAK Table C/D/E semantics and the 20-byte global table at `dword_581154` used by Table B material/global indices.
+4. Finish naming TRAK/STPC header fields `+0x00/+0x04/+0x08/+0x7E` and the exact semantic split of collision groups 0/1/2.
 5. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
 6. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
 7. Build a real 3D viewer that loads `MAP ` marker data, `STPC` render geometry, and `TRAK` sector/surface data together.

@@ -39,10 +39,11 @@ Recognized mesh record shape
 All integer and float fields are little-endian.
 
     record +0x00  u32/f32      unknown field; sometimes looks like metadata
-    record +0x04  f32          unknown / local bounds-related value
-    record +0x08  f32          unknown / local bounds-related value
-    record +0x0C  8 x vec3     96 bytes of bounding/corner vectors
-                                These are used only as a sanity check for now.
+    record +0x04  f32          unknown header float
+    record +0x08  f32          unknown header float
+    record +0x0C  8 x vec3     96 bytes of culling/bounds points.
+                                sub_402840 transforms these points and OR/ANDs
+                                clip outcodes for frustum rejection.
 
     record +0x6C  u32          packed mesh counts:
                                     low  16 bits = vertex_count
@@ -79,9 +80,11 @@ Exported files
 Important limitations
 ---------------------
 
-This is not yet a complete STPC semantic decoder.  OBJ geometry is valid, but
-some material IDs, render flags, collision attributes, texture lookup tables,
-and any spatial acceleration structures are still being treated as unknown.
+This is not yet a complete STPC semantic decoder.  OBJ geometry is valid, and
+the shared GeometryRecord84/STPC-like render layout is now mostly confirmed from
+sub_402840/sub_556510/sub_41FB30.  Material table binding is partially decoded,
+but object-local texture coordinates and high-level STPC container tables still
+need more work.
 """
 
 from __future__ import annotations
@@ -188,6 +191,30 @@ class Triangle:
     plane_ny: float
     plane_nz: float
     plane_d: float
+
+
+def triangle_flag_notes(flags: int) -> str:
+    """Human-readable notes for confirmed triangle flag bits.
+
+    These names come from sub_556510/sub_41FB30.  Some low bits are still render
+    state/effect related, so the labels stay conservative.
+    """
+    notes: list[str] = []
+    if flags & 0x0001:
+        notes.append("material_special_or_color_path")
+    if flags & 0x0002:
+        notes.append("effect_queue_related")
+    if flags & 0x0008:
+        notes.append("batch_or_material_break")
+    if flags & 0x0010:
+        notes.append("uv_branch_0x10")
+    if flags & 0x0020:
+        notes.append("uv_swap_or_filter_bit")
+    if flags & 0x0400:
+        notes.append("backface_cull_override")
+    if flags & 0x0800:
+        notes.append("terrain_uv_branch_0x800")
+    return ";".join(notes)
 
 
 @dataclass
@@ -617,8 +644,8 @@ def write_manifest(meshes: list[MeshCandidate], path: Path) -> None:
             "header_78",
             "header_7c",
             "header_80",
-            "header_84_repeated_vertex_count",
-            "header_88",
+            "header_84_repeated_vertex_count_or_base_vertex_count",
+            "header_88_group_counts_or_unknown",
         ])
 
         for mesh in meshes:
@@ -648,6 +675,14 @@ def write_debug_faces(meshes: list[MeshCandidate], out_dir: Path) -> Path:
             "mesh",
             "face",
             "flags_hex",
+            "flag_notes",
+            "flag_material_special_or_color_path",
+            "flag_effect_queue_related",
+            "flag_batch_or_material_break",
+            "flag_uv_branch_0x10",
+            "flag_uv_swap_or_filter_bit",
+            "flag_backface_cull_override",
+            "flag_terrain_uv_branch_0x800",
             "i0",
             "i1",
             "i2",
@@ -665,6 +700,14 @@ def write_debug_faces(meshes: list[MeshCandidate], out_dir: Path) -> Path:
                     mesh.index,
                     i,
                     f"0x{tri.flags:04X}",
+                    triangle_flag_notes(tri.flags),
+                    int(bool(tri.flags & 0x0001)),
+                    int(bool(tri.flags & 0x0002)),
+                    int(bool(tri.flags & 0x0008)),
+                    int(bool(tri.flags & 0x0010)),
+                    int(bool(tri.flags & 0x0020)),
+                    int(bool(tri.flags & 0x0400)),
+                    int(bool(tri.flags & 0x0800)),
                     tri.i0,
                     tri.i1,
                     tri.i2,

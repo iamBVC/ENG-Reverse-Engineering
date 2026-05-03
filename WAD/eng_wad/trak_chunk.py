@@ -52,8 +52,17 @@ Current interpretation:
             uint16 unknown;
             float plane_nx, plane_ny, plane_nz, plane_d;
 
-    Table C/D/E is confirmed as three adjacent 32-byte sublists, but its field
-    meaning is not decoded yet. This module exports it as raw u16/u32/hex rows.
+    Table C/D/E is confirmed as three adjacent 32-byte collision/contact
+    polygon sublists.  The runtime normally scans the combined C+D+E array.
+    Every entry is a compact plane plus 3 or 4 edge half-space tests:
+
+        +0x00 u8  flags, bit0 selects triangle(3 edges)/quad(4 edges)
+        +0x01 u8  surface/contact id; 17/18 are conditionally skipped, 30 is invalid/no contact
+        +0x02 s8  plane normal/coefficient X, scaled by 32
+        +0x03 s8  plane normal/coefficient Y/up, scaled by 32
+        +0x04 s8  plane normal/coefficient Z, scaled by 32
+        +0x06 s16 plane constant
+        +0x08      3 or 4 x 6-byte edge equations
 """
 
 from __future__ import annotations
@@ -117,14 +126,50 @@ class TrakTableBEntry:
 
 
 @dataclass
+class CollisionEdge6:
+    """One 6-byte collision edge half-space equation inside a C/D/E entry."""
+    x_q32: int
+    y_q32: int
+    z_q32: int
+    unknown_03: int
+    d: int
+
+
+@dataclass
 class TrakTableCDEEntry:
-    """One raw 32-byte entry from the combined C/D/E table area."""
+    """One decoded 32-byte collision/contact entry from the combined C/D/E table area."""
     record: int
     group: str
     group_index: int
     combined_index: int
     file_offset: int
     raw: bytes
+    flags: int
+    surface_id: int
+    normal_x_q32: int
+    normal_y_q32: int
+    normal_z_q32: int
+    unknown_05: int
+    plane_d: int
+    edge_count: int
+    edges: list[CollisionEdge6]
+
+    @property
+    def is_quad(self) -> bool:
+        return bool(self.flags & 1)
+
+    @property
+    def normal(self) -> tuple[float, float, float]:
+        """Plane normal/coefficient components after the executable's q32 scale."""
+        return (self.normal_x_q32 * 32.0, self.normal_y_q32 * 32.0, self.normal_z_q32 * 32.0)
+
+    @property
+    def surface_note(self) -> str:
+        if self.surface_id in (17, 18):
+            return "conditionally skipped surface id"
+        if self.surface_id == 30:
+            return "invalid/no-contact surface id"
+        return ""
 
 
 @dataclass
@@ -132,11 +177,15 @@ class TrakRecord:
     """
     One 0x84-byte TRAK main record.
 
-    The first 108 bytes contain nine vec3 values.  The first one behaves like a
-    center point, and the next eight behave like volume/corner points.  The last
-    24 bytes contain counts plus runtime pointer fields.  In the packed file,
-    the runtime pointer slots are normally zero or meaningless; sub_5563F0
-    overwrites them after loading.
+    The first 108 bytes are now mostly identified from sub_402840:
+
+        +0x00      unknown u32/f32 metadata
+        +0x04/+08 unknown floats, not used by sub_402840
+        +0x0C      eight vec3 culling/bounds points used for frustum tests
+
+    The last 24 bytes contain counts plus runtime pointer fields.  In the packed
+    file, the runtime pointer slots are normally zero or meaningless;
+    sub_5563F0 overwrites them after loading.
     """
     index: int
     file_offset: int
@@ -200,6 +249,42 @@ class TrakExportResult:
 
 def _vec3(buf: bytes, off: int) -> tuple[float, float, float]:
     return struct.unpack_from("<3f", buf, off)
+
+
+def _s8(v: int) -> int:
+    return v - 256 if v >= 128 else v
+
+
+def _i16(buf: bytes, off: int) -> int:
+    return struct.unpack_from("<h", buf, off)[0]
+
+
+def _decode_collision_entry(raw: bytes) -> tuple[int, int, int, int, int, int, int, int, list[CollisionEdge6]]:
+    """Decode one 32-byte C/D/E collision/contact entry.
+
+    Confirmed by sub_4036D0/sub_403AD0/sub_4042F0/sub_4046E0.  The runtime
+    treats the three C/D/E groups as one combined array for most collision
+    tests.  flags bit0 changes the number of 6-byte edge equations from 3 to 4.
+    """
+    flags = raw[0]
+    surface_id = raw[1]
+    nx = _s8(raw[2])
+    ny = _s8(raw[3])
+    nz = _s8(raw[4])
+    unknown_05 = _s8(raw[5])
+    plane_d = struct.unpack_from("<h", raw, 6)[0]
+    edge_count = 3 + (flags & 1)
+    edges: list[CollisionEdge6] = []
+    for i in range(edge_count):
+        eo = 8 + i * 6
+        edges.append(CollisionEdge6(
+            x_q32=_s8(raw[eo + 0]),
+            y_q32=_s8(raw[eo + 1]),
+            z_q32=_s8(raw[eo + 2]),
+            unknown_03=_s8(raw[eo + 3]),
+            d=struct.unpack_from("<h", raw, eo + 4)[0],
+        ))
+    return flags, surface_id, nx, ny, nz, unknown_05, plane_d, edge_count, edges
 
 
 def parse_trak_chunk(buf: bytes) -> TrakFile:
@@ -292,8 +377,10 @@ def parse_trak_chunk(buf: bytes) -> TrakFile:
             for group_index in range(group_count):
                 off = table_cde_off + combined_index * TRAK_TABLE_CDE_STRIDE
                 raw = buf[off:off + TRAK_TABLE_CDE_STRIDE]
+                flags, surface_id, nx, ny, nz, unk05, plane_d, edge_count, edges = _decode_collision_entry(raw)
                 table_cde.append(TrakTableCDEEntry(
-                    rec_index, group, group_index, combined_index, off, raw
+                    rec_index, group, group_index, combined_index, off, raw,
+                    flags, surface_id, nx, ny, nz, unk05, plane_d, edge_count, edges
                 ))
                 combined_index += 1
 
@@ -397,7 +484,15 @@ def write_table_b_csv(trak: TrakFile, path: Path) -> None:
 def write_table_cde_csv(trak: TrakFile, path: Path) -> None:
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        headers = ["record", "group", "group_index", "combined_index", "file_offset_hex", "raw_hex"]
+        headers = [
+            "record", "group", "group_index", "combined_index", "file_offset_hex",
+            "flags_hex", "is_quad", "surface_id", "surface_note",
+            "normal_x_q32", "normal_y_q32", "normal_z_q32", "normal_scaled_x", "normal_scaled_y", "normal_scaled_z",
+            "unknown_05_s8", "plane_d", "edge_count",
+        ]
+        for i in range(4):
+            headers += [f"edge{i}_x_q32", f"edge{i}_y_q32", f"edge{i}_z_q32", f"edge{i}_unknown_03", f"edge{i}_d"]
+        headers += ["raw_hex"]
         headers += [f"u16_{i:02d}" for i in range(16)]
         headers += [f"u32_{i:02d}" for i in range(8)]
         w.writerow(headers)
@@ -405,9 +500,21 @@ def write_table_cde_csv(trak: TrakFile, path: Path) -> None:
             for e in r.table_cde:
                 u16s = struct.unpack("<16H", e.raw)
                 u32s = struct.unpack("<8I", e.raw)
+                edge_cols: list[int | str] = []
+                for i in range(4):
+                    if i < len(e.edges):
+                        edge = e.edges[i]
+                        edge_cols += [edge.x_q32, edge.y_q32, edge.z_q32, edge.unknown_03, edge.d]
+                    else:
+                        edge_cols += ["", "", "", "", ""]
                 w.writerow([
                     r.index, e.group, e.group_index, e.combined_index,
-                    f"0x{e.file_offset:08X}", e.raw.hex(" "),
+                    f"0x{e.file_offset:08X}",
+                    f"0x{e.flags:02X}", int(e.is_quad), e.surface_id, e.surface_note,
+                    e.normal_x_q32, e.normal_y_q32, e.normal_z_q32, *e.normal,
+                    e.unknown_05, e.plane_d, e.edge_count,
+                    *edge_cols,
+                    e.raw.hex(" "),
                     *u16s, *u32s,
                 ])
 
@@ -666,9 +773,9 @@ parsed_all_bytes:      {trak.parsed_size == trak.source_size}
 
 Table A entries:       {trak.total_a_entries}  (stride 24, likely vertex position + normal)
 Table B entries:       {trak.total_b_entries}  (stride 28, indexed triangle/plane/material)
-Table C entries:       {trak.total_c_entries}  (stride 32, unknown subtable)
-Table D entries:       {trak.total_d_entries}  (stride 32, unknown subtable)
-Table E entries:       {trak.total_e_entries}  (stride 32, unknown subtable)
+Table C entries:       {trak.total_c_entries}  (stride 32, collision/contact plane group 0)
+Table D entries:       {trak.total_d_entries}  (stride 32, collision/contact plane group 1)
+Table E entries:       {trak.total_e_entries}  (stride 32, collision/contact plane group 2)
 
 Valid B triangles:     {valid_triangles}
 Invalid B triangles:   {invalid_triangles}
@@ -681,15 +788,18 @@ sub_5563F0 confirms:
   records are 0x84 bytes each
   record+0x6C = Table A count, stride 24, pointer written to +0x70
   record+0x6E = Table B count, stride 28, pointer written to +0x74
-  record+0x78/+0x7A/+0x7C are combined Table C/D/E counts, stride 32, pointer written to +0x80
+  record+0x00/+0x04/+0x08 are still-unknown header values
+  record+0x0C..+0x6B are 8 vec3 culling/bounds points used by sub_402840
+  record+0x78/+0x7A/+0x7C are combined C/D/E collision entry counts, stride 32, pointer written to +0x80
   each Table B entry +0x08 is converted from a u16 material/global-table index into dword_581154 + 20*index
 
 Interpretation status
 ---------------------
 Table A and Table B are structurally decoded and exported as combined and per-record OBJ surfaces.
 record_aabbs.obj is a diagnostic bounding-box view derived from Table A vertices.
-Table C/D/E are structurally located but semantically unknown.
-TRAK appears to describe level spatial/track/navigation/collision-like sectors, not a simple cinematic camera spline.
+Table C/D/E are now decoded as compact collision/contact plane entries.
+Each entry stores flags, surface_id, signed q32 plane coefficients, plane_d, and 3/4 edge half-space equations.
+TRAK appears to describe level spatial/render/collision sectors, not a simple cinematic camera spline.
 """
     path.write_text(summary, encoding="utf-8")
 
