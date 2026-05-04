@@ -41,6 +41,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1095585859` | `AMPC` / `CPMA` | audio/resource | `sub_558D70` |
 | `1162757152` | `END ` | terminator | closes WAD |
 | `1397575747` | `SMPC` / `CPMS` | audio/resource | `sub_558D30` |
+| `1397772884` | `SPRT` | sprite material-base metadata | inline branch at `loc_558AD1` |
 | `1397903427` | `SRPC` / `CPRS` | streamed speech slice table | `sub_545350(..., 2)` |
 | `1398034499` | `STPC` / `CPTS` | packed scene/static mesh/animation container | `sub_42AB50` |
 | `1413830740` | `TEXT`-material-related | material/texture table | `sub_4067B0` |
@@ -309,6 +310,51 @@ Known material flag observations:
 | `flags & 0x0010` | double height |
 | `flags & 0x0020` | generated page |
 
+
+## SPRT sprite material-base chunk
+
+`SPRT` does not store sprite pixels.  The pixels and UV rectangles live in the `TEXT` textures and runtime material table.  The confirmed part of `SPRT` is a material-table base index used by the sprite renderer.
+
+### Loader behavior
+
+The chunk dispatcher compares tag integer `0x53505254` (`SPRT`).  At `loc_558AD1`, the loader reads:
+
+```text
+0x00  u32 material_base_index  -> dword_5FF728
+```
+
+If `dword_6DA330 & 0x100000` is set, the loader then reads an optional table:
+
+```text
++0x04  u32 optional_count
++0x08  u32 optional_values[optional_count] -> unk_5FCFA0
+```
+
+Current sample WADs only contain the 4-byte base value, so the optional table is confirmed from executable control flow but not yet observed in the tested files.
+
+### Renderer use
+
+`sub_425D40` consumes `dword_5FF728` while selecting a 20-byte material row from `dword_581154`.  The observed formula is:
+
+```text
+material_index = dword_5FF728 + sprite_id * 2 + variant_or_frame
+material_ptr   = dword_581154 + material_index * 20
+```
+
+`sprite_id` is read from the sprite/runtime object at `+0x0C`.  `variant_or_frame` is usually a two-slot variant/frame value; when the object byte at `+0x2C` is set, the renderer indexes an inline byte table at `+0x2F` using `byte +0x05`.
+
+Observed sample bases against parsed `TEXT` material counts:
+
+| WAD | SPRT base | TEXT materials | Remaining materials | Paired sprite slots |
+|---|---:|---:|---:|---:|
+| `t1l1m001` | 780 | 986 | 206 | 103 |
+| `t1l1m002` | 873 | 1079 | 206 | 103 |
+| `t1l1m003` | 605 | 992 | 387 | 193 |
+| `t1l1m004` | 577 | 957 | 380 | 190 |
+| `t0i0m998` | 181 | 377 | 196 | 98 |
+| `t0i0m000` | 366 | 389 | 23 | 11 |
+
+The exporter writes `sprt/summary.txt`, `sprt/summary.json`, and `sprt/sprite_material_slots.csv`, mapping each derived two-material sprite slot to the corresponding parsed `TEXT` material rectangle and texture index.
 
 ## SRPC / CPRS streamed speech chunk
 
@@ -996,6 +1042,8 @@ Fallback d-pad values:
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
 - `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
 - `stpc/script_geometry_refs.csv`: opcode `0x00B2` references from the STPC script tail to decoded geometry-record offsets.
+- `sprt/summary.txt`: confirmed `SPRT` material-base value and derived material-slot counts.
+- `sprt/sprite_material_slots.csv`: derived sprite slots mapped to `TEXT` material indices, texture pages, rectangles, and flags.
 - `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC object binding, including decoded Section4 route transforms when present.
 - `world/stpc_mesh_reference_hits.csv`: exact per-object STPC mesh binds plus decoded script actor offsets/yaw source used by world OBJ export.
 - `world/objects_primary.obj`: one selected placed STPC mesh per MAP object, with materials/textures and decoded script placement offsets.
@@ -1010,6 +1058,7 @@ Fallback d-pad values:
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
 6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing, mesh binding, child-transform inheritance, and Section4 route transforms are confirmed, but complete actor/object behavior still needs VM semantics.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
+8. `SPRT` optional table behind `dword_6DA330 & 0x100000` is loader-confirmed but not observed in current sample WADs; high-level sprite records and animation/frame command semantics remain unnamed.
 
 ## Recommended next reverse-engineering targets
 
@@ -1018,6 +1067,7 @@ Fallback d-pad values:
 3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
 4. `sub_553920`–`sub_5539E0` (opcodes 0x37–0x3B) and `sub_553A10`–`sub_553B00` (0x3D–0x43) — likely geometry/transform opcodes worth decoding next.
 5. `sub_550E60` and `sub_5509F0` — called by multiple opcodes as the primary function-dispatch path; understanding them would clarify ~10 opcodes at once.
+6. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
 
 ---
 

@@ -9,7 +9,7 @@ The repository is split into small modules so every chunk can be studied indepen
 Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 
 - scan the WAD container and write a chunk manifest
-- extract simple metadata such as level name, version, light info, and sprite count
+- extract simple metadata such as level name, version, light info, and SPRT material-base index
 - decode `TEXT` RGB555 RLE textures to PNG
 - export `TEXT` palette/material diagnostics
 - parse `MAP ` tile placement data, grid data, object records, and executable-confirmed MAP diagnostics
@@ -144,6 +144,7 @@ extracted/t1l1m001/
 
   sounds/               SMPC .cvg, WAV, raw payloads, manifest
   srpc/                 SRPC entries, CVS slices, WAV, optional MP3
+  sprt/                 SPRT material-base summary and sprite material slots
 
   trak/                 TRAK CSV, OBJ surfaces, HTML viewer
   stpc/                 STPC geometry, script refs, OBJ/MTL files, local texture copies
@@ -161,6 +162,7 @@ Useful first files to inspect:
 | `trak/viewer.html` | Interactive terrain/sector preview. |
 | `stpc/manifest.csv` | Table-decoded STPC geometry records, offsets, matrix groups, and counts. |
 | `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
+| `sprt/sprite_material_slots.csv` | SPRT-derived sprite slots mapped onto TEXT runtime material rows. |
 | `world/terrain_and_objects.obj` | Textured terrain plus placed STPC object instances in one OBJ. |
 | `world/combined.obj` | Current best-effort diagnostic combined world reconstruction. |
 | `lights/lights.csv` | Runtime-derived light positions, colors, radii, and types. |
@@ -199,7 +201,7 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `VERS` | ~95% | Reads version value. | None important for extraction. |
 | `NAME` | ~90% | Extracts level name string. | Encoding edge cases. |
 | `LNFO` | ~20% | Reads count/version-like values when present. | Full purpose and relation to `LGHT`. |
-| `SPRT` | ~10% | Reads sprite count only. | Sprite table/body format. |
+| `SPRT` | ~45% | Reads the executable-confirmed TEXT material-base index, optional flag-gated table when present, and exports sprite material slot diagnostics. | High-level sprite object records, animation/frame command semantics, and optional table purpose. |
 | `TEXT` | ~80% | Decodes RGB555 RLE textures, palette, material diagnostics. | Some material flags, `extra` byte, and full binding semantics. |
 | `FONT` | ~10% | Preserves raw bytes. | Glyph layout and font renderer mapping. |
 | `SMPC` | ~80% | Exports `.cvg`, raw audio payloads, manifest, WAV. | Some CVG header semantics and uncommon channel/quality modes. |
@@ -242,9 +244,13 @@ Stores level sound entries using CVG containers with PlayStation/SPU ADPCM-style
 
 Stores streamed speech table entries into an external `.CVS` speech bank, normally `Music/ENGLISH.CVS`.  The WAD chunk contains offsets, sizes, and sample-rate scalars; the actual speech bytes live in the CVS file.
 
+### `SPRT`
+
+Stores sprite rendering metadata, not pixels.  The first `u32` is copied by the executable to `dword_5FF728` and used as a base index into the runtime `TEXT` material table.  Sprite rendering indexes materials approximately as `base + sprite_id * 2 + variant/frame`.  Current sample WADs only contain this 4-byte base value; the loader can read an optional `u32` table when `WFPC` flags include `0x100000`.
+
 ### Raw/low-knowledge chunks
 
-`AMPC`, `FONT`, `LGPC`, `WFPC`, `SPRT`, and parts of `LNFO` are preserved for later analysis.  Some have small metadata values decoded, but their full runtime structures are not known yet.
+`AMPC`, `FONT`, `LGPC`, `WFPC`, and parts of `LNFO` are preserved for later analysis.  `SPRT` now has confirmed material-base decoding, but the higher-level sprite/animation structures that consume those slots still need more runtime analysis.
 
 ## Development notes
 
@@ -270,6 +276,7 @@ eng_wad/world_rebuild.py  TRAK + MAP + STPC reconstruction
 eng_wad/light_chunk.py    LGHT parser/exporter
 eng_wad/smpc_chunk.py     SMPC sound parser/exporter
 eng_wad/srpc_chunk.py     SRPC speech parser/exporter
+eng_wad/sprt_chunk.py     SPRT material-base parser/exporter
 eng_wad/raw_export.py     raw chunk preservation
 ```
 
@@ -279,5 +286,5 @@ eng_wad/raw_export.py     raw chunk preservation
 2. Finish naming MAP Section 3/4 and object-definition data.
 3. Validate MAP object placement against more levels and in-game positions.
 4. Name the remaining TRAK/STPC geometry header fields and collision group roles.
-5. Finish decoding `AMPC`, `LGPC`, `WFPC`, `SPRT`, and `FONT`.
+5. Finish decoding `AMPC`, `LGPC`, `WFPC`, `FONT`, and the remaining high-level `SPRT` sprite/animation consumers.
 6. Build a single viewer that combines decoded textures, TRAK terrain, STPC objects, MAP placement, and LGHT lights.

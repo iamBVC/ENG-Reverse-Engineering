@@ -15,6 +15,7 @@ from pathlib import Path
 from eng_wad.binary import Reader, u32
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
 from eng_wad.smpc_chunk import export_all as export_smpc, parse as parse_smpc
+from eng_wad.sprt_chunk import export_sprt, parse_sprt_chunk
 from eng_wad.srpc_chunk import export_srpc, find_cvs_for_wad, parse_srpc_chunk
 from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
@@ -49,7 +50,7 @@ def _write_level_metadata(data: bytes, by_tag: dict, out_dir: Path, info_lines: 
         off = by_tag["LNFO"].offset
         info_lines.append(f"Light info  : count={u32(data, off)}, version={u32(data, off + 4)}")
     if "SPRT" in by_tag and by_tag["SPRT"].size >= 4:
-        info_lines.append(f"Sprite count: {u32(data, by_tag['SPRT'].offset)}")
+        info_lines.append(f"SPRT material base: {u32(data, by_tag['SPRT'].offset)}")
 
 
 def extract_wad(
@@ -130,6 +131,27 @@ def extract_wad(
             print(f"  [TEXT] Parse/export error: {exc}", file=sys.stderr)
     elif extract_textures:
         print("  [TEXT] chunk not found — skipping")
+
+    # SPRT: sprite material-base metadata. The pixels live in TEXT; SPRT gives
+    # the material-table base used by the executable sprite renderer.
+    if "SPRT" in by_tag:
+        print("  [SPRT] Parsing sprite material-base metadata ...")
+        try:
+            sprt = parse_sprt_chunk(chunk_bytes(data, by_tag["SPRT"]))
+            if text_chunk_for_materials is None and "TEXT" in by_tag:
+                text_chunk_for_materials = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
+            materials = parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else []
+            summary = export_sprt(
+                sprt,
+                out_dir / "sprt",
+                materials=materials,
+                texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
+            )
+            slots = summary["paired_sprite_slot_count_from_materials"]
+            slot_text = f", paired_slots={slots}" if slots != "" else ""
+            print(f"  -> sprt/ (material_base={sprt.material_base_index}{slot_text})")
+        except Exception as exc:
+            print(f"  [SPRT] Parse/export error: {exc}", file=sys.stderr)
 
     # MAP: world tile-list, grid, OBJ marker geometry, and HTML viewer.
     if extract_map and "MAP " in by_tag:
