@@ -157,7 +157,7 @@ def extract_wad(
         except Exception as exc:
             print(f"  [SMPC] Parse/export error: {exc}", file=sys.stderr)
         else:
-            print(f"         → sounds/cvg/ ({smpc.sound_count} .cvg)  sounds/wav/ (IMA ADPCM)  sounds/raw_audio/")
+            print(f"         → sounds/cvg/ ({smpc.sound_count} .cvg)  sounds/wav/ (PSX ADPCM)  sounds/raw_audio/")
 
     # Raw exports: keep source bytes for chunks that are not fully decoded yet.
     if extract_raw:

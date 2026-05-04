@@ -145,7 +145,7 @@ extracted/t1l1m001/
       sound_001.cvg
       ...
     wav/
-      sound_000.wav          # IMA ADPCM decode, best-effort
+      sound_000.wav          # PSX ADPCM decoded to PCM16
       sound_001.wav
       ...
     raw_audio/
@@ -712,7 +712,7 @@ when its offset, size, and semantic meaning are all confirmed from the EXE.
 | `TRAK` | ~72 %    | `Vertex24`, `Triangle28`, `CollisionEntry32` mostly decoded; header `+0x00/+0x04/+0x08/+0x7E` and collision group 0/1/2 split still unnamed; 3+ triangle flag bits unknown |
 | `MAP ` | ~55 %    | tile XYZ and most object58 fields confirmed; `flags`/`type_idx` semantic meaning unknown; Section 3 (90 B) and Section 4 (34 B) content unnamed |
 | `STPC` | ~45 %    | 3-section container confirmed; `GeometryRecord8C` ~70 %; `GeometryAnimRecord32` ~30 %; Section 3 disabled in PC WADs; object-definition bytecode ~20 % |
-| `SMPC` | ~65 %    | `sound_count` + CVG entry structure 100 %; CVG header fields named; `channels` encoding for non-1 values unclear; audio codec proprietary (AAL) |
+| `SMPC` | ~75 %    | `sound_count` + CVG entry structure 100 %; CVG header fields named; audio codec confirmed as PSX ADPCM (16-byte blocks, 28 samples/block); `codec_quality` semantic meaning and non-1 `channels` encoding still unclear |
 | `AMPC` | ~10 %    | same loader structure as SMPC confirmed; content not yet parsed |
 | `FONT` | ~10 %    | raw bytes preserved; glyph layout not decoded |
 | `SRPC` | ~5 %     | WAD position known; content not decoded |
@@ -728,7 +728,7 @@ These are preserved in `raw/` for later analysis:
 | Chunk | Raw output | Current status |
 |---|---|---|
 | `STPC` | `raw/stpc.bin` | Static mesh records decoded; culling header and triangle flags documented; full container/material binding still partial |
-| `SMPC` | `raw/smpc.bin`, `sounds/` | Level sounds decoded: `sound_count` + CVG entries; exports .cvg blobs, manifest CSV, best-effort WAV (IMA ADPCM); audio codec proprietary (AAL) |
+| `SMPC` | `raw/smpc.bin`, `sounds/` | Level sounds decoded: `sound_count` + CVG entries; codec confirmed as PSX ADPCM (16-byte blocks, 28 samples/block); exports .cvg blobs, manifest CSV, and decoded WAV files |
 | `SRPC` | `raw/srpc.bin` | Not decoded; likely sound/resource config |
 | `TRAK` | `raw/trak.bin`, `trak/` | Main record table and A/B/CDE table packing decoded; A/B exported as surfaces; C/D/E semantics still unknown |
 | `AMPC` | `raw/ambient_audio.bin` | Exported raw; semantic structure not decoded |

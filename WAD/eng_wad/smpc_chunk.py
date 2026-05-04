@@ -39,19 +39,26 @@ On-disk layout (confirmed from binary survey of t1l1m001 — 56 sounds,
         uint8_t  audio_data[data_size - 20];
     };
 
-CVG header (20 bytes, Argonaut proprietary audio container):
+CVG header (20 bytes, PC variant):
 
     +0x00  u32  sample_rate      e.g. 8000, 11025, 22050, 38000
-    +0x04  u16  block_align      scales with rate: 11025->1024, 22050->2048
-    +0x06  u16  codec_quality    127 most common; 25/45/50/60/85 also seen
-    +0x08  u32  channels         1=mono (common); 65793 appears for some entries
-    +0x0C  u16  amplitude        143 (0x8F) or 255 (0xFF)
+    +0x04  u16  block_align      AAL streaming PCM output buffer size (~46 ms at
+                                 the given rate); NOT the codec block size
+    +0x06  u16  codec_quality    127 most common; 25/45/50/60/85 also seen;
+                                 semantic meaning unclear (not standard ADPCM param)
+    +0x08  u32  channels         1=mono; non-1 values (e.g. 65793, 529) have
+                                 unclear encoding — treated as mono when decoding
+    +0x0C  u16  amplitude        runtime volume scale used by AAL; 143 or 255
     +0x0E  u16  unknown_0E       66 most common, 68-70 also seen
-    +0x10  u32  audio_data_size  always equals data_size - 20
+    +0x10  u32  audio_data_size  always equals data_size - 20; always divisible
+                                 by 16 (one PSX ADPCM block = 16 bytes)
 
-The audio encoding used inside the CVG blob is undocumented here; it is
-handled entirely by the AAL (Argonaut Audio Library).  The raw bytes are
-preserved verbatim by this parser.
+Audio codec: PlayStation SPU ADPCM (AV_CODEC_ID_ADPCM_PSX).
+Confirmed by: (a) all audio_data_size values are divisible by 16, and
+(b) FFmpeg libavformat/argo_cvg.c uses ADPCM_PSX for CVG files.
+Each 16-byte block decodes to 28 signed 16-bit PCM samples.
+The PS1 CVG format uses a 12-byte header; the PC variant here uses 20 bytes
+that add explicit sample_rate and AAL-specific fields.
 """
 
 from __future__ import annotations
@@ -200,69 +207,65 @@ def parse(data: bytes | memoryview, base_offset: int = 0) -> SmpcChunk:
 
 
 # ---------------------------------------------------------------------------
-# IMA ADPCM decoder (best-effort WAV export)
+# PSX ADPCM decoder (WAV export)
 # ---------------------------------------------------------------------------
-# CVG audio encoding is Argonaut-proprietary (handled by AAL at runtime).
-# Block-based IMA ADPCM matches the observed block_align values and era:
-#   11025 Hz → block_align 1024, 22050 Hz → block_align 2048.
-# The last block may be shorter than block_align (partial block is normal).
+# CVG audio data uses PlayStation SPU ADPCM, confirmed by:
+#   1. All audio_data_size values are exactly divisible by 16 (the PSX block size)
+#   2. FFmpeg libavformat/argo_cvg.c uses AV_CODEC_ID_ADPCM_PSX for CVG files
+#   3. No IMA step tables exist in groove.exe — decoding is done by the AAL DLL
+#
+# PSX ADPCM block layout (16 bytes → 28 PCM16 samples):
+#   byte 0:   shift_factor (bits 0-3) | filter_index (bits 4-7)
+#   byte 1:   loop/flag bits (bit 0 = loop_end, bit 1 = loop_repeat, bit 2 = loop_start)
+#   bytes 2-15: 14 bytes of 4-bit ADPCM nibbles, low nibble first per byte (28 nibbles)
+#
+# CVG block_align is NOT the codec block size.  It is the AAL streaming PCM output
+# buffer size (always ~46 ms: block_align / (2 * sample_rate) ≈ 0.046 s).
 
-_IMA_STEP_TABLE = [
-    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31,
-    34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130,
-    143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
-    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411,
-    1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026,
-    4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442,
-    11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623,
-    27086, 29794, 32767,
+_PSX_FILTER = [
+    (  0,   0),
+    ( 60,   0),
+    (115, -52),
+    ( 98, -55),
+    (122, -60),
 ]
-_IMA_INDEX_TABLE = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8]
+PSX_BLOCK_SIZE = 16
+PSX_SAMPLES_PER_BLOCK = 28
 
 
-def _ima_nibble(nibble: int, predictor: int, step_index: int):
-    step = _IMA_STEP_TABLE[step_index]
-    diff = step >> 3
-    if nibble & 4: diff += step
-    if nibble & 2: diff += step >> 1
-    if nibble & 1: diff += step >> 2
-    if nibble & 8: diff = -diff
-    predictor = max(-32768, min(32767, predictor + diff))
-    step_index = max(0, min(88, step_index + _IMA_INDEX_TABLE[nibble]))
-    return predictor, step_index
+def _decode_psx_adpcm(data: bytes) -> array.array:
+    """Decode PSX ADPCM (SPU/XA-ADPCM) to signed 16-bit PCM samples.
 
-
-def _decode_ima_adpcm(data: bytes, block_align: int) -> array.array:
-    """Decode block-based IMA ADPCM to signed 16-bit PCM samples.
-
-    Block layout (mono):
-      int16  initial_predictor   (== first output sample)
-      uint8  step_index          (0–88)
-      uint8  reserved
-      bytes  nibble_pairs        (low nibble first per byte)
-
-    The last block may be shorter than block_align.
-    Returns an array.array('h') in native byte order.
+    Per nibble decode:
+      sample = (sign_extend(nibble, 4) << 12 >> shift)
+               + (f1 * prev1 + f2 * prev2 + 32) // 64
+      clamp to [-32768, 32767]
     """
     samples: list[int] = []
+    prev1 = prev2 = 0
+    length = len(data)
     pos = 0
-    n = len(data)
 
-    while pos < n:
-        if pos + 4 > n:
-            break
-        predictor = struct.unpack_from("<h", data, pos)[0]
-        step_index = max(0, min(data[pos + 2], 88))
-        pos += 4
-        samples.append(predictor)
+    while pos + PSX_BLOCK_SIZE <= length:
+        byte0 = data[pos]
+        shift = byte0 & 0xF
+        fi = min((byte0 >> 4) & 0xF, 4)
+        flag = data[pos + 1] & 0x7
+        f1, f2 = _PSX_FILTER[fi]
+        pos += 2
 
-        block_end = min(pos + block_align - 4, n)
-        while pos < block_end:
+        for _ in range(14):
             byte = data[pos]; pos += 1
-            predictor, step_index = _ima_nibble(byte & 0x0F, predictor, step_index)
-            samples.append(predictor)
-            predictor, step_index = _ima_nibble((byte >> 4) & 0x0F, predictor, step_index)
-            samples.append(predictor)
+            for nibble in (byte & 0x0F, (byte >> 4) & 0x0F):
+                if flag >= 7:
+                    s = 0
+                else:
+                    n4 = nibble if nibble < 8 else nibble - 16  # sign-extend 4-bit
+                    s = (n4 << 12) >> shift
+                    s = s + (f1 * prev1 + f2 * prev2 + 32) // 64
+                    s = max(-32768, min(32767, s))
+                prev2, prev1 = prev1, s
+                samples.append(s)
 
     return array.array("h", samples)
 
@@ -359,21 +362,18 @@ def export_raw_audio(chunk: SmpcChunk, out_dir: Path) -> None:
 
 
 def export_wav(chunk: SmpcChunk, out_dir: Path) -> None:
-    """Export sounds as WAV files decoded from IMA ADPCM (best-effort).
+    """Export sounds as WAV files decoded from PSX ADPCM.
 
-    The CVG audio codec is proprietary (Argonaut AAL).  Block-based IMA
-    ADPCM is the most likely encoding given the block_align values and era.
-    Sounds with non-standard ``channels`` values are decoded as mono; if
-    decoding fails for any sound that file is silently skipped.
-
-    If the resulting audio sounds like noise, use the raw .cvg or raw_audio
-    files for further codec investigation.
+    CVG audio data uses PlayStation SPU ADPCM (AV_CODEC_ID_ADPCM_PSX),
+    confirmed by the 16-byte-aligned block structure and FFmpeg's argo_cvg.c.
+    All sounds are decoded as mono; ``channels`` field values other than 1
+    have unclear encoding and are treated as mono pending further analysis.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     for snd in chunk.sounds:
         wav_path = out_dir / f"sound_{snd.index:03d}.wav"
         try:
-            pcm = _decode_ima_adpcm(snd.audio_data, snd.header.block_align)
+            pcm = _decode_psx_adpcm(snd.audio_data)
             if pcm:
                 _write_wav_pcm16(wav_path, pcm, snd.header.sample_rate)
         except Exception:
