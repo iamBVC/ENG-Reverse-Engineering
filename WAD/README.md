@@ -165,6 +165,8 @@ Useful first files to inspect:
 | `textures/*.png` | Decoded level texture pages. |
 | `lgpc/dialogue_lines.csv` | Localized dialogue lines paired with voice/id tags. |
 | `map_full/objects_58_disk.csv` | Executable-confirmed MAP object table. |
+| `map_full/section3_records_90.csv` | Exact 90-byte Section3 disk records expanded into loader/runtime fields. |
+| `map_full/section4_records_34.csv` | Exact 34-byte Section4 disk records, route transform fields, and link metadata. |
 | `trak/viewer.html` | Interactive terrain/sector preview. |
 | `stpc/manifest.csv` | Table-decoded STPC geometry records, offsets, matrix groups, and counts. |
 | `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
@@ -215,7 +217,7 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `AMPC` | ~10% | Preserves raw ambient/audio chunk. | Full structure and relation to SMPC/AAL. |
 | `TRAK` | ~75% | Exports geometry records, vertices, triangles, collision entries, OBJ, viewer. | Header fields `+0x00/+0x04/+0x08/+0x7E`, collision group names, remaining triangle flags. |
 | `STPC` | ~65% | Parses the confirmed top-level geometry cursor layout, including matrix-group/skinned records; exports OBJ/MTL, manifest, face diagnostics, and script-to-geometry references. | Object-definition VM semantics, animation record fields, Block32 semantics. |
-| `MAP ` | ~60% | Parses tile placement, grid, object58 table, vertex colors, MAP diagnostics. | Section 3/4 semantics, some flags/type ids, complete object runtime behavior. |
+| `MAP ` | ~65% | Parses tile placement, grid, object58 table, vertex colors, Section3/Section4 loader layouts, MAP diagnostics. | Final Section3 semantic names, some flags/type ids, complete object runtime behavior. |
 | `LGHT` | ~90% | Exports directional, point, and negative/special point lights. | Final type-2/type-4 byte currently named `falloff_or_mode`; two copied runtime color fields. |
 | `LGPC` | ~75% | Parses the localized dialogue/text table, exports raw entry matrix and line/id CSV. | Exact semantic name of header `+0x08`, selected row/language global name, and non-2-row variants. |
 | `WFPC` | ~55% | Reads the executable-confirmed `dword_6DA330` feature flags, exports flag diagnostics, and uses confirmed MAP layout bits. | Exact names for several observed-only bits and some runtime-only consumers. |
@@ -228,7 +230,7 @@ Contains texture pages and material/palette information.  Texture pixels are RGB
 
 ### `MAP `
 
-Contains level layout data: terrain tile placements, grid data, object records, vertex color blocks, and additional sections that are still partially named.  It does not appear to store final render geometry by itself; it places or references geometry from other chunks.
+Contains level layout data: terrain tile placements, grid data, object records, vertex color blocks, a Section3 runtime table with STPC-relative pointers/range fields, and a Section4 route table used by object scripts.  It does not appear to store final render geometry by itself; it places or references geometry from other chunks.
 
 ### `TRAK`
 
@@ -299,7 +301,7 @@ eng_wad/raw_export.py     raw chunk preservation
 ## What to work on next
 
 1. Decode the STPC object-definition/script VM that points at the geometry records.
-2. Finish naming MAP Section 3/4 and object-definition data.
+2. Finish semantic naming for MAP Section3 fields and STPC object-definition data.
 3. Validate MAP object placement against more levels and in-game positions.
 4. Name the remaining TRAK/STPC geometry header fields and collision group roles.
 5. Finish decoding `AMPC`, `FONT`, remaining `LGPC` header/row-selection details, observed-only `WFPC` bits, and high-level `SPRT` sprite/animation consumers.

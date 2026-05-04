@@ -58,6 +58,10 @@ def _safe_float(v: int) -> float:
     return struct.unpack("<f", struct.pack("<I", v & 0xFFFFFFFF))[0]
 
 
+def _fixed12(v: int) -> float:
+    return v / 4096.0
+
+
 def _write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
@@ -124,13 +128,81 @@ class MapTileExe:
 
 @dataclass
 class MapSection3Record:
+    """One 90-byte Section 3 disk record, expanded by the game to 92 bytes."""
+
     index: int
     file_offset: int
     raw: bytes
-    u32_values: list[int]
-    u16_at_56: int
-    u16_at_84: int
-    u16_at_86: int
+    rt_00: int
+    rt_04: int
+    rt_08: int
+    rt_0C: int
+    rt_10: int
+    rt_14: int
+    rt_18: int
+    rt_1C: int
+    flags_20: int
+    rt_24: int
+    stpc_relative_ptr_28: int
+    rt_2C: int
+    rt_30: int
+    rt_34: int
+    rt_38_u16: int
+    range_a_min_3C: int
+    range_b_min_40: int
+    range_a_max_44_raw: int
+    range_b_max_48_raw: int
+    rt_4C: int
+    rt_50: int
+    rt_54_u16: int
+    rt_56_u16: int
+    rt_58: int
+
+    @property
+    def sets_dword_584644(self) -> bool:
+        return bool(self.flags_20 & 0x08)
+
+    @property
+    def stpc_ptr_expr(self) -> str:
+        if self.stpc_relative_ptr_28 == 0:
+            return "NULL"
+        return f"STPC_base+0x{self.stpc_relative_ptr_28:08X}"
+
+    @property
+    def range_a_max_44_runtime(self) -> int:
+        if self.range_a_max_44_raw <= self.range_a_min_3C:
+            return self.range_a_min_3C + (self.range_a_min_3C >> 1)
+        return self.range_a_max_44_raw
+
+    @property
+    def range_b_max_48_runtime(self) -> int:
+        if self.range_a_max_44_raw <= self.range_a_min_3C:
+            return self.range_b_min_40 + (self.range_b_min_40 >> 1)
+        return self.range_b_max_48_raw
+
+    @property
+    def u32_values(self) -> list[int]:
+        return [
+            self.rt_00, self.rt_04, self.rt_08, self.rt_0C,
+            self.rt_10, self.rt_14, self.rt_18, self.rt_1C,
+            self.flags_20, self.rt_24, self.stpc_relative_ptr_28,
+            self.rt_2C, self.rt_30, self.rt_34,
+            self.range_a_min_3C, self.range_b_min_40,
+            self.range_a_max_44_raw, self.range_b_max_48_raw,
+            self.rt_4C, self.rt_50, self.rt_58,
+        ]
+
+    @property
+    def u16_at_56(self) -> int:
+        return self.rt_38_u16
+
+    @property
+    def u16_at_84(self) -> int:
+        return self.rt_56_u16
+
+    @property
+    def u16_at_86(self) -> int:
+        return self.rt_58 & 0xFFFF
 
 
 @dataclass
@@ -140,16 +212,56 @@ class MapSection4Record:
     index: int
     file_offset: int
     raw: bytes
-    link_next_flag: int
-    link_prev_file_value: int
-    small_a: int
-    small_b: int
-    small_c: int
-    u32_24: int
-    u32_28: int
-    u32_32: int
-    u32_40: int
-    u32_44: int
+    link_next_raw_00: int
+    link_prev_raw_04: int
+    rt_08_u16: int
+    yaw_units_0C: int
+    rt_10_u16: int
+    route_x_18: int
+    route_y_1C: int
+    route_z_20: int
+    rt_28: int
+    rt_2C: int
+
+    @property
+    def link_next_flag(self) -> int:
+        return self.link_next_raw_00
+
+    @property
+    def link_prev_file_value(self) -> int:
+        return self.link_prev_raw_04
+
+    @property
+    def small_a(self) -> int:
+        return self.rt_08_u16
+
+    @property
+    def small_b(self) -> int:
+        return self.yaw_units_0C
+
+    @property
+    def small_c(self) -> int:
+        return self.rt_10_u16
+
+    @property
+    def u32_24(self) -> int:
+        return self.route_x_18
+
+    @property
+    def u32_28(self) -> int:
+        return self.route_y_1C
+
+    @property
+    def u32_32(self) -> int:
+        return self.route_z_20
+
+    @property
+    def u32_40(self) -> int:
+        return self.rt_28
+
+    @property
+    def u32_44(self) -> int:
+        return self.rt_2C
 
 
 @dataclass
@@ -425,12 +537,35 @@ def parse_map_full_exe(map_data: bytes, trak: TrakFile, *, assume_optional20: bo
     for i in range(section3_count):
         off = cur.tell()
         raw = cur.read(90)
-        # The record is not naturally aligned on disk. Export broad fields for analysis.
-        vals = []
-        for o in [0,4,8,12,16,20,24,28,32,36,40,44,48,52,58,62,66,70,74,78,86]:
-            if o + 4 <= len(raw):
-                vals.append(struct.unpack_from("<I", raw, o)[0])
-        section3.append(MapSection3Record(i, off, raw, vals, struct.unpack_from("<H", raw, 56)[0], struct.unpack_from("<H", raw, 84)[0], struct.unpack_from("<H", raw, 86)[0]))
+        section3.append(MapSection3Record(
+            index=i,
+            file_offset=off,
+            raw=raw,
+            rt_00=struct.unpack_from("<I", raw, 0)[0],
+            rt_04=struct.unpack_from("<I", raw, 4)[0],
+            rt_08=struct.unpack_from("<I", raw, 8)[0],
+            rt_0C=struct.unpack_from("<I", raw, 12)[0],
+            rt_10=struct.unpack_from("<I", raw, 16)[0],
+            rt_14=struct.unpack_from("<I", raw, 20)[0],
+            rt_18=struct.unpack_from("<I", raw, 24)[0],
+            rt_1C=struct.unpack_from("<I", raw, 28)[0],
+            flags_20=struct.unpack_from("<I", raw, 32)[0],
+            rt_24=struct.unpack_from("<I", raw, 36)[0],
+            stpc_relative_ptr_28=struct.unpack_from("<I", raw, 40)[0],
+            rt_2C=struct.unpack_from("<I", raw, 44)[0],
+            rt_30=struct.unpack_from("<I", raw, 48)[0],
+            rt_34=struct.unpack_from("<I", raw, 52)[0],
+            rt_38_u16=struct.unpack_from("<H", raw, 56)[0],
+            range_a_min_3C=struct.unpack_from("<I", raw, 58)[0],
+            range_b_min_40=struct.unpack_from("<I", raw, 62)[0],
+            range_a_max_44_raw=struct.unpack_from("<I", raw, 66)[0],
+            range_b_max_48_raw=struct.unpack_from("<I", raw, 70)[0],
+            rt_4C=struct.unpack_from("<I", raw, 74)[0],
+            rt_50=struct.unpack_from("<I", raw, 78)[0],
+            rt_54_u16=struct.unpack_from("<H", raw, 82)[0],
+            rt_56_u16=struct.unpack_from("<H", raw, 84)[0],
+            rt_58=struct.unpack_from("<I", raw, 86)[0],
+        ))
 
     section4_count = cur.u32()
     section4: list[MapSection4Record] = []
@@ -441,16 +576,16 @@ def parse_map_full_exe(map_data: bytes, trak: TrakFile, *, assume_optional20: bo
             index=i,
             file_offset=off,
             raw=raw,
-            link_next_flag=struct.unpack_from("<I", raw, 0)[0],
-            link_prev_file_value=struct.unpack_from("<I", raw, 4)[0],
-            small_a=struct.unpack_from("<H", raw, 8)[0],
-            small_b=struct.unpack_from("<H", raw, 10)[0],
-            small_c=struct.unpack_from("<H", raw, 12)[0],
-            u32_24=struct.unpack_from("<I", raw, 14)[0],
-            u32_28=struct.unpack_from("<I", raw, 18)[0],
-            u32_32=struct.unpack_from("<I", raw, 22)[0],
-            u32_40=struct.unpack_from("<I", raw, 26)[0],
-            u32_44=struct.unpack_from("<I", raw, 30)[0],
+            link_next_raw_00=struct.unpack_from("<I", raw, 0)[0],
+            link_prev_raw_04=struct.unpack_from("<I", raw, 4)[0],
+            rt_08_u16=struct.unpack_from("<H", raw, 8)[0],
+            yaw_units_0C=struct.unpack_from("<H", raw, 10)[0],
+            rt_10_u16=struct.unpack_from("<H", raw, 12)[0],
+            route_x_18=struct.unpack_from("<I", raw, 14)[0],
+            route_y_1C=struct.unpack_from("<I", raw, 18)[0],
+            route_z_20=struct.unpack_from("<I", raw, 22)[0],
+            rt_28=struct.unpack_from("<I", raw, 26)[0],
+            rt_2C=struct.unpack_from("<I", raw, 30)[0],
         ))
 
     section5 = []
@@ -605,6 +740,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
         "grid_height": parsed.grid_height,
         "section2_count": len(parsed.section2),
         "section3_count": len(parsed.section3),
+        "section3_global_record_count": sum(1 for r in parsed.section3 if r.sets_dword_584644),
         "section4_count": len(parsed.section4),
         "section5_count": len(parsed.section5),
         "tile_def_count": len(parsed.tile_defs),
@@ -625,11 +761,103 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
 
     _write_csv(out_dir / "tiles_24.csv", ["index","file_offset","x","y","z","unk_float","flags_or_id","nonzero_marker"], (t.__dict__ for t in parsed.tiles))
     _write_csv(out_dir / "section2_u32.csv", ["index","value","value_hex"], ({"index":i,"value":v,"value_hex":f"0x{v:08X}"} for i,v in enumerate(parsed.section2)))
-    _write_csv(out_dir / "section3_records_90.csv", ["index","file_offset","raw_hex","u32_values","u16_at_56","u16_at_84","u16_at_86"], (
-        {"index":r.index,"file_offset":r.file_offset,"raw_hex":_hex(r.raw),"u32_values":" ".join(str(v) for v in r.u32_values),"u16_at_56":r.u16_at_56,"u16_at_84":r.u16_at_84,"u16_at_86":r.u16_at_86} for r in parsed.section3
+    section3_fields = [
+        "index","file_offset","raw_hex",
+        "rt_00","rt_04","rt_08","rt_0C","rt_10","rt_14","rt_18","rt_1C",
+        "flags_20","flags_20_hex","sets_dword_584644","rt_24",
+        "stpc_relative_ptr_28","stpc_relative_ptr_28_hex","stpc_ptr_expr",
+        "rt_2C","rt_30","rt_34","rt_38_u16",
+        "range_a_min_3C","range_a_min_3C_fixed12",
+        "range_b_min_40","range_b_min_40_fixed12",
+        "range_a_max_44_raw","range_a_max_44_raw_fixed12",
+        "range_b_max_48_raw","range_b_max_48_raw_fixed12",
+        "range_a_max_44_runtime","range_a_max_44_runtime_fixed12",
+        "range_b_max_48_runtime","range_b_max_48_runtime_fixed12",
+        "rt_4C","rt_50","rt_54_u16","rt_56_u16","rt_58","rt_58_hex",
+        "u32_values",
+    ]
+    _write_csv(out_dir / "section3_records_90.csv", section3_fields, (
+        {
+            "index": r.index,
+            "file_offset": r.file_offset,
+            "raw_hex": _hex(r.raw),
+            "rt_00": r.rt_00,
+            "rt_04": r.rt_04,
+            "rt_08": r.rt_08,
+            "rt_0C": r.rt_0C,
+            "rt_10": r.rt_10,
+            "rt_14": r.rt_14,
+            "rt_18": r.rt_18,
+            "rt_1C": r.rt_1C,
+            "flags_20": r.flags_20,
+            "flags_20_hex": f"0x{r.flags_20:08X}",
+            "sets_dword_584644": r.sets_dword_584644,
+            "rt_24": r.rt_24,
+            "stpc_relative_ptr_28": r.stpc_relative_ptr_28,
+            "stpc_relative_ptr_28_hex": f"0x{r.stpc_relative_ptr_28:08X}",
+            "stpc_ptr_expr": r.stpc_ptr_expr,
+            "rt_2C": r.rt_2C,
+            "rt_30": r.rt_30,
+            "rt_34": r.rt_34,
+            "rt_38_u16": r.rt_38_u16,
+            "range_a_min_3C": r.range_a_min_3C,
+            "range_a_min_3C_fixed12": _fixed12(r.range_a_min_3C),
+            "range_b_min_40": r.range_b_min_40,
+            "range_b_min_40_fixed12": _fixed12(r.range_b_min_40),
+            "range_a_max_44_raw": r.range_a_max_44_raw,
+            "range_a_max_44_raw_fixed12": _fixed12(r.range_a_max_44_raw),
+            "range_b_max_48_raw": r.range_b_max_48_raw,
+            "range_b_max_48_raw_fixed12": _fixed12(r.range_b_max_48_raw),
+            "range_a_max_44_runtime": r.range_a_max_44_runtime,
+            "range_a_max_44_runtime_fixed12": _fixed12(r.range_a_max_44_runtime),
+            "range_b_max_48_runtime": r.range_b_max_48_runtime,
+            "range_b_max_48_runtime_fixed12": _fixed12(r.range_b_max_48_runtime),
+            "rt_4C": r.rt_4C,
+            "rt_50": r.rt_50,
+            "rt_54_u16": r.rt_54_u16,
+            "rt_56_u16": r.rt_56_u16,
+            "rt_58": r.rt_58,
+            "rt_58_hex": f"0x{r.rt_58:08X}",
+            "u32_values": " ".join(str(v) for v in r.u32_values),
+        } for r in parsed.section3
     ))
-    _write_csv(out_dir / "section4_records_34.csv", ["index","file_offset","raw_hex","link_next_flag","link_prev_file_value","small_a","small_b","small_c","u32_24","u32_28","u32_32","u32_40","u32_44"], (
-        {"index":r.index,"file_offset":r.file_offset,"raw_hex":_hex(r.raw),"link_next_flag":r.link_next_flag,"link_prev_file_value":r.link_prev_file_value,"small_a":r.small_a,"small_b":r.small_b,"small_c":r.small_c,"u32_24":r.u32_24,"u32_28":r.u32_28,"u32_32":r.u32_32,"u32_40":r.u32_40,"u32_44":r.u32_44} for r in parsed.section4
+    section4_fields = [
+        "index","file_offset","raw_hex",
+        "link_next_raw_00","link_prev_raw_04","rt_08_u16","yaw_units_0C","rt_10_u16",
+        "route_x_18","route_x_18_fixed12","route_y_1C","route_y_1C_fixed12",
+        "route_z_20","route_z_20_fixed12","rt_28","rt_2C",
+        "link_next_flag","link_prev_file_value","small_a","small_b","small_c",
+        "u32_24","u32_28","u32_32","u32_40","u32_44",
+    ]
+    _write_csv(out_dir / "section4_records_34.csv", section4_fields, (
+        {
+            "index": r.index,
+            "file_offset": r.file_offset,
+            "raw_hex": _hex(r.raw),
+            "link_next_raw_00": r.link_next_raw_00,
+            "link_prev_raw_04": r.link_prev_raw_04,
+            "rt_08_u16": r.rt_08_u16,
+            "yaw_units_0C": r.yaw_units_0C,
+            "rt_10_u16": r.rt_10_u16,
+            "route_x_18": r.route_x_18,
+            "route_x_18_fixed12": _fixed12(r.route_x_18),
+            "route_y_1C": r.route_y_1C,
+            "route_y_1C_fixed12": _fixed12(r.route_y_1C),
+            "route_z_20": r.route_z_20,
+            "route_z_20_fixed12": _fixed12(r.route_z_20),
+            "rt_28": r.rt_28,
+            "rt_2C": r.rt_2C,
+            "link_next_flag": r.link_next_flag,
+            "link_prev_file_value": r.link_prev_file_value,
+            "small_a": r.small_a,
+            "small_b": r.small_b,
+            "small_c": r.small_c,
+            "u32_24": r.u32_24,
+            "u32_28": r.u32_28,
+            "u32_32": r.u32_32,
+            "u32_40": r.u32_40,
+            "u32_44": r.u32_44,
+        } for r in parsed.section4
     ))
     _write_csv(out_dir / "section5_32x8.csv", ["index","u32_00","u32_04"], ({"index":i,"u32_00":a,"u32_04":b} for i,a,b in parsed.section5))
     _write_csv(out_dir / "grid_u32.csv", ["cell_index","x","y","value","value_hex"], (

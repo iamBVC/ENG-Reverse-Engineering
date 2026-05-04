@@ -951,6 +951,40 @@ Confirmed Section4 transform use:
   - `section4 +0x0C` -> actor `rot_y` (`+0x24`) after `<< 12`
 - This explains the object-placement outliers where the MAP object origin is correct for initial spawn, but the visible mesh is offset to a Section4 route/waypoint transform before model binding.
 
+### Section3 runtime table
+
+`sub_42AC50` reads Section3 as 90-byte disk records and expands each entry to a 92-byte runtime record (`0x5C` stride).  The disk record is mostly unaligned: after disk `+0x38` the loader reads several u32 fields from offsets `+0x3A`, `+0x3E`, `+0x42`, and so on.
+
+```text
+Disk offset   Size   Runtime offset   Notes
+0x00          u32    +0x00            unnamed
+0x04          u32    +0x04            unnamed
+0x08          u32    +0x08            unnamed
+0x0C          u32    +0x0C            unnamed
+0x10          u32    +0x10            unnamed
+0x14          u32    +0x14            unnamed
+0x18          u32    +0x18            unnamed
+0x1C          u32    +0x1C            unnamed
+0x20          u32    +0x20            flags; low byte bit 0x08 sets dword_584644 to this record
+0x24          u32    +0x24            unnamed
+0x28          u32    +0x28            STPC-relative pointer; 0 stays NULL, nonzero becomes dword_6D9DBC + value
+0x2C          u32    +0x2C            unnamed
+0x30          u32    +0x30            unnamed
+0x34          u32    +0x34            unnamed
+0x38          u16    +0x38            unnamed
+0x3A          u32    +0x3C            range/value A minimum
+0x3E          u32    +0x40            range/value B minimum
+0x42          u32    +0x44            range/value A maximum raw
+0x46          u32    +0x48            range/value B maximum raw
+0x4A          u32    +0x4C            unnamed
+0x4E          u32    +0x50            unnamed
+0x52          u16    +0x54            unnamed
+0x54          u16    +0x56            unnamed
+0x56          u32    +0x58            category/type-like value
+```
+
+After loading the four range fields, the loader applies a fallback: if runtime `+0x44 <= +0x3C`, it replaces `+0x44` with `+0x3C + (+0x3C >> 1)` and replaces `+0x48` with `+0x40 + (+0x40 >> 1)`.  The exporter now writes both raw and runtime-adjusted range values in `map_full/section3_records_90.csv`.
+
 ## Actor system
 
 ### Globals
@@ -1458,26 +1492,25 @@ For world placement, both child-spawn variants inherit the current parent actor 
 
 ---
 
-## MAP Section4 disk format (partially confirmed from `sub_42AC50`)
+## MAP Section4 disk format (confirmed from `sub_42AC50`)
 
 The 34-byte disk records are read in this order and expanded to 48-byte runtime records:
 
 ```text
 Disk offset   Size   Runtime offset   Notes
-0x00          u32    +0x08 area?      first field (role unknown)
-0x04          u32    +0x0C area?      second field (role unknown)
+0x00          u32    +0x00            raw next/link flag; nonzero becomes pointer to next record
+0x04          u32    +0x04            raw prev/link value; overwritten with previous pointer when chained
 0x08          u16    +0x08            small_a (zero-extended to u32)
-0x0A          u16    +0x0C            small_b (zero-extended to u32)
+0x0A          u16    +0x0C            yaw/angle units used by opcode 0xFE
 0x0C          u16    +0x10            small_c (zero-extended to u32)
-[gap ~10 bytes — exact byte accounting not yet confirmed]
-0x18          u32    +0x18            field_18
-0x1C          u32    +0x1C            field_1C
-0x20          u32    +0x20            field_20
-0x28          u32    +0x28            field_28
-0x2C          u32    +0x2C            field_2C
+0x0E          u32    +0x18            route/waypoint X
+0x12          u32    +0x1C            route/waypoint Y
+0x16          u32    +0x20            route/waypoint Z
+0x1A          u32    +0x28            unnamed
+0x1E          u32    +0x2C            unnamed
 ```
 
-Runtime slots +0x00 (next) and +0x04 (prev) are built by the loader's linked-list stitcher, not read from disk.
+The loader's linked-list stitcher then walks the runtime array.  If the previous runtime pointer is non-NULL, it writes it to current `+0x04`.  If current `+0x00` is nonzero, the loader overwrites current `+0x00` with `current + 0x30` and carries current as the previous pointer; otherwise the chain resets.
 
 In `t1l1m001`, most MAP objects have `section4_index = 0xFFFFFFFF` (sentinel → NULL).  Only a few objects (e.g., index 4) reference a valid Section4 entry.
 
