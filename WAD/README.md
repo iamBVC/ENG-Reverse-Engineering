@@ -110,7 +110,8 @@ World reconstruction options:
 
 ```bash
 --world-scale 0.01
---world-flip-z
+--world-flip-z              default final Z-axis flip for world OBJ exports
+--world-no-flip-z           disable the default final Z-axis flip
 --world-def-scan-bytes 2048
 --world-terrain-yaw-sign -1|1
 --world-terrain-z-mirror

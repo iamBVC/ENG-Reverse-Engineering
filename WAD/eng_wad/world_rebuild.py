@@ -78,6 +78,10 @@ class WorldObjectInstance:
     flags: int
     skip_initial_spawn: bool
     extra_u16: int
+    route_transform_x: float | None = None
+    route_transform_y: float | None = None
+    route_transform_z: float | None = None
+    route_transform_yaw_units: int | None = None
 
 
 @dataclass
@@ -92,6 +96,11 @@ class StpcMeshReferenceHit:
     mesh_index: int
     mesh_offset: int
     duplicate_index_for_object: int
+    script_x_offset: float = 0.0
+    script_y_offset: float = 0.0
+    script_z_offset: float = 0.0
+    script_yaw_units: int | None = None
+    script_transform_source: str = ""
 
 
 @dataclass
@@ -204,6 +213,16 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
     """Convert MAP object records into confirmed world-position rows."""
     out: list[WorldObjectInstance] = []
     for o in mapx.objects:
+        route_x = route_y = route_z = None
+        route_yaw_units = None
+        if 0 <= o.section4_index_raw < len(mapx.section4):
+            route = mapx.section4[o.section4_index_raw]
+            # Opcode 0xFE (sub_54DFE0) copies Section4 +0x18/+0x1C/+0x20
+            # into actor +0x30/+0x34/+0x38 and Section4 +0x0C into yaw.
+            route_x = _fixed12(route.u32_24)
+            route_y = _fixed12(route.u32_28)
+            route_z = _fixed12(route.u32_32)
+            route_yaw_units = route.small_b
         out.append(WorldObjectInstance(
             object_index=o.index,
             stpc_def_offset=o.name_or_string_offset,
@@ -227,6 +246,10 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
             flags=o.flags,
             skip_initial_spawn=o.skip_initial_spawn,
             extra_u16=o.extra_u16,
+            route_transform_x=route_x,
+            route_transform_y=route_y,
+            route_transform_z=route_z,
+            route_transform_yaw_units=route_yaw_units,
         ))
     return out
 
@@ -288,12 +311,229 @@ def scan_stpc_definition_for_mesh_offsets(
             target = struct.unpack_from("<I", stpc_bytes, off + 4)[0]
             yield off, target
 
+    @dataclass
+    class _StackValue:
+        value: int
+        kind: str = "value"
+        origin_offset: int | None = None
+
+    @dataclass
+    class _SimHit:
+        selection_offset: int
+        hit_file_offset: int
+        mesh_offset: int
+        script_x_offset: float
+        script_y_offset: float
+        script_z_offset: float
+        script_yaw_units: int | None
+        source: str
+
+    def _pop_value(stack: list[_StackValue]) -> int:
+        return stack.pop().value if stack else 0
+
+    def _movement_delta(op: int, amount_fixed: int, yaw_rad: float) -> tuple[float, float, float] | None:
+        amount = amount_fixed / 4096.0
+        if op == 0x0103:
+            return (0.0, amount, 0.0)
+        if op == 0x0104:
+            return (0.0, -amount, 0.0)
+        local_x = local_z = 0.0
+        if op in {0x0061, 0x00E3}:
+            local_x = amount
+        elif op in {0x0062, 0x00E4}:
+            local_x = -amount
+        elif op in {0x005F, 0x0125}:
+            local_z = amount
+        elif op in {0x0060, 0x0126}:
+            local_z = -amount
+        elif op == 0x005D:
+            return (0.0, amount, 0.0)
+        else:
+            return None
+        dx, dz = _rotate_xz(local_x, local_z, yaw_rad) if yaw_rad else (local_x, local_z)
+        return (dx, 0.0, dz)
+
+    def simulate_mesh_assignments(
+        *,
+        start: int,
+        end: int,
+        selection_base: int,
+        yaw_rad: float,
+        yaw_units: int | None,
+        route_transform: tuple[float, float, float, int | None] | None = None,
+        inherited_x: float = 0.0,
+        inherited_y: float = 0.0,
+        inherited_z: float = 0.0,
+        inherited_route: bool = False,
+        depth: int = 0,
+    ) -> list[_SimHit]:
+        """Decode the placement-related subset of the STPC script VM.
+
+        The executable shows that opcodes 0x94/0xE0 create child actors that
+        inherit the parent's current transform, and that common movement
+        opcodes mutate actor +30/+34/+38 before a later 0x54 model bind.  This
+        simulator intentionally handles only those placement effects; unknown
+        opcodes are left alone so existing mesh selection stays conservative.
+        """
+        if depth > max_script_pointer_depth or start < 0 or start >= len(stpc_bytes):
+            return []
+        pc = start
+        stack: list[_StackValue] = []
+        x = inherited_x
+        y = inherited_y
+        z = inherited_z
+        current_yaw_rad = yaw_rad
+        current_yaw_units = yaw_units
+        used_route_transform = inherited_route
+        out: list[_SimHit] = []
+        steps = 0
+        while pc + 4 <= end and steps < 512:
+            steps += 1
+            op_offset = pc
+            raw = struct.unpack_from("<I", stpc_bytes, pc)[0]
+            op = raw & 0xFFFF
+            pc += 4
+
+            if op <= 0x0044:
+                if op == 0x0044:
+                    imm = (raw >> 16) & 0xFFFF
+                    if imm & 0x8000:
+                        imm -= 0x10000
+                    stack.append(_StackValue(imm))
+                continue
+
+            if op == 0x0045:
+                if pc + 4 > end:
+                    break
+                stack.append(_StackValue(_i32_from_u32(struct.unpack_from("<I", stpc_bytes, pc)[0])))
+                pc += 4
+                continue
+
+            if op == 0x00B2:
+                if pc + 4 > end:
+                    break
+                target = struct.unpack_from("<I", stpc_bytes, pc)[0]
+                pc += 4
+                if target >= 0:
+                    stack.append(_StackValue(target, "stpc_ptr", op_offset))
+                else:
+                    stack.append(_StackValue(0, "stpc_ptr", op_offset))
+                continue
+
+            if op == 0x0054:
+                if not stack:
+                    continue
+                value = stack.pop()
+                if value.kind == "stpc_ptr" and value.value in mesh_by_offset:
+                    origin = value.origin_offset if value.origin_offset is not None else op_offset
+                    source = "script_vm_child" if depth else "script_vm_direct"
+                    if used_route_transform:
+                        source += "_route"
+                    out.append(_SimHit(
+                        selection_offset=selection_base,
+                        hit_file_offset=origin,
+                        mesh_offset=value.value,
+                        script_x_offset=x,
+                        script_y_offset=y,
+                        script_z_offset=z,
+                        script_yaw_units=current_yaw_units,
+                        source=source,
+                    ))
+                continue
+
+            if op in {0x0094, 0x00E0}:
+                child = stack.pop() if stack else _StackValue(0)
+                # sub_553170 consumes five dwords plus one extra output dword
+                # from the parent stream before sub_54BFC0 starts the child.
+                if pc + 24 > end:
+                    break
+                pc += 24
+                if (
+                    follow_script_pointers
+                    and child.kind == "stpc_ptr"
+                    and child.value not in mesh_by_offset
+                    and 0 <= child.value < len(stpc_bytes)
+                    and depth < max_script_pointer_depth
+                ):
+                    child_end = bounded_scan_end(child.value)
+                    child_selection = (
+                        child.origin_offset - selection_base
+                        if child.origin_offset is not None
+                        else op_offset - selection_base
+                    )
+                    out.extend(simulate_mesh_assignments(
+                        start=child.value,
+                        end=child_end,
+                        selection_base=child.value + child_selection,
+                        yaw_rad=current_yaw_rad,
+                        yaw_units=current_yaw_units,
+                        route_transform=route_transform,
+                        inherited_x=x,
+                        inherited_y=y,
+                        inherited_z=z,
+                        inherited_route=used_route_transform,
+                        depth=depth + 1,
+                    ))
+                continue
+
+            if op == 0x00D4:
+                # sub_553EF0 consumes two dwords and records an alternate PC.
+                # It does not change actor placement.
+                pc += 8
+                continue
+
+            if op == 0x00FE:
+                if route_transform is not None:
+                    route_x, route_y, route_z, route_yaw = route_transform
+                    x = route_x - inst.world_x
+                    y = route_y - inst.world_y
+                    z = route_z - inst.world_z
+                    used_route_transform = True
+                    if route_yaw is not None:
+                        current_yaw_units = route_yaw
+                        current_yaw_rad = _angle4096_to_radians(route_yaw)
+                continue
+
+            delta = _movement_delta(op, _pop_value(stack), current_yaw_rad)
+            if delta is not None:
+                dx, dy, dz = delta
+                x += dx
+                y += dy
+                z += dz
+
+        return out
+
     hits: list[StpcMeshReferenceHit] = []
     for inst in instances:
         start = inst.stpc_def_offset
         if start < 0 or start >= len(stpc_bytes):
             continue
         end = bounded_scan_end(start)
+        yaw_rad = _angle4096_to_radians(inst.rot_y_units)
+        route_transform = None
+        if (
+            inst.route_transform_x is not None
+            and inst.route_transform_y is not None
+            and inst.route_transform_z is not None
+        ):
+            route_transform = (
+                inst.route_transform_x,
+                inst.route_transform_y,
+                inst.route_transform_z,
+                inst.route_transform_yaw_units,
+            )
+        sim_hits = simulate_mesh_assignments(
+            start=start,
+            end=end,
+            selection_base=start,
+            yaw_rad=yaw_rad,
+            yaw_units=inst.rot_y_units,
+            route_transform=route_transform,
+            depth=0,
+        )
+        sim_by_hit: dict[tuple[int, int], _SimHit] = {
+            (h.hit_file_offset, h.mesh_offset): h for h in sim_hits
+        }
         direct_operands = list(iter_b2_operands(start, end))
         candidate_refs: list[tuple[int, int, int]] = []
 
@@ -320,6 +560,7 @@ def scan_stpc_definition_for_mesh_offsets(
             if dedupe_per_object_mesh and mesh.index in seen_meshes:
                 continue
             seen_meshes.add(mesh.index)
+            sim = sim_by_hit.get((off, target))
             hits.append(StpcMeshReferenceHit(
                 object_index=inst.object_index,
                 stpc_def_offset=inst.stpc_def_offset,
@@ -330,6 +571,11 @@ def scan_stpc_definition_for_mesh_offsets(
                 mesh_index=mesh.index,
                 mesh_offset=target,
                 duplicate_index_for_object=dup_index,
+                script_x_offset=sim.script_x_offset if sim else 0.0,
+                script_y_offset=sim.script_y_offset if sim else 0.0,
+                script_z_offset=sim.script_z_offset if sim else 0.0,
+                script_yaw_units=sim.script_yaw_units if sim else None,
+                script_transform_source=sim.source if sim else "",
             ))
             dup_index += 1
     return hits
@@ -400,7 +646,7 @@ def write_map_placed_trak_terrain_obj(
     mapx: MapFullExe,
     trak: TrakFile,
     scale: float = 1.0,
-    flip_z: bool = False,
+    flip_z: bool = True,
     terrain_yaw_sign: int = 1,
     mirror_terrain_z: bool = False,
     write_per_tile_dir: Path | None = None,
@@ -522,6 +768,7 @@ def _write_instanced_mesh_obj(
     inst: WorldObjectInstance,
     *,
     object_name: str,
+    hit: StpcMeshReferenceHit | None = None,
     scale: float,
     flip_z: bool,
     vertex_base: int,
@@ -547,12 +794,16 @@ def _write_instanced_mesh_obj(
     """
     f.write(f"\no {object_name}\n")
     f.write(f"# MAP object {inst.object_index}; STPC mesh {mesh.index}; mesh_offset=0x{mesh.offset:08X}\n")
-    yaw_units = inst.rot_y_units
-    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={yaw_units if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}; object_alignment_offset={object_x_offset:.9g},{object_y_offset:.9g},{object_z_offset:.9g}\n")
+    yaw_units = hit.script_yaw_units if (hit is not None and hit.script_yaw_units is not None) else inst.rot_y_units
+    script_x = hit.script_x_offset if hit is not None else 0.0
+    script_y = hit.script_y_offset if hit is not None else 0.0
+    script_z = hit.script_z_offset if hit is not None else 0.0
+    script_source = hit.script_transform_source if hit is not None else ""
+    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; script_actor_offset={script_x:.9g},{script_y:.9g},{script_z:.9g}; script_transform_source={script_source}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={yaw_units if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}; object_alignment_offset={object_x_offset:.9g},{object_y_offset:.9g},{object_z_offset:.9g}\n")
     yaw = _angle4096_to_radians(yaw_units, sign=object_yaw_sign) if apply_object_yaw else 0.0
-    base_x = inst.world_x
-    base_y = inst.world_y
-    base_z = object_z_sign * inst.world_z
+    base_x = inst.world_x + script_x
+    base_y = inst.world_y + script_y
+    base_z = object_z_sign * (inst.world_z + script_z)
     mirror_object_z = object_z_mirror_center is not None
     for v in mesh.vertices:
         lx = v.x
@@ -612,7 +863,7 @@ def write_instanced_stpc_objs(
     hits: list[StpcMeshReferenceHit],
     meshes: list[MeshCandidate],
     scale: float = 1.0,
-    flip_z: bool = False,
+    flip_z: bool = True,
     write_per_object: bool = False,
     object_z_sign: int = -1,
     local_z_sign: int = -1,
@@ -658,7 +909,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{inst.object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, hit=hit, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
 
     # Single-hit files: exactly one STPC mesh per OBJ file.
     by_hit_dir = out_dir / "objects_by_hit"
@@ -674,6 +925,7 @@ def write_instanced_stpc_objs(
             _write_instanced_mesh_obj(
                 f, mesh, inst,
                 object_name=f"object_{inst.object_index:03d}_hit_{hit.duplicate_index_for_object:02d}_mesh_{mesh.index:03d}",
+                hit=hit,
                 scale=scale, flip_z=flip_z, vertex_base=1,
                 object_z_sign=object_z_sign, local_z_sign=local_z_sign,
                 apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign,
@@ -697,7 +949,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{object_index:03d}_primary_mesh_{mesh.index:03d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, hit=hit, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
 
     if write_per_object:
         grouped_dir = out_dir / "diagnostics" / "objects_grouped_by_object"
@@ -721,7 +973,7 @@ def write_instanced_stpc_objs(
                     if mesh is None:
                         continue
                     name = f"object_{object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, hit=hit, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
     return primary
 
 
@@ -875,7 +1127,7 @@ def export_world(
     text_chunk: TextChunk | None = None,
     scan_bytes: int = 2048,
     scale: float = 1.0,
-    flip_z: bool = False,
+    flip_z: bool = True,
     write_terrain: bool = True,
     write_per_object: bool = False,
     terrain_yaw_sign: int = 1,
@@ -988,6 +1240,7 @@ def export_world(
 
     _write_csv(out_dir / "stpc_instance_transforms.csv", [
         "object_index","raw_x","raw_y","raw_z","render_x","render_y","render_z",
+        "final_world_flip_z","final_obj_z",
         "object_z_sign","local_z_sign","object_z_mirror_enabled","object_z_mirror_center","object_x_offset","object_y_offset","object_z_offset","yaw_units_4096","yaw_degrees","apply_yaw"
     ], (
         {
@@ -998,6 +1251,8 @@ def export_world(
             "render_x": o.world_x + object_x_offset,
             "render_y": o.world_y + object_y_offset,
             "render_z": ((2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z) + object_z_offset,
+            "final_world_flip_z": flip_z,
+            "final_obj_z": -(((2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z) + object_z_offset) if flip_z else (((2.0 * object_z_mirror_center - (stpc_object_z_sign * o.world_z)) if object_z_mirror_center is not None else stpc_object_z_sign * o.world_z) + object_z_offset),
             "object_z_sign": stpc_object_z_sign,
             "local_z_sign": stpc_local_z_sign,
             "object_z_mirror_enabled": object_z_mirror_center is not None,
@@ -1044,6 +1299,7 @@ def export_world(
         "local_count","section2_index_or_sentinel","stack_word_count","stack_arg_count",
         "spawn_flags","spawn_flags_hex","extra_count","section4_index_or_sentinel",
         "spawn_aux","spawn_aux_hex","flags","flags_hex","skip_initial_spawn","extra_u16",
+        "route_transform_x","route_transform_y","route_transform_z","route_transform_yaw_units",
     ], (
         {
             "object_index": o.object_index,
@@ -1074,6 +1330,10 @@ def export_world(
             "flags_hex": f"0x{o.flags:04X}",
             "skip_initial_spawn": o.skip_initial_spawn,
             "extra_u16": o.extra_u16,
+            "route_transform_x": o.route_transform_x if o.route_transform_x is not None else "",
+            "route_transform_y": o.route_transform_y if o.route_transform_y is not None else "",
+            "route_transform_z": o.route_transform_z if o.route_transform_z is not None else "",
+            "route_transform_yaw_units": o.route_transform_yaw_units if o.route_transform_yaw_units is not None else "",
         } for o in instances
     ))
 
@@ -1081,7 +1341,8 @@ def export_world(
     _write_csv(out_dir / "stpc_mesh_reference_hits.csv", [
         "object_index","stpc_def_offset","stpc_def_offset_hex","scan_start","scan_end",
         "hit_file_offset","hit_relative_offset","mesh_index","mesh_offset","mesh_offset_hex",
-        "duplicate_index_for_object",
+        "duplicate_index_for_object","script_x_offset","script_y_offset","script_z_offset",
+        "script_yaw_units","script_transform_source",
     ], (
         {
             "object_index": h.object_index,
@@ -1095,6 +1356,11 @@ def export_world(
             "mesh_offset": h.mesh_offset,
             "mesh_offset_hex": _hex(h.mesh_offset),
             "duplicate_index_for_object": h.duplicate_index_for_object,
+            "script_x_offset": h.script_x_offset,
+            "script_y_offset": h.script_y_offset,
+            "script_z_offset": h.script_z_offset,
+            "script_yaw_units": h.script_yaw_units if h.script_yaw_units is not None else "",
+            "script_transform_source": h.script_transform_source,
         } for h in hits
     ))
 
@@ -1131,6 +1397,7 @@ def export_world(
         "terrain_uv_mapping": "validated game terrain UV mapping",
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
+        "world_flip_z": flip_z,
         "mirror_terrain_z": mirror_terrain_z,
         "stpc_object_z_sign": stpc_object_z_sign,
         "stpc_local_z_sign": stpc_local_z_sign,
@@ -1146,7 +1413,7 @@ def export_world(
         "objects_primary_obj": str(combined_obj.name) if combined_obj else None,
         "combined_obj": str(world_combined.name) if world_combined else None,
         "terrain_and_objects_obj": str(terrain_and_objects.name) if terrain_and_objects else None,
-        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from rot_y_units, and final object alignment offsets. Scale and full object-definition semantics are still unresolved; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ plus decoded STPC script actor offsets for movement-before-bind, child-spawn, and Section4 route-transform cases, object yaw from the active actor transform, and final object alignment offsets. Full STPC object-definition semantics are still partial; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")

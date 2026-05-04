@@ -81,7 +81,7 @@ def extract_wad(
     srpc_mp3: bool = False,
     world_def_scan_bytes: int = 2048,
     world_scale: float = 1.0,
-    world_flip_z: bool = False,
+    world_flip_z: bool = True,
     world_terrain_yaw_sign: int = 1,
     world_mirror_terrain_z: bool = False,
     world_stpc_object_z_sign: int = -1,
@@ -397,7 +397,8 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--world-def-scan-bytes", type=int, default=2048, help="bytes to scan from each MAP object STPC-definition offset for mesh references")
     parser.add_argument("--world-scale", type=float, default=1.0, help="scale applied to world/ OBJ exports")
-    parser.add_argument("--world-flip-z", action="store_true", help="flip final Z axis in all world/ OBJ exports after per-source conversion")
+    parser.add_argument("--world-flip-z", action="store_true", help="flip final Z axis in all world/ OBJ exports after per-source conversion (default)")
+    parser.add_argument("--world-no-flip-z", action="store_true", help="disable the default final Z-axis flip in world/ OBJ exports")
     parser.add_argument("--world-terrain-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying MAP tile yaw to TRAK terrain")
     parser.add_argument("--world-no-terrain-z-mirror", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--world-terrain-z-mirror", action="store_true", help="apply the old centered Z mirror diagnostic to TRAK terrain")
@@ -457,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
             srpc_mp3=args.srpc_mp3,
             world_def_scan_bytes=args.world_def_scan_bytes,
             world_scale=args.world_scale,
-            world_flip_z=args.world_flip_z,
+            world_flip_z=(args.world_flip_z or not args.world_no_flip_z),
             world_terrain_yaw_sign=args.world_terrain_yaw_sign,
             world_mirror_terrain_z=args.world_terrain_z_mirror,
             world_stpc_object_z_sign=args.world_stpc_object_z_sign,

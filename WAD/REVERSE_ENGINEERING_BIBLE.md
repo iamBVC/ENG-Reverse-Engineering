@@ -485,7 +485,8 @@ Current status:
 - The exporter now finds static records and matrix-group/skinned records, including records where `base_vertex_count == 0` and `transform_group_count > 0`.
 - STPC OBJ exports include material/UV output where derivable from runtime materials.
 - The exporter writes `script_geometry_refs.csv` by scanning the script tail for opcode `0x00B2` references to decoded geometry-record offsets.
-- STPC object definition parsing is still heuristic: MAP object `script_offset` points into `dword_6D9DBC`, but most VM opcodes and high-level actor/object semantics are not fully named.
+- World export now binds MAP object placements to STPC meshes through the confirmed VM pattern `0x00B2 <stpc-relative GeometryRecord8C offset>` followed by opcode `0x54` (`sub_553C10`, set actor geometry/model).
+- STPC object definition parsing is partial but no longer purely heuristic: mesh binding, child-spawn inheritance, several actor movement opcodes, and Section4 route-transform application are decoded enough for the current world OBJ export.
 
 ## Geometry animation records
 
@@ -677,6 +678,13 @@ struct MapTilePlacement32 {
 };
 ```
 
+Confirmed export coordinate basis:
+
+- TRAK terrain placement uses tile-definition fixed12 `pos_x`, `pos_y`, and **negated** `pos_z`.
+- MAP object actor positions are copied directly into `Actor340 +0x30/+0x34/+0x38` by `sub_54CFC0`.
+- Terrain queries convert actor Z into terrain space by shifting and negating it (`mov eax, [actor+0x24]`, `sar eax, 0x0C`, `neg eax` in the relevant query path).  The world exporter therefore uses terrain as the reference orientation and exports STPC actor/object Z as `-actor_z`.
+- A centered terrain Z mirror was tested and rejected for the normal world export; the correct default is no centered mirror, no global object Z offset, and one final whole-world OBJ Z flip so terrain and STPC objects are mirrored together without changing their relative alignment.
+
 ### Object table: disk 58 bytes -> runtime 72 bytes -> Actor340
 
 This is the most recent major discovery.
@@ -783,6 +791,16 @@ struct MapSection4Runtime48 {
     uint32_t field_2C;           // +0x2C
 }; // 48 bytes
 ```
+
+Confirmed Section4 transform use:
+
+- Opcode `0xFE` dispatches to `sub_54DFE0`.
+- `sub_54DFE0` reads the actor's `+0x120` Section4 pointer and copies Section4 runtime fields into the active actor transform:
+  - `section4 +0x18` -> actor `pos_x` (`+0x30`) after `<< 12`
+  - `section4 +0x1C` -> actor `pos_y` (`+0x34`) after `<< 12`
+  - `section4 +0x20` -> actor `pos_z` (`+0x38`) after `<< 12`
+  - `section4 +0x0C` -> actor `rot_y` (`+0x24`) after `<< 12`
+- This explains the object-placement outliers where the MAP object origin is correct for initial spawn, but the visible mesh is offset to a Section4 route/waypoint transform before model binding.
 
 ## Actor system
 
@@ -978,16 +996,19 @@ Fallback d-pad values:
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
 - `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
 - `stpc/script_geometry_refs.csv`: opcode `0x00B2` references from the STPC script tail to decoded geometry-record offsets.
-- `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC object binding.
+- `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC object binding, including decoded Section4 route transforms when present.
+- `world/stpc_mesh_reference_hits.csv`: exact per-object STPC mesh binds plus decoded script actor offsets/yaw source used by world OBJ export.
+- `world/objects_primary.obj`: one selected placed STPC mesh per MAP object, with materials/textures and decoded script placement offsets.
+- `world/terrain_and_objects.obj`: textured terrain plus primary placed STPC objects in one OBJ.
 
 ## Remaining high-value unknowns
 
 1. Exact semantics of `MapObjectDisk58` script data. `script_offset` points into `dword_6D9DBC`, but the bytecode/data structure there still needs further decoding.
 2. Exact meaning of `MapObjectDisk58.flags` bits besides `0x0002` skip-initial-spawn.
-3. Exact meaning of `section2` and `section4` records beyond their object references and linked-list structure.
+3. Exact meaning of `section2` and the non-transform fields in `section4`; Section4 position/yaw use through opcode `0xFE` is confirmed.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
-6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing is now confirmed, but complete actor/object binding still needs VM semantics.
+6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing, mesh binding, child-transform inheritance, and Section4 route transforms are confirmed, but complete actor/object behavior still needs VM semantics.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 
 ## Recommended next reverse-engineering targets
@@ -1094,6 +1115,36 @@ else {
 ```
 
 A `script_offset` of zero resolves to the very start of the STPC blob (`dword_6D9DBC`), which is the first GeometryRecord8C record header.  Use an existing object's `script_offset` as a template rather than guessing.
+
+### STPC object mesh binding and placement transforms
+
+The current world OBJ exporter uses the following confirmed subset of the STPC VM:
+
+| Opcode | Handler | Confirmed effect for world export |
+|---:|---|---|
+| `0x44` | `sub_553610` | Push signed 16-bit immediate onto actor stack.  Commonly used for fixed12 movement amounts. |
+| `0x54` | `sub_553C10` | Pop a pointer and store it in `actor+0x10`; this binds the actor's current geometry/model. |
+| `0x5F` | `sub_550590` | Pop amount; move actor along one local horizontal axis. |
+| `0x60` | `sub_5505C0` | Pop amount; move actor along the opposite local horizontal axis. |
+| `0x61` | `sub_550720` | Pop amount; move actor along the other local horizontal axis. |
+| `0x62` | `sub_550750` | Pop amount; opposite of `0x61`. |
+| `0x94` | `sub_5531D0` | Spawn child actor after `sub_553170` reads inline spawn-state words; child inherits current actor transform. |
+| `0xB2` | `sub_553630` | Read next dword and push resolved pointer. Positive values are STPC-relative (`dword_6D9DBC + value`). |
+| `0xD4` | `sub_553EF0` | Consume two dwords and set an alternate script pointer at actor `+0x18`; no actor placement change by itself. |
+| `0xE0` | `sub_553230` | Spawn child actor variant after `sub_553170`; child inherits current actor transform. |
+| `0xE3` | `sub_550690` | Pop amount; yaw-relative horizontal move. |
+| `0xE4` | `sub_550600` | Pop amount; opposite yaw-relative horizontal move. |
+| `0xFE` | `sub_54DFE0` | Copy Section4 route transform into actor position/yaw (see Section4 notes). |
+| `0x103` | `sub_5508F0` | Pop amount; add to actor Y (`+0x34`). |
+| `0x104` | `sub_550940` | Pop amount; subtract from actor Y (`+0x34`). |
+| `0x125` | `sub_550790` | Pop amount; yaw-relative horizontal strafe/move. |
+| `0x126` | `sub_550820` | Pop amount; opposite of `0x125`. |
+
+The exporter only treats a `0xB2` operand as a mesh when a later `0x54` binds that pointer as the current actor model.  This avoids the earlier false positives from blind u32 scanning.
+
+Child actors matter for placement: parent scripts can move the actor, spawn a child with `0x94`/`0xE0`, and the mesh bind can occur inside the child script.  In that case the visible mesh should use the inherited child transform, not just the parent MAP object origin.
+
+Section4 route transforms matter too: if `0xFE` executes before the mesh bind, the visible actor position/yaw comes from the referenced Section4 record rather than the initial MAP object position.
 
 ---
 
@@ -1218,7 +1269,7 @@ opcode  handler         notes (from sub analysis)
 0x41    sub_553AC0      (unknown)
 0x42    sub_553AE0      (unknown)
 0x43    sub_553B00      (unknown)
-0x44    sub_553610      (unknown — last entry in table)
+0x44    sub_553610      push signed imm16 onto actor stack
 ```
 
 ### Script VM actor fields used by known opcodes
@@ -1241,6 +1292,8 @@ Three confirmed callers of the main spawn function `sub_54BFC0`:
 | `sub_5533F0` | ~385772 | Complex: decompresses transform matrix from geometry record; uses fixed-point FPU math to convert float positions to actor coordinates before spawning |
 
 `sub_553170` (called from both `sub_5531D0` and `sub_553230`) reads 6 sequential u32 values from the STPC object-definition stream and populates the spawn-state runtime block.
+
+For world placement, both child-spawn variants inherit the current parent actor transform.  If the parent script has already applied movement opcodes or a Section4 route transform, meshes bound inside the child script must use that inherited transform rather than the original MAP object origin.
 
 ---
 
@@ -1350,4 +1403,3 @@ The WAD container wrapper:
          u32      chunk_data_size
          bytes    chunk_data
 ```
-
