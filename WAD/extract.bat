@@ -1,2 +1,2 @@
-python wad_extractor.py "%~1" --srpc-cvs ENGLISH.CVS
+python wad_extractor.py "%~1"
 pause

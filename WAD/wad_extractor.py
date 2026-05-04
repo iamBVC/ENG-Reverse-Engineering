@@ -14,15 +14,18 @@ from pathlib import Path
 
 from eng_wad.binary import Reader, u32
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
+from eng_wad.smpc_chunk import export_all as export_smpc, parse as parse_smpc
+from eng_wad.srpc_chunk import export_srpc, find_cvs_for_wad, parse_srpc_chunk
 from eng_wad.instance_hunter import export_instance_hunt
 from eng_wad.map_chunk import parse_map_chunk
 from eng_wad.map_full_chunk import export_map_full_exe, parse_map_full_exe
 from eng_wad.map_export import export_map_outputs
+from eng_wad.material_chunk import export_material_diagnostics, parse_runtime_materials
 from eng_wad.raw_export import RAW_EXPORTS, export_raw_chunk
-from eng_wad.srpc_chunk import export_srpc, find_cvs_for_wad, parse_srpc_chunk
 from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
 from eng_wad.trak_chunk import export_trak_from_bytes
+from eng_wad.trak_viewer import write_map_placed_trak_viewer_html
 from eng_wad.world_rebuild import export_world
 from eng_wad.wad import chunk_bytes, chunk_manifest_lines, read_wad
 
@@ -58,16 +61,14 @@ def extract_wad(
     extract_stpc_obj: bool = True,
     extract_trak: bool = True,
     extract_lights: bool = True,
-    extract_raw: bool = True,
+    extract_sounds: bool = True,
     extract_srpc: bool = True,
-    srpc_cvs_path: Path | None = None,
-    srpc_export_slices: bool = True,
-    srpc_export_wav: bool = True,
-    srpc_export_mp3: bool = False,
+    extract_raw: bool = True,
     extract_world_probe: bool = False,
     extract_map_full: bool = True,
     extract_world: bool = True,
     texture_fields: bool = True,
+    texture_channel_order: str = "bgr",
     stpc_alignment: int = 4,
     stpc_min_score: float = 0.85,
     stpc_scale: float = 1.0,
@@ -75,6 +76,8 @@ def extract_wad(
     stpc_debug_faces: bool = False,
     trak_scale: float = 1.0,
     trak_flip_z: bool = False,
+    srpc_cvs_path: Path | None = None,
+    srpc_mp3: bool = False,
     world_def_scan_bytes: int = 2048,
     world_scale: float = 1.0,
     world_flip_z: bool = False,
@@ -108,6 +111,7 @@ def extract_wad(
     stpc_result = None
     mapx = None
     stpc_bytes_for_world = None
+    text_chunk_for_materials = None
 
     info_lines = chunk_manifest_lines(wad_path, data, chunks)
     _write_level_metadata(data, by_tag, out_dir, info_lines)
@@ -119,7 +123,8 @@ def extract_wad(
         print("  [TEXT] Parsing textures/palette …")
         try:
             text = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
-            export_textures(text, out_dir, verbose=verbose, export_fields=texture_fields)
+            text_chunk_for_materials = text
+            export_textures(text, out_dir, verbose=verbose, export_fields=texture_fields, texture_channel_order=texture_channel_order)
         except Exception as exc:
             print(f"  [TEXT] Parse/export error: {exc}", file=sys.stderr)
     elif extract_textures:
@@ -146,6 +151,36 @@ def extract_wad(
         except Exception as exc:
             print(f"  [LGHT] Parse/export error: {exc}", file=sys.stderr)
 
+    # SMPC: level sounds.  Exports .cvg blobs, manifest CSV, and raw audio bins.
+    if extract_sounds and "SMPC" in by_tag:
+        print("  [SMPC] Parsing sounds …")
+        try:
+            smpc = parse_smpc(chunk_bytes(data, by_tag["SMPC"]))
+            export_smpc(smpc, out_dir / "sounds")
+            print(f"  [SMPC] → sounds/  ({smpc.sound_count} sounds)")
+        except Exception as exc:
+            print(f"  [SMPC] Parse/export error: {exc}", file=sys.stderr)
+        else:
+            print(f"         → sounds/cvg/ ({smpc.sound_count} .cvg)  sounds/wav/ (PSX ADPCM)  sounds/raw_audio/")
+
+    # SRPC: streamed speech table. The table lives in the WAD, while the
+    # referenced ADPCM payload is normally stored in Music/ENGLISH.CVS.
+    if extract_srpc and "SRPC" in by_tag:
+        print("  [SRPC] Parsing streamed speech table …")
+        try:
+            srpc = parse_srpc_chunk(chunk_bytes(data, by_tag["SRPC"]))
+            cvs_path = find_cvs_for_wad(wad_path, srpc_cvs_path)
+            stats = export_srpc(srpc, out_dir / "srpc", cvs_path=cvs_path, export_mp3=srpc_mp3)
+            if stats["cvs_found"]:
+                print(
+                    f"  [SRPC] → srpc/ ({stats['entries']} entries, "
+                    f"{stats['slices']} .cvs, {stats['wav']} .wav, {stats['mp3']} .mp3)"
+                )
+            else:
+                print(f"  [SRPC] → srpc/ ({stats['entries']} entries; CVS source not found, metadata only)")
+        except Exception as exc:
+            print(f"  [SRPC] Parse/export error: {exc}", file=sys.stderr)
+
     # Raw exports: keep source bytes for chunks that are not fully decoded yet.
     if extract_raw:
         raw_dir = out_dir / "raw"
@@ -154,37 +189,6 @@ def extract_wad(
                 chunk = by_tag[tag]
                 path = export_raw_chunk(tag, chunk_bytes(data, chunk), raw_dir)
                 print(f"  [{tag:4s}] → raw/{path.name} ({chunk.size:,} bytes)")
-
-
-    # SRPC/CPRS: streamed speech index into Music/ENGLISH.CVS.
-    # Keep raw/srpc.bin above for byte-for-byte preservation; this decoded export
-    # writes the table, optional CVS slices, and standard WAV/MP3 speech files.
-    if extract_srpc and "SRPC" in by_tag:
-        print("  [SRPC] Parsing streamed speech table …")
-        try:
-            srpc = parse_srpc_chunk(chunk_bytes(data, by_tag["SRPC"]))
-            cvs_path = find_cvs_for_wad(wad_path, srpc_cvs_path)
-            stats = export_srpc(
-                srpc,
-                out_dir / "srpc",
-                cvs_path=cvs_path,
-                export_slices=srpc_export_slices,
-                export_wav=srpc_export_wav,
-                export_mp3=srpc_export_mp3,
-            )
-            msg = f"  → srpc/ ({stats['entries']} entries"
-            if stats.get("cvs_found"):
-                msg += f", slices={stats['slices']}, wav={stats['wav']}, mp3={stats['mp3']}"
-            else:
-                msg += ", CVS not found — metadata only"
-            msg += ")"
-            print(msg)
-            if stats.get("mp3_unavailable"):
-                print("  [SRPC] MP3 conversion requested but ffmpeg was unavailable or failed; WAV files were still written.")
-        except Exception as exc:
-            print(f"  [SRPC] Parse/export error: {exc}", file=sys.stderr)
-    elif extract_srpc:
-        print("  [SRPC] chunk not found — skipping")
 
     # TRAK: track/navigation/collision-like sector data.
     # The raw TRAK chunk is still preserved in raw/trak.bin when raw export is enabled.
@@ -220,6 +224,15 @@ def extract_wad(
             try:
                 mapx = parse_map_full_exe(map_bytes_for_probe, trak_result.trak)
                 export_map_full_exe(mapx, out_dir / "map_full")
+                if trak_result is not None:
+                    write_map_placed_trak_viewer_html(
+                        trak_result.trak,
+                        mapx,
+                        out_dir / "trak" / "viewer.html",
+                        terrain_yaw_sign=world_terrain_yaw_sign,
+                        mirror_terrain_z=world_mirror_terrain_z,
+                    )
+                    print("  → trak/viewer.html (MAP-placed TRAK terrain)")
                 print(
                     f"  → map_full/ ({mapx.tile_count} tiles, "
                     f"objects={len(mapx.objects)}, colors={sum(c.byte_size + c.extra_byte_size for c in mapx.colors):,} bytes)"
@@ -242,11 +255,30 @@ def extract_wad(
                 scale=stpc_scale,
                 flip_z=stpc_flip_z,
                 write_debug=stpc_debug_faces,
+                materials=parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else None,
+                texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
                 verbose=verbose,
             )
             print(f"  → stpc/ ({len(stpc_result.meshes)} meshes, manifest.csv, combined.obj)")
         except Exception as exc:
             print(f"  [STPC] OBJ export error: {exc}", file=sys.stderr)
+
+
+    # MATERIALS: executable-informed TEXT trailing table export.  This decodes
+    # dword_581154-style 20-byte material rows and cross-references TRAK/STPC
+    # material usage.
+    if text_chunk_for_materials is not None:
+        print("  [MAT ] Exporting material/UV diagnostics …")
+        try:
+            export_material_diagnostics(
+                text=text_chunk_for_materials,
+                out_dir=out_dir / "materials",
+                trak=trak_result.trak if trak_result is not None else None,
+                stpc_result=stpc_result,
+            )
+            print("  → materials/ (runtime material table + terrain/STPC usage)")
+        except Exception as exc:
+            print(f"  [MAT ] Material export error: {exc}", file=sys.stderr)
 
 
     # WORLD REBUILD: experimental reconstruction using confirmed MAP object XYZ
@@ -261,6 +293,7 @@ def extract_wad(
                     trak=trak_result.trak,
                     stpc_bytes=stpc_bytes_for_world,
                     stpc_result=stpc_result,
+                    text_chunk=text_chunk_for_materials,
                     scan_bytes=world_def_scan_bytes,
                     scale=world_scale,
                     flip_z=world_flip_z,
@@ -332,16 +365,16 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--no-tex", action="store_true", help="skip TEXT texture/palette extraction")
     parser.add_argument("--no-texture-fields", action="store_true", help="skip diagnostic palette-field images")
+    parser.add_argument("--texture-channel-order", choices=("bgr", "rgb"), default="bgr", help="channel order for exported TEXT PNGs; default bgr fixes the observed blue/red swap, rgb preserves the older extractor output")
     parser.add_argument("--no-map", action="store_true", help="skip MAP parsing and map viewer exports")
     parser.add_argument("--no-stpc-obj", action="store_true", help="skip STPC OBJ mesh export")
     parser.add_argument("--no-trak", action="store_true", help="skip TRAK CSV/OBJ/viewer export")
     parser.add_argument("--no-lights", action="store_true", help="skip LGHT light CSV export")
+    parser.add_argument("--no-sounds", action="store_true", help="skip SMPC sound export")
+    parser.add_argument("--no-srpc", action="store_true", help="skip SRPC streamed speech table export")
+    parser.add_argument("--srpc-cvs", default=None, metavar="PATH", help="explicit CVS file for SRPC speech extraction, for example Music/ENGLISH.CVS")
+    parser.add_argument("--srpc-mp3", action="store_true", help="also convert SRPC WAV exports to MP3 when ffmpeg is available")
     parser.add_argument("--no-raw", action="store_true", help="do not export raw undecoded chunks")
-    parser.add_argument("--no-srpc", action="store_true", help="skip decoded SRPC/CPRS speech table export")
-    parser.add_argument("--srpc-cvs", default=None, metavar="PATH", help="path to localized CVS stream file, e.g. Music/ENGLISH.CVS")
-    parser.add_argument("--no-srpc-slices", action="store_true", help="do not export individual SRPC .cvs slices")
-    parser.add_argument("--no-srpc-wav", action="store_true", help="do not decode SRPC CVS slices to WAV")
-    parser.add_argument("--srpc-mp3", action="store_true", help="also convert decoded SRPC WAV files to MP3 using ffmpeg if available")
     parser.add_argument("--world-probe", action="store_true", help="also run the older Section-4 instance-hunting diagnostics (deprecated)")
     parser.add_argument("--no-map-full", action="store_true", help="skip executable-confirmed MAP full diagnostics")
     parser.add_argument("--no-world", action="store_true", help="skip reconstructed TRAK + MAP-object + STPC world export")
@@ -398,16 +431,14 @@ def main(argv: list[str] | None = None) -> int:
             extract_stpc_obj=not args.no_stpc_obj,
             extract_trak=not args.no_trak,
             extract_lights=not args.no_lights,
-            extract_raw=not args.no_raw,
+            extract_sounds=not args.no_sounds,
             extract_srpc=not args.no_srpc,
-            srpc_cvs_path=Path(args.srpc_cvs) if args.srpc_cvs else None,
-            srpc_export_slices=not args.no_srpc_slices,
-            srpc_export_wav=not args.no_srpc_wav,
-            srpc_export_mp3=args.srpc_mp3,
+            extract_raw=not args.no_raw,
             extract_world_probe=args.world_probe,
             extract_map_full=not args.no_map_full,
             extract_world=not (args.no_world or args.no_world_rebuild),
             texture_fields=not args.no_texture_fields,
+            texture_channel_order=args.texture_channel_order,
             stpc_alignment=args.stpc_alignment,
             stpc_min_score=args.stpc_min_score,
             stpc_scale=args.stpc_scale,
@@ -415,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
             stpc_debug_faces=args.stpc_debug_faces,
             trak_scale=args.trak_scale,
             trak_flip_z=args.trak_flip_z,
+            srpc_cvs_path=Path(args.srpc_cvs) if args.srpc_cvs else None,
+            srpc_mp3=args.srpc_mp3,
             world_def_scan_bytes=args.world_def_scan_bytes,
             world_scale=args.world_scale,
             world_flip_z=args.world_flip_z,

@@ -41,7 +41,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1095585859` | `AMPC` / `CPMA` | audio/resource | `sub_558D70` |
 | `1162757152` | `END ` | terminator | closes WAD |
 | `1397575747` | `SMPC` / `CPMS` | audio/resource | `sub_558D30` |
-| `1397903427` | `SRPC` / `CPRS` | resource pack | `sub_545350(..., 2)` |
+| `1397903427` | `SRPC` / `CPRS` | streamed speech slice table | `sub_545350(..., 2)` |
 | `1398034499` | `STPC` / `CPTS` | packed scene/static mesh/animation container | `sub_42AB50` |
 | `1413830740` | `TEXT`-material-related | material/texture table | `sub_4067B0` |
 | `1414676811` | `TRAK` / `KART` integer | terrain/track geometry records | `sub_42AAC0` |
@@ -302,6 +302,157 @@ Known material flag observations:
 | `flags & 0x0008` | double width |
 | `flags & 0x0010` | double height |
 | `flags & 0x0020` | generated page |
+
+
+## SRPC / CPRS streamed speech chunk
+
+`SRPC` is the human-readable name used by this project for the WAD chunk whose bytes appear on disk as `CPRS`.  The reversal happens because the original PC executable compares chunk identifiers as little-endian 32-bit integers.  The dispatcher compares the value `0x53525043`, which is the byte sequence `43 50 52 53` (`CPRS`) in the file.
+
+The dispatcher calls:
+
+```c
+sub_545350(level_context, stream, 2);
+```
+
+This means `sub_545350` case `2` is the `SRPC`/`CPRS` loader.
+
+### What SRPC stores
+
+`SRPC` does **not** store the speech audio bytes directly.  It stores a table of slices into an external CVS stream file, normally:
+
+```text
+Music/ENGLISH.CVS
+```
+
+A practical way to think about it:
+
+- `SRPC` is the speech index inside the WAD.
+- `ENGLISH.CVS` is the large speech data bank.
+- Each `SRPC` entry says: "speech N starts at byte offset X in the CVS file and has byte size Y".
+- The game loads that slice and sends it to the Argonaut audio layer.
+
+### Loader behavior: `sub_545350(..., case 2)`
+
+Equivalent pseudocode:
+
+```c
+uint32_t count;
+read_u32(stream, &count);
+
+SRPCEntry16 *entries = alloc(count * 16);
+for (uint32_t i = 0; i < count * 4; i++)
+    read_u32(stream, ((uint32_t *)entries) + i);
+
+sub_5465D0(entries, count);
+```
+
+The loader first reads a 32-bit entry count.  It then reads `count` fixed-size records, each 16 bytes long.  No nested compression or relocation has been observed inside the WAD chunk itself.
+
+### Runtime registration: `sub_5465D0`
+
+```c
+SRPCEntry16 *dword_6D91C4; // base pointer to entries
+uint32_t     dword_6D91C8; // entry count
+uint32_t     dword_6D91D4; // loaded flag
+
+void *sub_5465D0(SRPCEntry16 *entries, uint32_t count) {
+    dword_6D91C4 = entries;
+    dword_6D91C8 = count;
+    dword_6D91D4 = 1;
+    return entries + count;
+}
+```
+
+The important point is that the game registers the whole table globally.  Later playback does not search by filename; it indexes this table by a speech id.
+
+### Disk structure
+
+```c
+#pragma pack(push, 1)
+struct SRPCChunkDisk {
+    uint32_t count;
+    SRPCEntry16 entries[count];
+};
+
+struct SRPCEntry16 {
+    uint32_t unknown_00;       // observed as dialogue/resource-id-like value
+    uint16_t rate_or_timing;   // sample-rate scalar; 2048 -> 22050 Hz
+    uint16_t unknown_06;       // usually 0 in observed files
+    uint32_t cvs_offset;       // byte offset into Music/ENGLISH.CVS
+    uint32_t cvs_size;         // byte size before runtime 0x800 alignment
+};
+#pragma pack(pop)
+```
+
+Field explanation for non-specialists:
+
+| Field | Meaning |
+|---|---|
+| `count` | Number of speech-table entries. |
+| `unknown_00` | Looks like a dialogue or resource identifier.  It is useful in exported filenames, but the confirmed playback path indexes by table position. |
+| `rate_or_timing` | A scalar converted by the game into an audio sample rate. |
+| `unknown_06` | Usually zero in tested files.  No confirmed consumer yet. |
+| `cvs_offset` | Start byte of this speech clip inside the external `.CVS` file. |
+| `cvs_size` | Number of meaningful bytes in the speech clip before the game aligns the load size. |
+
+### Playback behavior: `sub_546620`
+
+`sub_546620` validates the requested speech id against `dword_6D91C8`, selects `dword_6D91C4[speech_id]`, opens `Music/ENGLISH.CVS`, and sends the referenced slice to AAL:
+
+```c
+entry = &dword_6D91C4[speech_id];
+stream_ptr  = lpBaseAddress + entry->cvs_offset;
+stream_size = (entry->cvs_size + 0x7FF) & ~0x7FF;
+AAL_LoadResourceType(stream_ptr, stream_size, 0x15, 0);
+```
+
+The runtime aligns the loaded size upward to a `0x800` byte boundary.  The table's `cvs_size` still represents the meaningful clip size; the extra aligned bytes are padding/loading granularity.
+
+The same function copies `rate_or_timing` to `word_6D93E4` and derives a sample-rate-like value:
+
+```text
+sample_rate_hz = rate_or_timing * 44100 / 4096
+```
+
+Common observed value:
+
+```text
+rate_or_timing = 2048 -> 22050 Hz
+```
+
+### CVS stream codec
+
+The referenced `.CVS` slices match PlayStation/SPU ADPCM audio:
+
+- Each frame is 16 bytes.
+- Each frame decodes to 28 mono PCM samples.
+- Byte 0 is the filter/shift header.
+- Byte 1 is the frame flags byte.
+- Bytes 2..15 store 28 4-bit ADPCM nibbles.
+
+The project decodes these slices to mono 16-bit PCM WAV files.  Optional MP3 conversion is available when `ffmpeg` is installed and `--srpc-mp3` is requested.
+
+### Exporter outputs
+
+When `SRPC` is present, the extractor writes:
+
+```text
+srpc/srpc_entries.csv
+srpc/summary.txt
+srpc/cvs_slices/*.cvs      when a CVS file is found/provided
+srpc/wav/*.wav             when a CVS file is found/provided
+srpc/mp3/*.mp3             optional, requires ffmpeg and --srpc-mp3
+```
+
+The raw WAD chunk is still preserved separately as `raw/srpc.bin` when raw export is enabled.
+
+The extractor searches common CVS locations next to the WAD, such as `Music/ENGLISH.CVS`.  A specific file can be supplied with `--srpc-cvs PATH`.
+
+### Remaining SRPC unknowns
+
+- `SRPCEntry16.unknown_00`: often looks like a dialogue/resource id and is useful in filenames, but the confirmed playback path uses the table index.
+- `SRPCEntry16.unknown_06`: observed as zero in tested samples; no confirmed consumer yet.
+- Exact AAL resource type `0x15` name is unknown; behavior matches streamed speech/voice.
 
 ## TRAK chunk
 
