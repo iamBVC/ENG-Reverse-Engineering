@@ -17,21 +17,30 @@ It can be used in two ways:
 
         result = export_stpc_meshes_from_bytes(stpc_bytes, out_dir / "stpc_obj")
 
-The current parser is intentionally conservative.  The full STPC container is
-not completely decoded yet, but the static mesh records inside the blob are
-reliably identifiable by a repeated header/vertex/triangle layout.
+The parser now follows the executable-confirmed cursor walk used by
+sub_42AB50/sub_41F770.  Older versions of this tool scanned for likely mesh
+records, which missed matrix-group/skinned records.  Scanning is still available
+as a fallback for damaged or unknown files, but normal exports are table-driven.
 
 Observed STPC high-level layout
 -------------------------------
 
-The file/chunk begins with a small little-endian uint32 value.  In the tested
-level this behaves like a top-level count or table length, but it is not yet
-safe to use it as the only source of truth for parsing the whole chunk.
+The file/chunk begins with a little-endian uint32 stored_count.  For the tested
+PC WADs this value includes one extra/non-geometry entry, so the number of
+serialized GeometryRecord8C records is stored_count - 1.  Each geometry record
+is immediately followed by its variable data.  The executable does not store all
+headers first and all vertex/triangle data later.
 
-After that, the blob contains several recognizable mesh-like records plus other
-still-unknown data.  Because the unknown sections may contain collision, BSP,
-render batching, visibility, or material lookup data, this module scans for
-valid mesh records instead of assuming every byte belongs to a linear array.
+    u32 stored_count
+    repeat stored_count - 1 times:
+        GeometryRecord8C header, 0x8C bytes
+        u16 matrix_group_vertex_counts[header.u16_86]
+        Vertex24 vertices[header.vertex_count]
+        Triangle28 triangles[header.triangle_count]
+        Block32 blocks[header.u16_78 + header.u16_7A + header.u16_7C]
+    u32 section2_count
+    GeometryAnimRecord32 section2[section2_count]
+    raw script / constants / string tail
 
 Recognized mesh record shape
 ----------------------------
@@ -49,16 +58,19 @@ All integer and float fields are little-endian.
                                     low  16 bits = vertex_count
                                     high 16 bits = triangle_count
 
-    record +0x70  u32          unknown header word
-    record +0x74  u32          unknown header word
-    record +0x78  u32          unknown header word
-    record +0x7C  u32          unknown header word
-    record +0x80  u32          unknown header word
-    record +0x84  u32          repeated vertex_count
-                                This duplicate count is a strong signature.
-    record +0x88  u32          unknown header word
+    record +0x70  u32          runtime vertex pointer after relocation
+    record +0x74  u32          runtime triangle pointer after relocation
+    record +0x78  u16          Block32 count A
+    record +0x7A  u16          Block32 count B
+    record +0x7C  u16          Block32 count C
+    record +0x7E  u16          unknown render/collision discriminator
+    record +0x80  u32          runtime Block32 pointer after relocation
+    record +0x84  u16          base/static vertex copy count
+    record +0x86  u16          matrix group count
+    record +0x88  u32          runtime matrix-count pointer after relocation
 
-    record +0x8C  vertices     vertex_count entries, 24 bytes each:
+    record +0x8C  groups       matrix_group_count entries, 2 bytes each
+    ...          vertices      vertex_count entries, 24 bytes each:
                                     float x, y, z
                                     float nx, ny, nz
 
@@ -82,9 +94,9 @@ Important limitations
 
 This is not yet a complete STPC semantic decoder.  OBJ geometry is valid, and
 the shared GeometryRecord84/STPC-like render layout is now mostly confirmed from
-sub_402840/sub_556510/sub_41FB30.  Material table binding is partially decoded,
-but object-local texture coordinates and high-level STPC container tables still
-need more work.
+sub_402840/sub_556510/sub_41FB30.  Material table binding and EXE-style triangle
+UV selection are partially decoded.  Script/object VM semantics still need more
+work.
 """
 
 from __future__ import annotations
@@ -109,6 +121,10 @@ VERTEX_STRIDE = 24
 # Triangle format currently confirmed from extracted meshes:
 #     6 x uint16 + 4 x float
 TRI_STRIDE = 28
+
+# Opaque/partially-known records that follow each GeometryRecord8C.
+BLOCK32_STRIDE = 32
+ANIM_RECORD_STRIDE = 32
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +235,7 @@ def triangle_flag_notes(flags: int) -> str:
 
 @dataclass
 class MeshCandidate:
-    """A mesh record found inside an STPC blob."""
+    """One decoded GeometryRecord8C mesh from an STPC blob."""
     index: int
     offset: int
     vertex_count: int
@@ -231,18 +247,43 @@ class MeshCandidate:
     bounds_max: tuple[float, float, float]
     vertices: list[Vertex]
     triangles: list[Triangle]
+    vertex_data_offset: int
+    triangle_data_offset: int
+    block32_offset: int
+    end_data_offset: int
+    block32_count_a: int
+    block32_count_b: int
+    block32_count_c: int
+    unknown_7e: int
+    base_vertex_copy_count: int
+    matrix_group_count: int
+    matrix_group_vertex_counts: list[int]
+    matrix_counts_offset: int
+    parse_mode: str = "table"
 
     @property
     def vertex_offset(self) -> int:
-        return self.offset + HEADER_SIZE
+        return self.vertex_data_offset
 
     @property
     def triangle_offset(self) -> int:
-        return self.vertex_offset + self.vertex_count * VERTEX_STRIDE
+        return self.triangle_data_offset
+
+    @property
+    def block32_count(self) -> int:
+        return self.block32_count_a + self.block32_count_b + self.block32_count_c
 
     @property
     def end_offset(self) -> int:
-        return self.triangle_offset + self.triangle_count * TRI_STRIDE
+        return self.end_data_offset
+
+
+@dataclass
+class ScriptGeometryReference:
+    """One opcode 0x00B2 reference from the STPC script tail to geometry."""
+    script_offset: int
+    target_offset: int
+    mesh_index: int
 
 
 @dataclass
@@ -256,6 +297,14 @@ class STPCExportResult:
     combined_obj_path: Path | None
     mesh_obj_paths: list[Path]
     faces_debug_path: Path | None
+    parse_mode: str = "table"
+    geometry_end_offset: int | None = None
+    section2_count: int | None = None
+    section2_offset: int | None = None
+    script_tail_offset: int | None = None
+    script_reference_path: Path | None = None
+    script_references: list[ScriptGeometryReference] | None = None
+    parser_warning: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -312,55 +361,53 @@ def compute_bounds(vertices: list[Vertex]) -> tuple[tuple[float, float, float], 
     return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
 
 
-def try_parse_mesh(
+def _validate_mesh_layout(
     buf: bytes,
+    *,
     off: int,
     index: int,
+    vertex_count: int,
+    triangle_count: int,
+    vertex_off: int,
+    triangle_off: int,
+    block32_off: int,
+    end_off: int,
+    block32_count_a: int,
+    block32_count_b: int,
+    block32_count_c: int,
+    unknown_7e: int,
+    base_vertex_copy_count: int,
+    matrix_group_count: int,
+    matrix_group_vertex_counts: list[int],
+    matrix_counts_offset: int,
+    parse_mode: str,
     min_vertices: int,
     max_vertices: int,
     max_triangles: int,
 ) -> MeshCandidate | None:
-    """
-    Try to parse one mesh record at absolute offset off.
-
-    This returns None if the bytes at off do not look like a valid STPC mesh
-    record.  The validation is intentionally strict enough to reject random
-    bytes but loose enough to keep currently confirmed meshes.
-    """
-    if off + HEADER_SIZE > len(buf):
+    """Validate and decode one candidate whose offsets are already known."""
+    if off + HEADER_SIZE > len(buf) or end_off > len(buf):
         return None
-
-    packed = u32(buf, off + 0x6C)
-    vertex_count = packed & 0xFFFF
-    triangle_count = (packed >> 16) & 0xFFFF
-
-    repeated_vertex_count = u32(buf, off + 0x84)
-
-    # Signature checks.  The repeated vertex count at +0x84 is one of the most
-    # useful ways to distinguish real mesh records from random data.
-    if vertex_count < min_vertices:
-        return None
-    if vertex_count > max_vertices:
+    if vertex_count < min_vertices or vertex_count > max_vertices:
         return None
     if triangle_count <= 0 or triangle_count > max_triangles:
         return None
-    if repeated_vertex_count != vertex_count:
-        return None
 
-    vertex_off = off + HEADER_SIZE
-    triangle_off = vertex_off + vertex_count * VERTEX_STRIDE
-    end_off = triangle_off + triangle_count * TRI_STRIDE
+    if matrix_group_count:
+        # sub_41FB30 consumes a u16 array of per-matrix vertex counts.  Tested
+        # dynamic/skinned records always sum exactly to the source vertex count.
+        if sum(matrix_group_vertex_counts) != vertex_count:
+            return None
+    else:
+        # Static records normally copy every source vertex once.  Keep this as
+        # a soft rule because malformed data should fail through geometry tests.
+        if base_vertex_copy_count not in (0, vertex_count):
+            return None
 
-    if end_off > len(buf):
-        return None
-
-    # Validate bounding/corner floats.  Observed records contain 24 reasonable
-    # floats starting at +0x0C, probably 8 local bbox/corner vectors.
     try:
         bound_probe = struct.unpack_from("<24f", buf, off + 0x0C)
     except struct.error:
         return None
-
     if not all(sane_float(v) for v in bound_probe):
         return None
 
@@ -373,12 +420,10 @@ def try_parse_mesh(
             sane_vertices += 1
         if sane_float(v.nx) and sane_float(v.ny) and sane_float(v.nz) and normal_len_ok(v.nx, v.ny, v.nz):
             sane_normals += 1
-
     if sane_vertices != vertex_count:
         return None
 
     triangles = parse_triangles(buf, triangle_off, triangle_count)
-
     valid_triangles = 0
     for tri in triangles:
         indices_ok = (
@@ -387,7 +432,6 @@ def try_parse_mesh(
             tri.i2 < vertex_count and
             len({tri.i0, tri.i1, tri.i2}) == 3
         )
-
         plane_ok = (
             sane_float(tri.plane_nx) and
             sane_float(tri.plane_ny) and
@@ -395,7 +439,6 @@ def try_parse_mesh(
             sane_float(tri.plane_d) and
             normal_len_ok(tri.plane_nx, tri.plane_ny, tri.plane_nz)
         )
-
         if indices_ok and plane_ok:
             valid_triangles += 1
 
@@ -404,7 +447,6 @@ def try_parse_mesh(
         score += 0.70 * (valid_triangles / triangle_count)
     if vertex_count:
         score += 0.30 * (sane_normals / vertex_count)
-
     if valid_triangles == 0:
         return None
 
@@ -423,7 +465,176 @@ def try_parse_mesh(
         bounds_max=bounds_max,
         vertices=vertices,
         triangles=triangles,
+        vertex_data_offset=vertex_off,
+        triangle_data_offset=triangle_off,
+        block32_offset=block32_off,
+        end_data_offset=end_off,
+        block32_count_a=block32_count_a,
+        block32_count_b=block32_count_b,
+        block32_count_c=block32_count_c,
+        unknown_7e=unknown_7e,
+        base_vertex_copy_count=base_vertex_copy_count,
+        matrix_group_count=matrix_group_count,
+        matrix_group_vertex_counts=matrix_group_vertex_counts,
+        matrix_counts_offset=matrix_counts_offset,
+        parse_mode=parse_mode,
     )
+
+
+def try_parse_mesh(
+    buf: bytes,
+    off: int,
+    index: int,
+    min_vertices: int,
+    max_vertices: int,
+    max_triangles: int,
+) -> MeshCandidate | None:
+    """
+    Legacy scanner parser for one static mesh candidate at absolute offset off.
+
+    This is kept only as a fallback.  It intentionally assumes no matrix-count
+    array between the header and vertices, so it cannot find all real STPC
+    records.  Normal parsing should use parse_stpc_geometry_table().
+    """
+    if off + HEADER_SIZE > len(buf):
+        return None
+
+    vertex_count = u16(buf, off + 0x6C)
+    triangle_count = u16(buf, off + 0x6E)
+    block_a = u16(buf, off + 0x78)
+    block_b = u16(buf, off + 0x7A)
+    block_c = u16(buf, off + 0x7C)
+    unknown_7e = u16(buf, off + 0x7E)
+    base_vertex_copy_count = u16(buf, off + 0x84)
+    matrix_group_count = u16(buf, off + 0x86)
+
+    if matrix_group_count != 0 or base_vertex_copy_count != vertex_count:
+        return None
+
+    vertex_off = off + HEADER_SIZE
+    triangle_off = vertex_off + vertex_count * VERTEX_STRIDE
+    block32_off = triangle_off + triangle_count * TRI_STRIDE
+    end_off = block32_off + (block_a + block_b + block_c) * BLOCK32_STRIDE
+
+    return _validate_mesh_layout(
+        buf,
+        off=off,
+        index=index,
+        vertex_count=vertex_count,
+        triangle_count=triangle_count,
+        vertex_off=vertex_off,
+        triangle_off=triangle_off,
+        block32_off=block32_off,
+        end_off=end_off,
+        block32_count_a=block_a,
+        block32_count_b=block_b,
+        block32_count_c=block_c,
+        unknown_7e=unknown_7e,
+        base_vertex_copy_count=base_vertex_copy_count,
+        matrix_group_count=matrix_group_count,
+        matrix_group_vertex_counts=[],
+        matrix_counts_offset=off + HEADER_SIZE,
+        parse_mode="scan-fallback",
+        min_vertices=min_vertices,
+        max_vertices=max_vertices,
+        max_triangles=max_triangles,
+    )
+
+
+def parse_stpc_geometry_table(
+    buf: bytes,
+    *,
+    min_vertices: int = 3,
+    max_vertices: int = 20000,
+    max_triangles: int = 50000,
+    min_score: float = 0.0,
+) -> tuple[list[MeshCandidate], int, int | None, int | None, str | None]:
+    """
+    Parse STPC geometry using the sub_42AB50/sub_41F770 cursor layout.
+
+    Returns (meshes, geometry_end_offset, section2_count, script_tail_offset,
+    warning).  A non-empty warning means the table parser rejected the blob and
+    the caller may choose the legacy scanner fallback.
+    """
+    if len(buf) < 8:
+        return [], 0, None, None, "STPC blob is too small"
+
+    stored_count = u32(buf, 0)
+    if stored_count == 0 or stored_count > 10000:
+        return [], 4, None, None, f"implausible stored_count={stored_count}"
+
+    record_count = stored_count - 1
+    cur = 4
+    meshes: list[MeshCandidate] = []
+
+    for i in range(record_count):
+        rec_off = cur
+        if rec_off + HEADER_SIZE > len(buf):
+            return meshes, cur, None, None, f"record {i} header exceeds STPC size"
+        cur += HEADER_SIZE
+
+        vertex_count = u16(buf, rec_off + 0x6C)
+        triangle_count = u16(buf, rec_off + 0x6E)
+        block_a = u16(buf, rec_off + 0x78)
+        block_b = u16(buf, rec_off + 0x7A)
+        block_c = u16(buf, rec_off + 0x7C)
+        unknown_7e = u16(buf, rec_off + 0x7E)
+        base_vertex_copy_count = u16(buf, rec_off + 0x84)
+        matrix_group_count = u16(buf, rec_off + 0x86)
+
+        matrix_counts_off = cur
+        matrix_counts_end = cur + matrix_group_count * 2
+        if matrix_counts_end > len(buf):
+            return meshes, cur, None, None, f"record {i} matrix-count array exceeds STPC size"
+        matrix_counts = [u16(buf, cur + 2 * j) for j in range(matrix_group_count)]
+        cur = matrix_counts_end
+
+        vertex_off = cur
+        triangle_off = vertex_off + vertex_count * VERTEX_STRIDE
+        block32_off = triangle_off + triangle_count * TRI_STRIDE
+        end_off = block32_off + (block_a + block_b + block_c) * BLOCK32_STRIDE
+
+        mesh = _validate_mesh_layout(
+            buf,
+            off=rec_off,
+            index=i,
+            vertex_count=vertex_count,
+            triangle_count=triangle_count,
+            vertex_off=vertex_off,
+            triangle_off=triangle_off,
+            block32_off=block32_off,
+            end_off=end_off,
+            block32_count_a=block_a,
+            block32_count_b=block_b,
+            block32_count_c=block_c,
+            unknown_7e=unknown_7e,
+            base_vertex_copy_count=base_vertex_copy_count,
+            matrix_group_count=matrix_group_count,
+            matrix_group_vertex_counts=matrix_counts,
+            matrix_counts_offset=matrix_counts_off,
+            parse_mode="table",
+            min_vertices=min_vertices,
+            max_vertices=max_vertices,
+            max_triangles=max_triangles,
+        )
+        if mesh is None:
+            return meshes, rec_off, None, None, f"record {i} failed geometry validation at 0x{rec_off:08X}"
+        if mesh.score >= min_score:
+            meshes.append(mesh)
+        cur = end_off
+
+    geometry_end_offset = cur
+    section2_count: int | None = None
+    script_tail_offset: int | None = None
+    if cur + 4 <= len(buf):
+        section2_count = u32(buf, cur)
+        section2_offset = cur + 4
+        section2_end = section2_offset + section2_count * ANIM_RECORD_STRIDE
+        if section2_count < 100000 and section2_end <= len(buf):
+            script_tail_offset = section2_end
+        else:
+            script_tail_offset = section2_offset
+    return meshes, geometry_end_offset, section2_count, script_tail_offset, None
 
 
 def scan_meshes(
@@ -436,20 +647,15 @@ def scan_meshes(
     max_triangles: int = 50000,
 ) -> list[MeshCandidate]:
     """
-    Scan an STPC blob for mesh-like records.
+    Legacy scan for mesh-like static records.
 
-    This intentionally scans instead of trusting a full container parser because
-    STPC contains extra data between and/or after recognizable mesh records.
-    Once the remaining tables are decoded, this function can be replaced by a
-    strict table-driven parser while keeping the export API stable.
+    Prefer parse_stpc_geometry_table().  This fallback is useful when testing
+    unknown/corrupt blobs, but it intentionally misses matrix-group records.
     """
     if alignment <= 0:
         raise ValueError("alignment must be >= 1")
 
     raw_candidates: list[MeshCandidate] = []
-
-    # The first dword appears to be a top-level count/table field, so scanning
-    # starts at offset 4 by default.
     start = 4
     candidate_index = 0
 
@@ -457,14 +663,11 @@ def scan_meshes(
         mesh = try_parse_mesh(buf, off, candidate_index, min_vertices, max_vertices, max_triangles)
         if mesh is None:
             continue
-
         if mesh.score < min_score:
             continue
-
         raw_candidates.append(mesh)
         candidate_index += 1
 
-    # Remove duplicate candidates with the same offset, preferring high score.
     by_offset: dict[int, MeshCandidate] = {}
     for mesh in raw_candidates:
         old = by_offset.get(mesh.offset)
@@ -472,12 +675,42 @@ def scan_meshes(
             by_offset[mesh.offset] = mesh
 
     meshes = sorted(by_offset.values(), key=lambda m: m.offset)
-
-    # Re-number after sorting so filenames are stable and sequential.
     for i, mesh in enumerate(meshes):
         mesh.index = i
-
     return meshes
+
+
+def find_script_geometry_references(
+    buf: bytes,
+    meshes: list[MeshCandidate],
+    *,
+    start_offset: int | None = None,
+) -> list[ScriptGeometryReference]:
+    """Find opcode 0x00B2 immediates that point at decoded geometry records.
+
+    In tested STPC script streams the instruction appears as:
+
+        u16 opcode = 0x00B2
+        u16 zero_or_arg
+        u32 stpc_relative_geometry_offset
+
+    Therefore the geometry pointer-sized immediate starts at opcode + 4.
+    """
+    by_offset = {m.offset: m.index for m in meshes}
+    refs: list[ScriptGeometryReference] = []
+    if not by_offset or len(buf) < 8:
+        return refs
+
+    start = 0 if start_offset is None else max(0, min(start_offset, len(buf)))
+    for pos in range(start, len(buf) - 8 + 1):
+        if u16(buf, pos) != 0x00B2:
+            continue
+        target = u32(buf, pos + 4)
+        mesh_index = by_offset.get(target)
+        if mesh_index is None:
+            continue
+        refs.append(ScriptGeometryReference(pos, target, mesh_index))
+    return refs
 
 
 # ---------------------------------------------------------------------------
@@ -601,7 +834,7 @@ def write_obj(
 ) -> None:
     """Write one STPC mesh as a Wavefront OBJ file."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write(f"# STPC mesh candidate {mesh.index}\n")
+        f.write(f"# STPC GeometryRecord8C {mesh.index}\n")
         f.write(f"# source_offset=0x{mesh.offset:08X}\n")
         f.write(f"# vertices={mesh.vertex_count} triangles={mesh.triangle_count} valid_triangles={mesh.valid_triangles}\n")
         f.write(f"# score={mesh.score:.4f}\n")
@@ -660,8 +893,8 @@ def write_combined_obj(
 ) -> None:
     """Write all detected STPC meshes into one OBJ file."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write("# Combined STPC mesh candidates\n")
-        f.write("# Each OBJ object corresponds to one recognized STPC mesh record.\n")
+        f.write("# Combined STPC GeometryRecord8C meshes\n")
+        f.write("# Each OBJ object corresponds to one table-decoded STPC geometry record.\n")
         if mtl_name:
             f.write(f"mtllib {mtl_name}\n")
 
@@ -712,18 +945,30 @@ def write_combined_obj(
 
 
 def write_manifest(meshes: list[MeshCandidate], path: Path) -> None:
-    """Write a CSV summary of detected STPC meshes."""
+    """Write a CSV summary of decoded STPC geometry records."""
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow([
             "mesh",
+            "parse_mode",
             "offset_hex",
             "offset_dec",
+            "matrix_counts_offset_hex",
             "vertex_offset_hex",
             "triangle_offset_hex",
+            "block32_offset_hex",
             "end_offset_hex",
             "vertex_count",
             "triangle_count",
+            "block32_count_a",
+            "block32_count_b",
+            "block32_count_c",
+            "block32_count_total",
+            "unknown_7e",
+            "base_vertex_copy_count",
+            "matrix_group_count",
+            "matrix_group_vertex_counts",
+            "matrix_group_vertex_sum",
             "valid_triangles",
             "score",
             "bounds_min_x",
@@ -733,30 +978,56 @@ def write_manifest(meshes: list[MeshCandidate], path: Path) -> None:
             "bounds_max_y",
             "bounds_max_z",
             "header_6c_packed_counts",
-            "header_70",
-            "header_74",
-            "header_78",
-            "header_7c",
-            "header_80",
-            "header_84_repeated_vertex_count_or_base_vertex_count",
-            "header_88_group_counts_or_unknown",
+            "header_70_vertex_ptr_runtime",
+            "header_74_triangle_ptr_runtime",
+            "header_78_7a_block_counts",
+            "header_7c_7e_block_count_unknown",
+            "header_80_block32_ptr_runtime",
+            "header_84_86_base_vertex_and_matrix_group_counts",
+            "header_88_matrix_counts_ptr_runtime",
         ])
 
         for mesh in meshes:
             w.writerow([
                 mesh.index,
+                mesh.parse_mode,
                 f"0x{mesh.offset:08X}",
                 mesh.offset,
+                f"0x{mesh.matrix_counts_offset:08X}",
                 f"0x{mesh.vertex_offset:08X}",
                 f"0x{mesh.triangle_offset:08X}",
+                f"0x{mesh.block32_offset:08X}",
                 f"0x{mesh.end_offset:08X}",
                 mesh.vertex_count,
                 mesh.triangle_count,
+                mesh.block32_count_a,
+                mesh.block32_count_b,
+                mesh.block32_count_c,
+                mesh.block32_count,
+                mesh.unknown_7e,
+                mesh.base_vertex_copy_count,
+                mesh.matrix_group_count,
+                ";".join(str(x) for x in mesh.matrix_group_vertex_counts),
+                sum(mesh.matrix_group_vertex_counts),
                 mesh.valid_triangles,
                 f"{mesh.score:.6f}",
                 *mesh.bounds_min,
                 *mesh.bounds_max,
                 *[f"0x{x:08X}" for x in mesh.header_words],
+            ])
+
+
+def write_script_references(refs: list[ScriptGeometryReference], path: Path) -> None:
+    """Write opcode 0x00B2 -> GeometryRecord8C reference diagnostics."""
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["script_offset_hex", "script_offset_dec", "target_geometry_offset_hex", "mesh"])
+        for ref in refs:
+            w.writerow([
+                f"0x{ref.script_offset:08X}",
+                ref.script_offset,
+                f"0x{ref.target_offset:08X}",
+                ref.mesh_index,
             ])
 
 
@@ -836,29 +1107,70 @@ def export_stpc_meshes_from_bytes(
     materials=None,
     texture_count: int | None = None,
     verbose: bool = False,
+    force_scan: bool = False,
 ) -> STPCExportResult:
     """
-    Scan an STPC blob and export detected mesh records as OBJ files.
+    Parse an STPC blob and export decoded GeometryRecord8C meshes as OBJ files.
 
-    This is the main function used by wad_extractor.py.  It accepts raw STPC
-    bytes directly, so the WAD extractor does not need to create stpc.bin first,
-    although it still can and does for archival/debug purposes.
+    The default path is the executable-confirmed table/cursor parser.  If that
+    parser rejects the blob, the legacy scanner is used as a fallback so older
+    workflows still produce diagnostics instead of failing hard.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
     top_count = u32(buf, 0) if len(buf) >= 4 else 0
+    parse_mode = "table"
+    geometry_end_offset: int | None = None
+    section2_count: int | None = None
+    section2_offset: int | None = None
+    script_tail_offset: int | None = None
+    parser_warning: str | None = None
 
-    meshes = scan_meshes(
-        buf,
-        alignment=alignment,
-        min_score=min_score,
-        min_vertices=min_vertices,
-        max_vertices=max_vertices,
-        max_triangles=max_triangles,
-    )
+    if force_scan:
+        parse_mode = "scan-fallback"
+        parser_warning = "forced legacy scan mode"
+        meshes = scan_meshes(
+            buf,
+            alignment=alignment,
+            min_score=min_score,
+            min_vertices=min_vertices,
+            max_vertices=max_vertices,
+            max_triangles=max_triangles,
+        )
+    else:
+        meshes, geometry_end_offset, section2_count, script_tail_offset, parser_warning = parse_stpc_geometry_table(
+            buf,
+            min_score=0.0,
+            min_vertices=min_vertices,
+            max_vertices=max_vertices,
+            max_triangles=max_triangles,
+        )
+        if parser_warning is not None or not meshes:
+            parse_mode = "scan-fallback"
+            meshes = scan_meshes(
+                buf,
+                alignment=alignment,
+                min_score=min_score,
+                min_vertices=min_vertices,
+                max_vertices=max_vertices,
+                max_triangles=max_triangles,
+            )
+            geometry_end_offset = meshes[-1].end_offset if meshes else None
+            section2_count = None
+            section2_offset = None
+            script_tail_offset = geometry_end_offset
+        else:
+            parse_mode = "table"
+            section2_offset = None if geometry_end_offset is None else geometry_end_offset + 4
 
     manifest_path = out_dir / "manifest.csv"
     write_manifest(meshes, manifest_path)
+
+    script_refs = find_script_geometry_references(buf, meshes, start_offset=script_tail_offset)
+    script_reference_path: Path | None = None
+    if parse_mode == "table" or script_refs:
+        script_reference_path = out_dir / "script_geometry_refs.csv"
+        write_script_references(script_refs, script_reference_path)
 
     mtl_path: Path | None = None
     mtl_name: str | None = None
@@ -874,12 +1186,17 @@ def export_stpc_meshes_from_bytes(
         mesh_obj_paths.append(obj_path)
 
         if verbose:
+            group_note = ""
+            if mesh.matrix_group_count:
+                group_note = f" groups={mesh.matrix_group_count}"
             print(
                 f"  mesh_{mesh.index:03d}: "
                 f"off=0x{mesh.offset:08X} "
                 f"v={mesh.vertex_count} "
                 f"tri={mesh.triangle_count} "
+                f"blocks={mesh.block32_count} "
                 f"score={mesh.score:.3f}"
+                f"{group_note}"
             )
 
     combined_obj_path: Path | None = None
@@ -900,6 +1217,14 @@ def export_stpc_meshes_from_bytes(
         combined_obj_path=combined_obj_path,
         mesh_obj_paths=mesh_obj_paths,
         faces_debug_path=faces_debug_path,
+        parse_mode=parse_mode,
+        geometry_end_offset=geometry_end_offset,
+        section2_count=section2_count,
+        section2_offset=section2_offset,
+        script_tail_offset=script_tail_offset,
+        script_reference_path=script_reference_path,
+        script_references=script_refs,
+        parser_warning=parser_warning,
     )
 
 
@@ -932,6 +1257,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-combined", action="store_true", help="Do not write combined.obj")
     ap.add_argument("--no-mtl", action="store_true", help="Do not write placeholder OBJ material library")
     ap.add_argument("--debug-faces", action="store_true", help="Write faces_debug.csv")
+    ap.add_argument("--force-scan", action="store_true", help="Use the old candidate scanner instead of the table parser")
     args = ap.parse_args(argv)
 
     buf = args.stpc_bin.read_bytes()
@@ -955,17 +1281,28 @@ def main(argv: list[str] | None = None) -> int:
         write_debug=args.debug_faces,
         write_materials=not args.no_mtl,
         verbose=True,
+        force_scan=args.force_scan,
     )
 
-    print(f"[STPC] mesh candidates={len(result.meshes)}")
+    print(f"[STPC] parse_mode={result.parse_mode}")
+    if result.geometry_end_offset is not None:
+        print(f"[STPC] geometry_end=0x{result.geometry_end_offset:08X}")
+    if result.section2_count is not None:
+        print(f"[STPC] section2_count={result.section2_count}")
+    if result.parser_warning:
+        print(f"[STPC] parser_warning={result.parser_warning}")
+    print(f"[STPC] meshes={len(result.meshes)}")
     if result.combined_obj_path is not None:
         print(f"[STPC] wrote {result.combined_obj_path}")
     if result.faces_debug_path is not None:
         print(f"[STPC] wrote {result.faces_debug_path}")
+    if result.script_reference_path is not None:
+        ref_count = len(result.script_references or [])
+        print(f"[STPC] wrote {result.script_reference_path} ({ref_count} geometry refs)")
     print(f"[STPC] wrote {result.manifest_path}")
 
     if not result.meshes:
-        print("[STPC] No meshes found. Try lowering --min-score, using --alignment 1, or increasing limits.")
+        print("[STPC] No meshes found. Try --force-scan, lowering --min-score, using --alignment 1, or increasing limits.")
         return 1
 
     return 0

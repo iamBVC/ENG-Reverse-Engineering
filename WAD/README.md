@@ -17,7 +17,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 - decode `SMPC` level audio entries to `.cvg`, raw payloads, and WAV files
 - decode `SRPC` streamed speech tables and, when `Music/ENGLISH.CVS` is available, export speech `.cvs` slices and WAV files
 - decode `TRAK` terrain/world geometry records, vertices, triangles, collision/contact entries, OBJ surfaces, and an HTML viewer
-- scan/export validated `STPC` static geometry candidates as OBJ meshes
+- parse `STPC` with the executable-confirmed table/cursor layout and export all decoded geometry records as OBJ meshes
 - generate a `world/` reconstruction using TRAK terrain, MAP object placement, and STPC mesh candidates
 - preserve raw chunks for anything still unknown or only partially decoded
 
@@ -91,11 +91,12 @@ python wad_extractor.py t1l1m001.wad --srpc-cvs Music/ENGLISH.CVS
 STPC options:
 
 ```bash
---stpc-alignment 1       exhaustive STPC mesh scan; slower
---stpc-min-score 0.80    lower mesh candidate acceptance threshold
+--stpc-alignment 1       legacy fallback scanner alignment; rarely needed
+--stpc-min-score 0.80    lower fallback mesh-candidate acceptance threshold
 --stpc-scale 0.01        scale STPC OBJ vertices
 --stpc-flip-z            flip the Z axis in STPC OBJ export
 --stpc-debug-faces       write stpc/faces_debug.csv
+--stpc-force-scan        use the old candidate scanner instead of the table parser
 ```
 
 TRAK options:
@@ -144,7 +145,7 @@ extracted/t1l1m001/
   srpc/                 SRPC entries, CVS slices, WAV, optional MP3
 
   trak/                 TRAK CSV, OBJ surfaces, HTML viewer
-  stpc/                 STPC mesh candidates and material files
+  stpc/                 STPC table-decoded geometry, script refs, OBJ/MTL files
   world/                reconstructed terrain + object candidates
   world_probe/          deprecated opt-in diagnostics
 ```
@@ -157,6 +158,8 @@ Useful first files to inspect:
 | `textures/*.png` | Decoded level texture pages. |
 | `map_full/objects_58_disk.csv` | Executable-confirmed MAP object table. |
 | `trak/viewer.html` | Interactive terrain/sector preview. |
+| `stpc/manifest.csv` | Table-decoded STPC geometry records, offsets, matrix groups, and counts. |
+| `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
 | `world/combined.obj` | Current best-effort combined world reconstruction. |
 | `lights/lights.csv` | Runtime-derived light positions, colors, radii, and types. |
 | `sounds/smpc_manifest.csv` | Level sound table and decoded WAV metadata. |
@@ -201,7 +204,7 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `SRPC` | ~85% | Exports speech table; decodes `.CVS` slices to WAV when CVS is available. | `unknown_00`, `unknown_06`, and exact AAL resource type name. |
 | `AMPC` | ~10% | Preserves raw ambient/audio chunk. | Full structure and relation to SMPC/AAL. |
 | `TRAK` | ~75% | Exports geometry records, vertices, triangles, collision entries, OBJ, viewer. | Header fields `+0x00/+0x04/+0x08/+0x7E`, collision group names, remaining triangle flags. |
-| `STPC` | ~50% | Finds and exports validated static mesh candidates; supports material/UV output where possible. | Full container table of contents, object-definition language, animation data. |
+| `STPC` | ~65% | Parses the confirmed top-level geometry cursor layout, including matrix-group/skinned records; exports OBJ/MTL, manifest, face diagnostics, and script-to-geometry references. | Object-definition VM semantics, animation record fields, Block32 semantics. |
 | `MAP ` | ~60% | Parses tile placement, grid, object58 table, vertex colors, MAP diagnostics. | Section 3/4 semantics, some flags/type ids, complete object runtime behavior. |
 | `LGHT` | ~90% | Exports directional, point, and negative/special point lights. | Final type-2/type-4 byte currently named `falloff_or_mode`; two copied runtime color fields. |
 | `LGPC` | ~5% | Preserves raw bytes. | Structure and purpose unknown. |
@@ -223,7 +226,7 @@ Stores the main world/terrain geometry record table.  Each decoded geometry reco
 
 ### `STPC`
 
-Stores packed scene/static object data.  The tool currently uses a validated mesh scanner because the whole top-level container is not fully decoded yet.  These meshes are used by the world exporter as object candidates.
+Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data.  The exporter also scans the script tail for opcode `0xB2` references back to decoded geometry offsets.  The old scanner remains available internally as a fallback.
 
 ### `LGHT`
 
@@ -260,7 +263,7 @@ eng_wad/map_chunk.py      older partial-safe MAP parser
 eng_wad/map_full_chunk.py executable-confirmed MAP parser/diagnostics
 eng_wad/map_export.py     MAP CSV, PNG, OBJ, and HTML exports
 eng_wad/trak_chunk.py     TRAK parser/exporter
-eng_wad/stpc_chunk.py     STPC mesh scanner/exporter
+eng_wad/stpc_chunk.py     STPC table parser/exporter plus scanner fallback
 eng_wad/world_rebuild.py  TRAK + MAP + STPC reconstruction
 eng_wad/light_chunk.py    LGHT parser/exporter
 eng_wad/smpc_chunk.py     SMPC sound parser/exporter
@@ -270,7 +273,7 @@ eng_wad/raw_export.py     raw chunk preservation
 
 ## What to work on next
 
-1. Replace the STPC mesh scanner with a full top-level STPC container parser.
+1. Decode the STPC object-definition/script VM that points at the geometry records.
 2. Finish naming MAP Section 3/4 and object-definition data.
 3. Validate MAP object placement against more levels and in-game positions.
 4. Name the remaining TRAK/STPC geometry header fields and collision group roles.

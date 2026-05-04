@@ -74,6 +74,7 @@ def extract_wad(
     stpc_scale: float = 1.0,
     stpc_flip_z: bool = False,
     stpc_debug_faces: bool = False,
+    stpc_force_scan: bool = False,
     trak_scale: float = 1.0,
     trak_flip_z: bool = False,
     srpc_cvs_path: Path | None = None,
@@ -242,9 +243,9 @@ def extract_wad(
         elif verbose:
             print("  [MAPX] skipped — needs both MAP and TRAK")
 
-    # STPC: additionally unpack static meshes to OBJ using the importable library.
+    # STPC: table-parse GeometryRecord8C records, then export meshes to OBJ.
     if extract_stpc_obj and "STPC" in by_tag:
-        print("  [STPC] Exporting static geometry OBJ meshes …")
+        print("  [STPC] Parsing table geometry and exporting OBJ meshes …")
         try:
             stpc_bytes_for_world = chunk_bytes(data, by_tag["STPC"])
             stpc_result = export_stpc_meshes_from_bytes(
@@ -258,8 +259,10 @@ def extract_wad(
                 materials=parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else None,
                 texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
                 verbose=verbose,
+                force_scan=stpc_force_scan,
             )
-            print(f"  → stpc/ ({len(stpc_result.meshes)} meshes, manifest.csv, combined.obj)")
+            extra = f", refs={len(stpc_result.script_references or [])}" if stpc_result.script_reference_path else ""
+            print(f"  → stpc/ ({len(stpc_result.meshes)} meshes, {stpc_result.parse_mode}, manifest.csv, combined.obj{extra})")
         except Exception as exc:
             print(f"  [STPC] OBJ export error: {exc}", file=sys.stderr)
 
@@ -381,11 +384,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-world-rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--quiet", action="store_true", help="suppress per-record progress")
 
-    parser.add_argument("--stpc-alignment", type=int, default=4, help="STPC scan alignment; use 1 for exhaustive scan")
-    parser.add_argument("--stpc-min-score", type=float, default=0.85, help="minimum STPC mesh validation score")
+    parser.add_argument("--stpc-alignment", type=int, default=4, help="legacy STPC fallback scan alignment; use 1 for exhaustive scan")
+    parser.add_argument("--stpc-min-score", type=float, default=0.85, help="minimum legacy STPC fallback mesh validation score")
     parser.add_argument("--stpc-scale", type=float, default=1.0, help="scale applied to STPC OBJ vertices")
     parser.add_argument("--stpc-flip-z", action="store_true", help="flip Z axis in STPC OBJ export")
     parser.add_argument("--stpc-debug-faces", action="store_true", help="write stpc/faces_debug.csv")
+    parser.add_argument("--stpc-force-scan", action="store_true", help="use the old STPC candidate scanner instead of the table parser")
 
     parser.add_argument("--trak-scale", type=float, default=1.0, help="scale applied to TRAK OBJ vertices")
     parser.add_argument("--trak-flip-z", action="store_true", help="flip Z axis in TRAK OBJ export")
@@ -444,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
             stpc_scale=args.stpc_scale,
             stpc_flip_z=args.stpc_flip_z,
             stpc_debug_faces=args.stpc_debug_faces,
+            stpc_force_scan=args.stpc_force_scan,
             trak_scale=args.trak_scale,
             trak_flip_z=args.trak_flip_z,
             srpc_cvs_path=Path(args.srpc_cvs) if args.srpc_cvs else None,

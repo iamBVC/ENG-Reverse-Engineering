@@ -137,11 +137,17 @@ for each record:
 
 ### `sub_41F770(int *cursor, int count, DWORD *out)`
 
-Relocates `GeometryRecord8C` records.  It has the same vertex/triangle/collision relocation as `sub_5563F0`, plus:
+Relocates `GeometryRecord8C` records.  It has the same vertex/triangle/collision relocation as `sub_5563F0`, plus one important extra array before the vertex block:
 
 ```text
-record+134 = transform_group_count
-record+136 = pointer to u16 transform-group vertex-count array
+for each record:
+  matrix_group_counts = cursor; cursor += 2 * transform_group_count; record+136 = matrix_group_counts
+  vertices            = cursor; cursor += 24 * vertex_count;          record+112 = vertices
+  triangles           = cursor; cursor += 28 * triangle_count;        record+116 = triangles
+  block32             = cursor; cursor += 32 * (group0+group1+group2); record+128 = block32
+
+Static records usually have base_vertex_count == vertex_count and transform_group_count == 0.
+Skinned/matrix-group records usually have base_vertex_count == 0, transform_group_count > 0, and sum(matrix_group_counts) == vertex_count.
 ```
 
 ### `sub_42AB50(world, FILE *Stream, int size)`
@@ -475,9 +481,11 @@ The record format is `GeometryRecord84`.
 
 Current status:
 
-- STPC mesh scanner/exporter can find and export validated static meshes.
+- STPC geometry parsing now follows the executable-confirmed `sub_42AB50`/`sub_41F770` cursor layout instead of relying on blind scanning.
+- The exporter now finds static records and matrix-group/skinned records, including records where `base_vertex_count == 0` and `transform_group_count > 0`.
 - STPC OBJ exports include material/UV output where derivable from runtime materials.
-- STPC object definition parsing is still heuristic: MAP object `script_offset` points into `dword_6D9DBC`, and the world exporter scans around that area for exact decoded STPC mesh-record offsets.
+- The exporter writes `script_geometry_refs.csv` by scanning the script tail for opcode `0x00B2` references to decoded geometry-record offsets.
+- STPC object definition parsing is still heuristic: MAP object `script_offset` points into `dword_6D9DBC`, but most VM opcodes and high-level actor/object semantics are not fully named.
 
 ## Geometry animation records
 
@@ -968,7 +976,9 @@ Fallback d-pad values:
 - `map_full/object_spawn_points.obj`: confirmed fixed12 object position markers.
 - `lights/lights.csv`: typed directional/point/negative point lights with runtime conversions.
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
-- `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC reference scanning.
+- `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
+- `stpc/script_geometry_refs.csv`: opcode `0x00B2` references from the STPC script tail to decoded geometry-record offsets.
+- `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC object binding.
 
 ## Remaining high-value unknowns
 
@@ -977,7 +987,7 @@ Fallback d-pad values:
 3. Exact meaning of `section2` and `section4` records beyond their object references and linked-list structure.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
-6. STPC object-definition structure and script VM opcodes partially decoded (see below); mesh-reference scanning still used for full instance binding.
+6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing is now confirmed, but complete actor/object binding still needs VM semantics.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 
 ## Recommended next reverse-engineering targets
@@ -992,37 +1002,79 @@ Fallback d-pad values:
 
 ## STPC / CPTS container top-level layout (confirmed from `sub_42AB50`)
 
-`sub_42AB50` loads the packed STPC blob into `dword_6D9DBC`.  The blob is read all at once with `sub_415A90`, then `sub_42AB50` walks a cursor through the buffer to relocate nested records.
+`sub_42AB50` loads the packed STPC blob into `dword_6D9DBC`.  The blob is read all at once with `sub_415A90`, then `sub_42AB50` walks a cursor through the buffer.  The key correction is that the executable relocates one `GeometryRecord8C` at a time.  Therefore the disk layout is not "all headers first, all variable data later".  Each geometry header is immediately followed by its own variable-length arrays.
 
 ```text
-STPC blob layout (all little-endian):
+STPC blob layout, tested PC WADs, all little-endian:
 
-  u32   section1_count        // number of GeometryRecord8C mesh records
-  section1_count × 140 bytes  // GeometryRecord8C records (cursor-relocated by sub_41F770)
+  u32 stored_count
+      Observed to be geometry_record_count + 1 in tested files.
 
-  u32   section2_count        // number of GeometryAnimRecord32 animation records
-  section2_count × 32 bytes   // animation records (cursor-relocated by sub_41F8B0)
+  repeat stored_count - 1 times:
+      GeometryRecord8C header, 0x8C bytes
 
-  // Section 3 is conditional: only present when (dword_6DA330 & 0x01) is set.
-  // In tested PC WADs this flag is always 0, so section 3 is absent.
-  u32   section3_count
-  section3_count entries, each:
-      u32  sub_size
-      u32  sub_count            // multiply by 8 for allocation
-      sub_count × ? bytes       // relocatable sub-records (sub_41F770 again)
+      u16 matrix_group_vertex_counts[header.transform_group_count]
+          Present only when transform_group_count > 0.
+          sub_41FB30 uses these counts to split the source vertex array into
+          contiguous batches transformed by different matrices.
 
-  // Variable geometry data (vertices / triangles / collision) for ALL
-  // GeometryRecord8C records follows immediately after the record array.
-  // sub_41F770 relocates the pointer slots at +0x70, +0x74, +0x80, +0x88
-  // inside each record to point into this trailing data block.
+      Vertex24 vertices[header.vertex_count]
+
+      Triangle28 triangles[header.triangle_count]
+
+      Block32 blocks[
+          header.collision_group0_count +
+          header.collision_group1_count +
+          header.collision_group2_count
+      ]
+
+  u32 section2_count
+  GeometryAnimRecord32 section2[section2_count]
+
+  raw script / constants / string / object-definition tail
 ```
 
-Confirmed from `t1l1m001` STPC binary:
+Confirmed table-walk results:
 
-- `section1_count` = 33 (0x21)
-- 33 × 140 = 4620 bytes of record headers → section 2 starts at file offset 4624 (0x1210)
-- `section2_count` follows at offset 0x1210
-- Section 3 absent (`dword_6DA330` bit 0 not set for PC WADs)
+| WAD | STPC size | Stored count | Geometry records | Geometry end | Section2 count | First known MAP script offset |
+|---|---:|---:|---:|---:|---:|---:|
+| `t1l1m001.wad` | `0x43934A` | 33 | 32 | `0x3321E` | 0 | `0x4210E2` |
+| `t1l1m002.wad` | `0x381B86` | 57 | 56 | `0x4351E` | 0 | `0x36547E` |
+
+The older assumption was:
+
+```text
+u32 count
+count * GeometryRecord8C headers
+all vertices/triangles/blocks later
+```
+
+That model fails because it places section 2 near `0x1210` in `t1l1m001`, but the executable-style cursor walk proves geometry actually continues until `0x3321E`.  It also misses dynamic/skinned records because it treats `+0x84` as a 32-bit duplicate vertex count.  The real fields are two `u16`s:
+
+```c
+uint16_t base_vertex_count;       // +0x84
+uint16_t transform_group_count;   // +0x86
+uint16_t *group_vertex_counts;    // +0x88, relocated runtime pointer
+```
+
+### STPC script geometry references
+
+The script/object-definition tail contains opcode `0x00B2` instructions that reference geometry by STPC-relative offset:
+
+```text
+u16 opcode = 0x00B2
+u16 zero_or_arg
+u32 stpc_relative_geometry_offset
+```
+
+Scanning this pattern after the geometry table confirms that every table-decoded geometry record in the two tested WADs is referenced by at least one script instruction:
+
+| WAD | `0x00B2` geometry references | Unique records referenced |
+|---|---:|---:|
+| `t1l1m001.wad` | 41 | 32 / 32 |
+| `t1l1m002.wad` | 70 | 56 / 56 |
+
+This is strong independent evidence that the cursor parser is aligned correctly.
 
 When `script_offset` in a MAP object is resolved by `sub_553630`:
 
@@ -1047,7 +1099,7 @@ A `script_offset` of zero resolves to the very start of the STPC blob (`dword_6D
 
 ## GeometryRecord84 unknown fields — binary observations
 
-From `t1l1m001` STPC (`section1_count=33`):
+From `t1l1m001` STPC (`stored_count=33`, `geometry_record_count=32`):
 
 | Field | Offset | Record 0 raw value | Interpreted |
 |---:|---:|---|---|
