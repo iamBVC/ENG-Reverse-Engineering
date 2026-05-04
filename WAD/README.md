@@ -145,7 +145,7 @@ extracted/t1l1m001/
   srpc/                 SRPC entries, CVS slices, WAV, optional MP3
 
   trak/                 TRAK CSV, OBJ surfaces, HTML viewer
-  stpc/                 STPC table-decoded geometry, script refs, OBJ/MTL files
+  stpc/                 STPC geometry, script refs, OBJ/MTL files, local texture copies
   world/                reconstructed terrain + object candidates
   world_probe/          deprecated opt-in diagnostics
 ```

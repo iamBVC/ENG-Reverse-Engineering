@@ -87,6 +87,7 @@ Exported files
     manifest.csv               one row per detected mesh
     mesh_XXX_off_XXXXXXXX.obj  one OBJ per detected mesh
     combined.obj               all detected meshes in one OBJ
+    textures/                  local copies of exported TEXT PNGs when present
     faces_debug.csv            optional per-triangle metadata dump
 
 Important limitations
@@ -104,6 +105,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import shutil
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -822,6 +824,27 @@ def write_mtl(
             f.write("\n")
 
 
+def copy_exported_textures_for_stpc(textures_dir: Path, stpc_textures_dir: Path) -> bool:
+    """Copy exported TEXT texture pages next to STPC OBJ/MTL assets.
+
+    OBJ viewers resolve ``map_Kd`` relative to the MTL file.  Keeping a local
+    ``stpc/textures`` copy makes the STPC folder directly loadable while still
+    sourcing the images from the extractor's decoded TEXT output.
+    """
+    if not textures_dir.exists():
+        return False
+    texture_paths = [
+        p for p in sorted(textures_dir.glob("texture_*.png"))
+        if "_field_" not in p.name and not p.name.endswith("_grey.png") and not p.name.endswith("_pal.png")
+    ]
+    if not texture_paths:
+        return False
+    stpc_textures_dir.mkdir(parents=True, exist_ok=True)
+    for p in texture_paths:
+        shutil.copy2(p, stpc_textures_dir / p.name)
+    return True
+
+
 def write_obj(
     mesh: MeshCandidate,
     path: Path,
@@ -1106,6 +1129,7 @@ def export_stpc_meshes_from_bytes(
     write_materials: bool = True,
     materials=None,
     texture_count: int | None = None,
+    texture_source_dir: Path | None = None,
     verbose: bool = False,
     force_scan: bool = False,
 ) -> STPCExportResult:
@@ -1175,8 +1199,17 @@ def export_stpc_meshes_from_bytes(
     mtl_path: Path | None = None
     mtl_name: str | None = None
     if write_materials and meshes:
+        texture_prefix = "../textures"
+        if texture_source_dir is not None and copy_exported_textures_for_stpc(texture_source_dir, out_dir / "textures"):
+            texture_prefix = "textures"
         mtl_path = out_dir / "stpc_materials.mtl"
-        write_mtl(iter_material_ids(meshes), mtl_path, materials=materials, texture_count=texture_count)
+        write_mtl(
+            iter_material_ids(meshes),
+            mtl_path,
+            materials=materials,
+            texture_count=texture_count,
+            texture_prefix=texture_prefix,
+        )
         mtl_name = mtl_path.name
 
     mesh_obj_paths: list[Path] = []

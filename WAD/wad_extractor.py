@@ -258,6 +258,7 @@ def extract_wad(
                 write_debug=stpc_debug_faces,
                 materials=parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else None,
                 texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
+                texture_source_dir=out_dir / "textures" if text_chunk_for_materials is not None else None,
                 verbose=verbose,
                 force_scan=stpc_force_scan,
             )
