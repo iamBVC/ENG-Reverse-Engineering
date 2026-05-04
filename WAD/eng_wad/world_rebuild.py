@@ -402,7 +402,7 @@ def write_map_placed_trak_terrain_obj(
     scale: float = 1.0,
     flip_z: bool = False,
     terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
+    mirror_terrain_z: bool = False,
     write_per_tile_dir: Path | None = None,
 ) -> tuple[Path, int, int]:
     """Write world-placed terrain by applying MAP tile XYZ to TRAK meshes.
@@ -450,7 +450,10 @@ def write_map_placed_trak_terrain_obj(
     with path.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
         f.write("# World-placed TRAK terrain.  Each MAP tile translates one TRAK record mesh.\n")
-        f.write("# Terrain Z is mirrored around the terrain center by default so it matches the validated MAP/STPC object coordinate basis without moving the level away from its original bounds.\n")
+        if terrain_z_mirror_center is not None:
+            f.write("# Terrain Z is mirrored around the terrain center for diagnostics.\n")
+        else:
+            f.write("# Terrain Z uses the MAP terrain-space axis directly; actor/object Z is negated into this space.\n")
         vbase = 1
         for tile_i, tile in enumerate(mapx.tiles):
             if tile_i >= len(mapx.tile_trak_indices):
@@ -537,11 +540,10 @@ def _write_instanced_mesh_obj(
     Append one STPC mesh instance to an open OBJ file.
 
     Important coordinate note: after visual validation, terrain.obj is the
-    reference orientation.  MAP object positions are still correct in magnitude
-    but need the same centered Z-space mirror as the terrain/object basis when
-    written into the combined world.  object_z_mirror_center mirrors the whole
-    transformed STPC vertex around the level's Z center, preserving level bounds
-    while correcting the left/right mirrored placement.
+    reference orientation.  MAP object positions are stored as 12.12 fixed-point
+    actor coordinates.  Terrain queries in the executable negate actor Z before
+    comparing against MAP terrain space, so the normal world export uses
+    object_z_sign=-1 and no centered mirror.
     """
     f.write(f"\no {object_name}\n")
     f.write(f"# MAP object {inst.object_index}; STPC mesh {mesh.index}; mesh_offset=0x{mesh.offset:08X}\n")
@@ -562,8 +564,8 @@ def _write_instanced_mesh_obj(
         if mirror_object_z:
             out_z = 2.0 * object_z_mirror_center - out_z
         # Final user-tunable alignment correction. This is deliberately applied
-        # after all source-coordinate conversion/mirroring so it behaves like a
-        # simple world-space nudge against the validated terrain.obj.
+        # after all source-coordinate conversion so it behaves like a simple
+        # world-space nudge against terrain.obj.
         out_x += object_x_offset
         out_y += object_y_offset
         out_z += object_z_offset
@@ -877,22 +879,22 @@ def export_world(
     write_terrain: bool = True,
     write_per_object: bool = False,
     terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
+    mirror_terrain_z: bool = False,
     stpc_object_z_sign: int = -1,
     stpc_local_z_sign: int = -1,
     apply_stpc_object_yaw: bool = True,
     stpc_object_yaw_sign: int = 1,
-    mirror_stpc_objects_z: bool = True,
+    mirror_stpc_objects_z: bool = False,
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
-    object_z_offset: float = 1.5,
+    object_z_offset: float = 0.0,
 ) -> WorldRebuildResult:
     """Export the reconstructed level world into `out_dir`.
 
     Confirmed pieces:
-    * TRAK terrain geometry is placed with MAP tile position/yaw and mirrored on Z around the terrain center to match MAP/STPC object space.
+    * TRAK terrain geometry is placed with MAP tile position/yaw in terrain space.
     * STPC object candidates are translated with MAP object XYZ.
-    * STPC object candidates are mirrored around the same world Z center by default, matching the visually validated terrain orientation.
+    * STPC object Z is negated into terrain space, matching the terrain-query path in the executable.
 
     Still unresolved:
     * Full STPC object-definition semantics.
@@ -932,6 +934,7 @@ def export_world(
             scale=scale,
             flip_z=flip_z,
             terrain_yaw_sign=terrain_yaw_sign,
+            mirror_terrain_z=mirror_terrain_z,
             write_per_tile_dir=None,
         )
 

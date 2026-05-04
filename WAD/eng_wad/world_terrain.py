@@ -220,7 +220,7 @@ def write_textured_terrain_obj(
     scale: float = 1.0,
     flip_z: bool = False,
     terrain_yaw_sign: int = 1,
-    mirror_terrain_z: bool = True,
+    mirror_terrain_z: bool = False,
     mtl_name: str = "world.mtl",
 ) -> Path:
     """Write the default textured terrain OBJ.

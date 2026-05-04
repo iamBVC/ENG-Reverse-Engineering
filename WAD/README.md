@@ -113,14 +113,14 @@ World reconstruction options:
 --world-flip-z
 --world-def-scan-bytes 2048
 --world-terrain-yaw-sign -1|1
---world-no-terrain-z-mirror
+--world-terrain-z-mirror
 --world-stpc-object-z-sign -1|1
 --world-stpc-local-z-sign -1|1
 --world-no-stpc-yaw
 --world-stpc-yaw-sign -1|1
 --world-object-x-offset 0.0
 --world-object-y-offset 0.0
---world-object-z-offset 1.5
+--world-object-z-offset 0.0
 ```
 
 ## Output layout

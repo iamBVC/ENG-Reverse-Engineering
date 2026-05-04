@@ -83,14 +83,14 @@ def extract_wad(
     world_scale: float = 1.0,
     world_flip_z: bool = False,
     world_terrain_yaw_sign: int = 1,
-    world_mirror_terrain_z: bool = True,
+    world_mirror_terrain_z: bool = False,
     world_stpc_object_z_sign: int = -1,
     world_stpc_local_z_sign: int = -1,
     world_apply_stpc_yaw: bool = True,
     world_stpc_yaw_sign: int = 1,
     world_object_x_offset: float = 0.0,
     world_object_y_offset: float = 0.0,
-    world_object_z_offset: float = 1.5,
+    world_object_z_offset: float = 0.0,
     verbose: bool = True,
 ) -> bool:
     """Extract one WAD file into a clean per-level output folder."""
@@ -399,14 +399,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--world-scale", type=float, default=1.0, help="scale applied to world/ OBJ exports")
     parser.add_argument("--world-flip-z", action="store_true", help="flip final Z axis in all world/ OBJ exports after per-source conversion")
     parser.add_argument("--world-terrain-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying MAP tile yaw to TRAK terrain")
-    parser.add_argument("--world-no-terrain-z-mirror", action="store_true", help="disable the default centered Z mirror applied to TRAK terrain")
+    parser.add_argument("--world-no-terrain-z-mirror", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--world-terrain-z-mirror", action="store_true", help="apply the old centered Z mirror diagnostic to TRAK terrain")
     parser.add_argument("--world-stpc-object-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to MAP object positions when exporting STPC instances; -1 aligns object Z with TRAK terrain")
     parser.add_argument("--world-stpc-local-z-sign", type=int, choices=(-1, 1), default=-1, help="Z sign applied to local STPC mesh vertices before object yaw/translation")
     parser.add_argument("--world-no-stpc-yaw", action="store_true", help="do not apply experimental MAP object yaw from small_04 to STPC instances")
     parser.add_argument("--world-stpc-yaw-sign", type=int, choices=(-1, 1), default=1, help="sign used when applying experimental MAP object yaw to STPC instances")
     parser.add_argument("--world-object-x-offset", type=float, default=0.0, help="final world-space X offset applied only to STPC object instances after all conversion/mirroring")
     parser.add_argument("--world-object-y-offset", type=float, default=0.0, help="final world-space Y offset applied only to STPC object instances after all conversion/mirroring")
-    parser.add_argument("--world-object-z-offset", type=float, default=1.5, help="final world-space Z offset applied only to STPC object instances after all conversion/mirroring; default 1.5 is the visually validated object/terrain alignment correction")
+    parser.add_argument("--world-object-z-offset", type=float, default=0.0, help="final world-space Z offset applied only to STPC object instances after source-coordinate conversion")
 
     args = parser.parse_args(argv)
 
@@ -458,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             world_scale=args.world_scale,
             world_flip_z=args.world_flip_z,
             world_terrain_yaw_sign=args.world_terrain_yaw_sign,
-            world_mirror_terrain_z=not args.world_no_terrain_z_mirror,
+            world_mirror_terrain_z=args.world_terrain_z_mirror,
             world_stpc_object_z_sign=args.world_stpc_object_z_sign,
             world_stpc_local_z_sign=args.world_stpc_local_z_sign,
             world_apply_stpc_yaw=not args.world_no_stpc_yaw,
