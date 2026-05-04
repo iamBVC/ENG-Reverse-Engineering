@@ -10,12 +10,11 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can:
 
 - scan the WAD container and write a chunk manifest
 - extract level metadata such as the level name
-- decode the `TEXT` chunk into real RGB555 RLE texture PNGs
-- export the remaining `TEXT` palette/metadata table and optional legacy diagnostics
+- decode the `TEXT` chunk into texture/control-map diagnostic PNGs
+- export the `TEXT` palette table and palette-field debug images
 - parse the `MAP ` chunk into world-space tile XYZ data
 - generate MAP CSV files, OBJ marker meshes, a PNG grid, and an HTML map viewer
 - parse the `LGHT` chunk into `lights.csv`
-- decode the `SMPC` chunk into individual `.cvg` sound files, a manifest CSV, and best-effort WAV files
 - decode the `TRAK` chunk into records, vertex/triangle tables, OBJ surfaces, and an HTML viewer
 - export `STPC` static geometry as OBJ meshes
 - export a `world/` folder that reconstructs the level world from TRAK terrain, MAP tile/object placement, and STPC mesh candidates
@@ -62,7 +61,6 @@ Most extraction features are enabled by default.  Use these flags to disable par
 --no-stpc-obj         skip STPC OBJ mesh export
 --no-trak             skip TRAK CSV/OBJ/viewer export
 --no-lights           skip LGHT light CSV export
---no-sounds           skip SMPC sound export
 --no-raw              do not export raw undecoded chunks
 --no-world            skip reconstructed TRAK + MAP-object + STPC world export
 --world-probe          also run the older Section-4 instance-hunting diagnostics, now deprecated
@@ -106,14 +104,19 @@ extracted/t1l1m001/
     wfpc.bin
 
   textures/
-    texture_00.png
-    texture_01.png
-    texture_decode_stats.csv
+    texture_00_grey.png
+    texture_00_pal.png
     ...
 
   texture_fields/
-    texture_00_legacy_field0_meta0.png
-    texture_00_legacy_field1_meta1.png
+    texture_00_field0_meta0.png
+    texture_00_field1_meta1.png
+    texture_00_field2_meta2.png
+    texture_00_field3_marker.png
+    texture_00_field4_rgb_r.png
+    texture_00_field5_rgb_g.png
+    texture_00_field6_rgb_b.png
+    texture_00_field7_extra.png
     ...
 
   palette/
@@ -136,21 +139,6 @@ extracted/t1l1m001/
 
   lights/
     lights.csv
-    summary.txt
-
-  sounds/
-    smpc_manifest.csv
-    cvg/
-      sound_000.cvg
-      sound_001.cvg
-      ...
-    wav/
-      sound_000.wav          # PSX ADPCM decoded to PCM16
-      sound_001.wav
-      ...
-    raw_audio/
-      sound_000_audio.bin    # raw CVG payload without header
-      ...
 
   trak/
     summary.txt
@@ -277,7 +265,7 @@ Exact hits where an STPC object definition contains a decoded STPC mesh-record o
 
 ### `world/objects_primary.obj`
 
-One earliest mesh-reference hit per MAP object. This is the cleanest object export for quick inspection and is now the object source used by `world/combined.obj`.
+One earliest mesh-reference hit per MAP object. This is the cleanest object export for quick inspection.
 
 ### `world/objects_all_candidates.obj`
 
@@ -289,7 +277,7 @@ One OBJ per exact STPC mesh-reference hit. Each file contains exactly one STPC m
 
 ### `world/combined.obj`
 
-The reconstructed terrain plus `objects_primary.obj` in one OBJ. `objects_all_candidates.obj` is still written as a diagnostic, but it is no longer the default combined-world source.
+The reconstructed terrain plus all translated STPC candidate instances in one OBJ.
 
 ### `world/world_viewer.html`
 
@@ -321,13 +309,30 @@ INFO VERS WFPC TEXT FONT SPRT NAME SMPC AMPC SRPC TRAK STPC MAP  LGHT LNFO LGPC
 
 The tag `MAP ` includes a trailing space because chunk tags are exactly four bytes.
 
-## Compression notes
+## LZSS compression
 
-The project still includes an LZSS helper because some early reverse-engineering probes used it, but the main `TEXT`/`TXET` texture images are now decoded with the correct RGB555 RLE stream described below.
+The game uses an LZSS-style compression scheme in texture/control-map data.
+
+```text
+Read control byte b.
+
+If (b & 0x80) == 0:
+    literal run
+    copy next (b & 0x7F) bytes directly
+
+If (b & 0x80) != 0:
+    read byte c
+    w      = (b << 8) | c
+    offset = w & 0x0FFF
+    length = ((w >> 12) & 7) + 3
+    copy length bytes from dst[dp - offset]
+```
+
+Important detail: the currently confirmed decompressor uses a fixed back-reference source for each byte in the run.  It does not use a sliding `dst[dp - offset + i]` source.
 
 ## `TEXT` chunk structure
 
-Despite the name, `TEXT` is not a text-string chunk.  It contains RGB555 compressed textures plus a palette/metadata table.
+Despite the name, `TEXT` is not a text-string chunk.  It contains texture/control-map byte planes and a palette/metadata table.
 
 Observed layout:
 
@@ -342,24 +347,6 @@ repeated texture_count times:
     u32 compressed_size
     bytes compressed_data
 
-Then the texture payload itself is decoded as a stream of little-endian 16-bit packets:
-
-```text
-packet < 0x8000:
-    literal packet
-    read packet RGB555 words
-
-packet & 0x8000:
-    repeat packet
-    count = 0x10000 - packet
-    read one RGB555 word and repeat it count times
-```
-
-Each RGB555 word is decoded as `xRRRRRGGGGGBBBBB` and expanded to 8-bit RGB by left-shifting each 5-bit channel by 3.
-
-After all texture records:
-
-```text
 u32 palette_entry_count
 repeated palette_entry_count times, 8 bytes each:
     byte 0  metadata A
@@ -374,8 +361,9 @@ repeated palette_entry_count times, 8 bytes each:
 
 Known uncertainty:
 
-- The main exported texture PNGs are now decoded as RGB555 RLE.
-- The palette/metadata table is preserved, but its full material/texture binding role is not fully decoded yet.
+- The direct `pixel_byte -> first 256 palette entries` mapping is only a diagnostic view.
+- Palette counts can exceed 256, while texture byte values are only 0..255.
+- The full material/palette remapping logic is not fully decoded yet.
 - Texture flags such as `0x81..0x87` likely encode type/format information, but the exact meanings are not fully confirmed.
 
 ## `MAP ` chunk structure
@@ -416,310 +404,148 @@ Known uncertainty:
 - Tile definitions are exported as raw integer fields, but their semantic meaning is not confirmed.
 - MAP does not appear to contain final render geometry by itself; it likely references/organizes geometry from other chunks such as `STPC`.
 
-## `STPC` / `TRAK` geometry structures
+## `STPC` chunk structure
 
-The executable has now confirmed the shared render/collision geometry record used by TRAK and by STPC-like static meshes.  The two important loader functions are:
+`STPC` contains static polygon geometry.  The exporter scans for validated mesh records and writes OBJ files.
 
-```text
-sub_42AAC0 -> sub_5563F0  // TRAK, 0x84-byte runtime geometry records
-sub_42AB50 -> sub_41F770  // extended 0x8C-byte records used by packed/scene data
-```
-
-### `GeometryRecord84` / runtime record
-
-`sub_5563F0` confirms the normal runtime record is `0x84` bytes.  `sub_402840` confirms that most of the first `0x6C` bytes are culling bounds.
+Recognized mesh record layout:
 
 ```text
-+0x00  u32/f32   unknown metadata
-+0x04  f32       unknown header float
-+0x08  f32       unknown header float
-+0x0C  8 x vec3  culling/bounds points used by sub_402840 frustum tests
-+0x6C  u16       vertex_count
-+0x6E  u16       triangle_count
-+0x70  u32       vertices pointer slot, overwritten by loader
-+0x74  u32       triangles pointer slot, overwritten by loader
-+0x78  u16       collision/contact group 0 count
-+0x7A  u16       collision/contact group 1 count
-+0x7C  u16       collision/contact group 2 count
-+0x7E  u16       still unknown
-+0x80  u32       collision/contact entries pointer slot, overwritten by loader
++0x00  u32/f32   unknown block field
++0x04  f32       unknown / local bound field
++0x08  f32       unknown / local bound field
++0x0C  8 x vec3  local bounding/corner vectors, 96 bytes
++0x6C  u32       packed counts:
+                  low 16 bits  = vertex_count
+                  high 16 bits = triangle_count
++0x70  u32       unknown
++0x74  u32       unknown
++0x78  u32       unknown
++0x7C  u32       unknown
++0x80  u32       unknown
++0x84  u32       repeated vertex_count
++0x88  u32       unknown
++0x8C  vertices  vertex_count * 24 bytes:
+                  f32 x, y, z
+                  f32 nx, ny, nz
+...    triangles triangle_count * 28 bytes:
+                  u16 face_flags
+                  u16 i0, i1, i2
+                  u16 material_or_texture_id
+                  u16 unknown
+                  f32 plane_nx, plane_ny, plane_nz, plane_d
 ```
 
-After the fixed record table, `sub_5563F0` lays out the variable data for every record in order:
+Known uncertainty:
 
-```text
-vertices:          vertex_count * 24 bytes
-triangles:         triangle_count * 28 bytes
-collision entries: (group0 + group1 + group2) * 32 bytes
-```
-
-### Vertex and triangle records
-
-```c
-struct Vertex24 {
-    float x, y, z;
-    float nx, ny, nz;
-};
-
-struct Triangle28Disk {
-    uint16_t flags;
-    uint16_t i0, i1, i2;
-    uint16_t material_index; // runtime: dword_581154 + 20 * material_index
-    uint16_t material_pad;
-    float plane_nx, plane_ny, plane_nz, plane_d;
-};
-```
-
-Confirmed triangle flag notes from `sub_556510` / `sub_41FB30`:
-
-```text
-0x0008 = render batch/material-state break marker
-0x0010 = terrain UV branch bit
-0x0020 = terrain UV swap/filter bit
-0x0400 = backface/plane-cull override
-0x0800 = terrain UV branch bit
-```
-
-Bits `0x0001` and `0x0002` are render/material/effect related but still conservatively named in CSV output.
-
-### Collision/contact entry records
-
-The C/D/E entries are no longer raw unknown data.  `sub_4036D0`, `sub_403AD0`, `sub_4042F0`, and `sub_4046E0` use them as compact collision/contact polygons.
-
-```c
-struct CollisionEntry32 {
-    uint8_t  flags;       // bit0: 0 = 3 edges, 1 = 4 edges
-    uint8_t  surface_id;  // 17/18 conditionally skipped, 30 invalid/no contact
-    int8_t   normal_x_q32;
-    int8_t   normal_y_q32;
-    int8_t   normal_z_q32;
-    int8_t   unknown_05;
-    int16_t  plane_d;
-    uint8_t  edge_data[24]; // 3 or 4 x 6-byte edge equations
-};
-```
-
-The runtime usually scans the combined `group0 + group1 + group2` entry array.  The tool now decodes these into `trak/table_cde_entries.csv` with signed plane coefficients, surface IDs, edge counts, and per-edge values.
-
-### Extended `GeometryRecord8C`
-
-`sub_41F770` confirms an extended `0x8C` form used by packed/scene data.  It starts with the same `GeometryRecord84`, then adds transform-group data used by the `sub_41FB30` skinned/multi-transform path:
-
-```text
-+0x84  u16  base_vertex_count
-+0x86  u16  transform_group_count
-+0x88  u32  transform_group_vertex_counts pointer slot
-```
-
-### `STPC` chunk status
-
-`STPC` static polygon exports still use a validated scanner because the high-level STPC container is not fully table-decoded yet.  The mesh records it finds match the same 24-byte vertex and 28-byte triangle format, and their first `0x6C` bytes are now understood as the same culling/bounds-style header. STPC OBJ export now writes `vt` coordinates per face using the same material-rectangle selector bits confirmed in `sub_556510` (`0x0800`, `0x0010`, `0x0020`) and writes `map_Kd` texture bindings when the TEXT material table is available.
-
-Known remaining STPC uncertainty:
-
-- the high-level STPC container/table of contents
-- exact names for `GeometryRecord84 +0x00/+0x04/+0x08/+0x7E`
-- full semantic split of collision group0/group1/group2
+- The full STPC container is not decoded yet.
+- Mesh records are found with a validated scanner, not a complete table-driven parser.
+- Unknown bytes between mesh records may contain collision data, BSP/spatial partitioning, visibility, batching, material lookup tables, or other render metadata.
+- OBJ material IDs are diagnostic placeholders; texture/material binding is not fully decoded.
 
 ## `TRAK` chunk structure
 
-`TRAK` is structurally decoded from the executable loader.  In the WAD file the tag bytes are stored reversed as `KART`, but the chunk name shown by this tool is `TRAK`.  It is not a simple camera spline: it is the level/world geometry record table used for rendering and collision.
+`TRAK` is now structurally decoded from the game executable loader.  In the WAD file the tag bytes are stored reversed as `KART`, but the chunk name shown by this tool is `TRAK`.
 
-Outputs now include:
+The loader path observed in the executable is:
 
-- `trak/table_b_surfaces.obj` — all decoded render triangles from Table A/B.
-- `trak/per_record_surfaces/` — one OBJ per geometry record/sector.
-- `trak/table_cde_entries.csv` — decoded collision/contact plane entries.
-- `trak/record_header_vectors_diagnostic.obj` — culling/bounds vectors from the record header.
-- `trak/viewer.html` — local/MAP-placed interactive preview, depending on whether MAP_FULL was available.
+```text
+sub_42AAC0
+  reads the whole TRAK chunk
+  reads first uint32 as record_count
+  calls sub_5563F0(&cursor, record_count, &dword_5846EC)
 
-Known remaining TRAK uncertainty:
+sub_5563F0
+  treats the first table as record_count records of 0x84 bytes
+  assigns three runtime pointers inside each record
+  rewrites a field in every Table B entry into a pointer to dword_581154 + 20 * index
+```
 
-- exact names for header fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E`
-- exact semantic split between the three collision entry count groups
-- some triangle flag bits beyond the confirmed render/UV/culling bits
+Confirmed packed layout:
+
+```text
+u32 record_count
+
+repeated record_count times, 0x84 bytes each:
+    +0x00  vec3 center
+    +0x0C  vec3 corners[8]
+    +0x6C  u16 table_a_count
+    +0x6E  u16 table_b_count
+    +0x70  u32 runtime_table_a_pointer_slot, overwritten by game loader
+    +0x74  u32 runtime_table_b_pointer_slot, overwritten by game loader
+    +0x78  u16 table_c_count
+    +0x7A  u16 table_d_count
+    +0x7C  u16 table_e_count
+    +0x7E  u16 padding_or_unused
+    +0x80  u32 runtime_table_cde_pointer_slot, overwritten by game loader
+
+then, for every record in order:
+    Table A:   table_a_count * 24 bytes
+    Table B:   table_b_count * 28 bytes
+    Table CDE: (table_c_count + table_d_count + table_e_count) * 32 bytes
+```
+
+Table A decodes as point/normal data:
+
+```text
+f32 x, y, z
+f32 nx, ny, nz
+```
+
+Table B decodes as indexed triangle/plane/material-like data:
+
+```text
+u16 flags
+u16 i0, i1, i2
+u16 material_or_global_table_index
+u16 unknown
+f32 plane_nx, plane_ny, plane_nz, plane_d
+```
+
+Table C/D/E entries are located and exported, but their field meanings are still unknown.
+
+Current interpretation:
+
+- TRAK is probably not a free camera spline.
+- It looks more like level spatial sectors, navigation/collision surfaces, camera constraints, or track graph data.
+- `trak/table_b_surfaces.obj` exports all decoded Table A/B triangle surfaces as one combined OBJ.
+- `trak/per_record_surfaces/` exports one OBJ per TRAK record/sector, which is easier to inspect than the combined mesh.
+- `trak/record_aabbs.obj` exports visible diagnostic bounding boxes derived from decoded Table A vertices.
+- `trak/record_centers.obj` exports visible center markers.
+- `trak/record_header_vectors_diagnostic.obj` preserves the raw 8-vector record-header diagnostic, but those vectors are not treated as final geometry.
+- `trak/viewer.html` previews the decoded Table A/B triangle surfaces with auto-fit, height coloring, pan/zoom, and hover details.
+
+Known uncertainty:
+
+- The exact gameplay role of TRAK is not confirmed.
+- Table C/D/E semantics are not decoded.
+- The 20-byte global table at `dword_581154`, referenced by Table B material/global indices, is not decoded yet.
+- The Table B `flags`, `unknown`, and material/global table index meanings are not fully decoded.
 
 ## `LGHT` chunk structure
 
-`LGHT` is now mostly decoded from the PC executable path.  In the WAD dispatcher, the little-endian chunk tag `1279739988` / `0x4C474854` is `LGHT`, and it is loaded by `sub_42C180`.  The loader creates 112-byte runtime light objects with `sub_41B8A0` and stores their pointers in the world container.
+`LGHT` contains light entries.
 
-World/container fields:
+Observed layout:
 
-```c
-struct MapWorld_LightFields {
-    uint32_t light_count;      // world + 0x5C / +92
-    RuntimeLight112 **lights;  // world + 0x60 / +96
-};
+```text
+u32 count
+repeated entries:
+    u8 type
+    u8 red
+    u8 green
+    u8 blue
+    f32 f0
+    f32 f1
+    f32 f2
+    f32 f3
+    f32 f4
 ```
 
-### Disk layout
+Known uncertainty:
 
-The chunk starts with a 32-bit count, then packed type-dependent records.
-
-```c
-#pragma pack(push, 1)
-
-struct LGHT_Header {
-    uint32_t light_count;
-};
-
-struct LGHT_Type1_Directional {
-    uint8_t type;      // 1
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-
-    float dir_x;
-    float dir_y;
-    float dir_z;      // runtime negates z, then normalizes dir_x/dir_y/-dir_z
-}; // 16 bytes
-
-struct LGHT_Type2_Point {
-    uint8_t type;      // 2
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-
-    float x;
-    float y;
-    float z;          // runtime negates z
-
-    float inner_radius;
-    float outer_radius;
-
-    uint8_t falloff_or_mode;
-}; // 25 bytes, packed
-
-struct LGHT_Type4_NegativePoint {
-    uint8_t type;      // 4 on disk; constructor creates runtime type 2
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-
-    float x;
-    float y;
-    float z;          // runtime negates z
-
-    float inner_radius;
-    float outer_radius;
-
-    uint8_t falloff_or_mode;
-}; // 25 bytes, packed
-
-#pragma pack(pop)
-```
-
-### Color conversion
-
-For type `1` and type `2`, `sub_42C180` converts each RGB byte to runtime intensity with:
-
-```c
-float channel = (2.0f * byte_value) / 255.0f;
-```
-
-So disk color bytes cover approximately `0.0..2.0` intensity.  For disk type `4`, the loader reads the same point-light payload but converts color to negative/special values before creating a runtime type-2 light:
-
-```c
-runtime_channel = -((channel + 1.0f) * 0.5f);
-```
-
-Type `4` is therefore best described as a **negative/special point light** until the lighting evaluator is fully named.
-
-### Runtime light object
-
-`sub_41B8A0` allocates 112 bytes for each light.  `sub_41BEE0` copies base color to current/effective color and can convert it to grayscale when color rendering is disabled.
-
-```c
-#pragma pack(push, 1)
-struct RuntimeLight112 {
-    float color_r;             // +0x00 current/effective
-    float color_g;             // +0x04 current/effective
-    float color_b;             // +0x08 current/effective
-    float color_a_or_unused;   // +0x0C copied from +0x1C
-
-    float base_r;              // +0x10 constructor r
-    float base_g;              // +0x14 constructor g
-    float base_b;              // +0x18 constructor b
-    float base_a_or_unused;    // +0x1C
-
-    // runtime type 2 positional light current position
-    float pos_x_current;       // +0x20
-    float pos_y_current;       // +0x24
-    float pos_z_current;       // +0x28
-
-    // runtime type 1 normalized direction
-    float dir_x;               // +0x2C
-    float dir_y;               // +0x30
-    float dir_z;               // +0x34
-
-    // runtime type 2 base/original position
-    float pos_x_base;          // +0x38
-    float pos_y_base;          // +0x3C
-    float pos_z_base;          // +0x40
-
-    // runtime type 1 copied normalized direction
-    float dir_x_base;          // +0x44
-    float dir_y_base;          // +0x48
-    float dir_z_base;          // +0x4C
-
-    // runtime type 2 radius/falloff
-    float outer_radius_sq;     // +0x50
-    float inner_radius_sq;     // +0x54
-    float outer_radius;        // +0x58
-    float inner_radius;        // +0x5C
-    float inv_radius_range;    // +0x60 = 1.0 / (outer_radius - inner_radius) when non-zero
-    uint32_t falloff_or_mode;  // +0x64 final disk byte from type 2/4
-
-    uint32_t type;             // +0x68, 1=directional, 2=point/ranged
-    uint8_t active_or_flags;   // +0x6C, constructor clears to 0
-    uint8_t unknown_6D[3];
-}; // 112 bytes
-#pragma pack(pop)
-```
-
-`sub_41BD70`, `sub_41BF80`, `sub_41BFA0`, and `sub_41BFC0` are simple active-light linked-list helpers.
-
-### Current LGHT outputs
-
-`lights/lights.csv` now includes both raw disk values and runtime-derived values:
-
-- `kind`: `directional`, `point`, `negative_point`, or `unknown`
-- disk RGB bytes and runtime intensities
-- type-1 direction and normalized runtime direction
-- type-2/type-4 position, runtime-negated Z, inner/outer radii, squared radii, and inverse radius range
-- `falloff_or_mode`, the final byte of type-2/type-4 records
-
-`lights/summary.txt` summarizes counts by light kind and repeats the executable-backed interpretation.
-
-Known remaining LGHT uncertainty:
-
-- The final byte in type `2`/`4` is still named `falloff_or_mode`; it should be renamed once the lighting evaluator using runtime offset `+0x64` is reversed.
-- `RuntimeLight112 +0x0C/+0x1C` are copied by `sub_41BEE0`, but are not initialized by the constructor pseudocode we have.
-
-## Chunk reversal progress
-
-Percentage of known fields per chunk, based on confirmed executable analysis.
-"Fields" counts named struct members, not raw bytes.  A field is "reversed"
-when its offset, size, and semantic meaning are all confirmed from the EXE.
-
-| Chunk  | Reversed | Notes on remaining unknowns |
-|--------|----------|-----------------------------|
-| `INFO` | ~95 %    | level identifier fully read; minor metadata flags unconfirmed |
-| `VERS` | ~95 %    | version number fully read |
-| `NAME` | ~90 %    | level name string decoded; exact encoding edge-cases unconfirmed |
-| `TEXT` | ~75 %    | RGB555 RLE textures 100 %; material table format confirmed; `flags`, `extra` byte, and full texture-binding semantics ~50 % |
-| `LGHT` | ~90 %    | all 3 light types decoded; final type-2/4 byte (`falloff_or_mode`) name not confirmed |
-| `TRAK` | ~72 %    | `Vertex24`, `Triangle28`, `CollisionEntry32` mostly decoded; header `+0x00/+0x04/+0x08/+0x7E` and collision group 0/1/2 split still unnamed; 3+ triangle flag bits unknown |
-| `MAP ` | ~55 %    | tile XYZ and most object58 fields confirmed; `flags`/`type_idx` semantic meaning unknown; Section 3 (90 B) and Section 4 (34 B) content unnamed |
-| `STPC` | ~45 %    | 3-section container confirmed; `GeometryRecord8C` ~70 %; `GeometryAnimRecord32` ~30 %; Section 3 disabled in PC WADs; object-definition bytecode ~20 % |
-| `SMPC` | ~75 %    | `sound_count` + CVG entry structure 100 %; CVG header fields named; audio codec confirmed as PSX ADPCM (16-byte blocks, 28 samples/block); `codec_quality` semantic meaning and non-1 `channels` encoding still unclear |
-| `AMPC` | ~10 %    | same loader structure as SMPC confirmed; content not yet parsed |
-| `FONT` | ~10 %    | raw bytes preserved; glyph layout not decoded |
-| `SRPC` | ~5 %     | WAD position known; content not decoded |
-| `LGPC` | ~5 %     | WAD position known; content not decoded |
-| `WFPC` | ~5 %     | WAD position known; content not decoded |
-| `SPRT` | ~5 %     | WAD position known; content not decoded |
-| `LNFO` | ~5 %     | WAD position known; content not decoded |
+- The meaning of `f0..f4` depends on light type and is not fully decoded.
+- They may encode direction, position, radius, falloff, or intensity depending on the light.
 
 ## Chunks and files not fully decoded yet
 
@@ -727,8 +553,8 @@ These are preserved in `raw/` for later analysis:
 
 | Chunk | Raw output | Current status |
 |---|---|---|
-| `STPC` | `raw/stpc.bin` | Static mesh records decoded; culling header and triangle flags documented; full container/material binding still partial |
-| `SMPC` | `raw/smpc.bin`, `sounds/` | Level sounds decoded: `sound_count` + CVG entries; codec confirmed as PSX ADPCM (16-byte blocks, 28 samples/block); exports .cvg blobs, manifest CSV, and decoded WAV files |
+| `STPC` | `raw/stpc.bin` | Static mesh records decoded; full container, material binding, collision/BSP unknown |
+| `SMPC` | `raw/smpc.bin` | Not decoded; likely sprite/mesh compressed or related geometry data |
 | `SRPC` | `raw/srpc.bin` | Not decoded; likely sound/resource config |
 | `TRAK` | `raw/trak.bin`, `trak/` | Main record table and A/B/CDE table packing decoded; A/B exported as surfaces; C/D/E semantics still unknown |
 | `AMPC` | `raw/ambient_audio.bin` | Exported raw; semantic structure not decoded |
@@ -736,8 +562,8 @@ These are preserved in `raw/` for later analysis:
 | `WFPC` | `raw/wfpc.bin` | Not decoded |
 | `FONT` | `raw/font.bin` | Exported raw; glyph layout not decoded |
 | `MAP ` | `map/` outputs | Tile list/grid partially decoded; flags/type semantics still unknown |
-| `TEXT` | `textures/`, `palette/` | RGB555 RLE texture images decoded; palette/material binding semantics still partly unknown |
-| `LGHT` | `lights/lights.csv`, `lights/summary.txt` | Directional, point, and negative/special point records decoded from `sub_42C180` / `sub_41B8A0`; final type-2/type-4 byte still named `falloff_or_mode` |
+| `TEXT` | `textures/`, `palette/` | Compression and palette table parsed; material remap/field semantics still unknown |
+| `LGHT` | `lights/lights.csv` | Light entries parsed; exact field semantics still unknown |
 
 ## What is left to do
 
@@ -746,12 +572,11 @@ Useful next reverse-engineering tasks:
 1. Validate MAP-object → STPC-definition → STPC-mesh references visually in `world/combined.obj`.
 2. Decode MAP object scale and the full STPC object-definition language, then apply it to `world/objects_all_candidates.obj`.
 2. Decode `MAP ` `flags` and `type_idx` values.
-3. Validate the current EXE-derived STPC triangle UV/material mapping across more levels; texture pages now bind through the decoded TEXT runtime material table.
-4. Finish naming TRAK/STPC header fields `+0x00/+0x04/+0x08/+0x7E` and the exact semantic split of collision groups 0/1/2.
-5. Reverse the runtime lighting evaluator that reads `RuntimeLight112 +0x64` so `falloff_or_mode` can be named precisely.
-6. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
-7. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
-8. Build a real 3D viewer that loads `MAP ` marker data, `STPC` render geometry, `TRAK` sector/surface data, and decoded `LGHT` lights together.
+3. Decode texture/material binding between `STPC` triangle material IDs and `TEXT` palette/texture data.
+4. Decode TRAK Table C/D/E semantics and the 20-byte global table at `dword_581154` used by Table B material/global indices.
+5. Identify whether `SMPC`, `LGPC`, or `WFPC` contain collision, visibility, portals, sprites, or runtime placement tables.
+6. Replace the STPC mesh scanner with a full container parser once the top-level tables are understood.
+7. Build a real 3D viewer that loads `MAP ` marker data, `STPC` render geometry, and `TRAK` sector/surface data together.
 
 ## Module overview
 
@@ -759,7 +584,7 @@ Useful next reverse-engineering tasks:
 wad_extractor.py          main command-line entry point
 
 eng_wad/binary.py         Reader, endian helpers, hexdump helper
-eng_wad/lzss.py           legacy/experimental LZSS helper
+eng_wad/lzss.py           LZSS decompressor
 eng_wad/wad.py            WAD chunk scanner/container utilities
 eng_wad/text_chunk.py     TEXT parser and texture/palette exports
 eng_wad/map_chunk.py      partial-safe MAP parser
@@ -769,7 +594,6 @@ eng_wad/instance_hunter.py deprecated Section-4 world-probe diagnostics
 eng_wad/stpc_chunk.py     STPC mesh scanner/exporter library
 eng_wad/trak_chunk.py     TRAK parser/exporter library
 eng_wad/light_chunk.py    LGHT parser/exporter
-eng_wad/smpc_chunk.py     SMPC parser/exporter (CVG sound entries + IMA ADPCM WAV)
 eng_wad/raw_export.py     raw binary chunk exporters
 ```
 
@@ -898,7 +722,7 @@ world/diagnostics/objects_grouped_by_object/
 
 contains grouped candidate hits per MAP object. These files may intentionally contain multiple meshes and should be treated as diagnostic.
 
-Known limitation: the current visual reference is `terrain.obj`. The exporter therefore mirrors STPC object instances around the same centered world Z axis used by the validated terrain orientation. STPC object yaw is applied experimentally from `small_04`; scale and full STPC object-definition semantics are still unresolved. STPC OBJ faces now include per-face UVs derived from the EXE-confirmed material-rectangle flag path, and `world.mtl` maps `stpc_mat_####` entries to decoded TEXT textures when available.
+Known limitation: the current visual reference is `terrain.obj`. The exporter therefore mirrors STPC object instances around the same centered world Z axis used by the validated terrain orientation. STPC object yaw is applied experimentally from `small_04`; scale, materials, and full STPC object-definition semantics are still unresolved.
 
 ## World rebuild transform update
 
@@ -984,167 +808,64 @@ This is now the default, but the flag remains available for experiments. The cor
 
 Current best explanation: this is probably an object-anchor/pivot correction from the STPC object-definition scripting layer, not a MAP position error. The MAP object XYZ fields align globally, and the executable contains a STPC definition resolver (`sub_553630`) that converts offsets inside object-definition bytecode to runtime pointers before executing that definition. Our exporter currently scans those definitions for mesh offsets, but it does not yet execute the nearby placement/anchor opcodes. The consistent `+1.5` correction likely represents one of those definition-level local placement constants or a collision/render pivot convention used by the engine.
 
-## Material / UV checkpoint
+## SRPC / CPRS streamed speech export
 
-The trailing table after the `TEXT` texture records is now treated as the executable-confirmed runtime material source table, not as a color palette for the decoded RGB555 texture images.
+Latest EXE-backed SRPC reverse-engineering notes:
 
-The game expands each 8-byte disk row into a 20-byte runtime material record at `dword_581154`:
+- The WAD dispatcher sees integer `0x53525043`; this appears in the tool as human label `SRPC` / reversed disk tag `CPRS`.
+- The original game calls `sub_545350(level_context, stream, 2)` for this chunk.
+- Case `2` reads a 32-bit entry count, then `count * 16` bytes into runtime global `dword_6D91C4` and stores the count in `dword_6D91C8`.
+- Runtime playback in `sub_546620` uses the entry index as a speech/dialogue cue, opens `Music/ENGLISH.CVS`, points AAL at `CVS + cvs_offset`, aligns `cvs_size` up to `0x800`, and loads it as AAL resource type `0x15`.
+- The CVS stream slices are PlayStation/SPU ADPCM: mono, 16-byte frames, 28 samples per frame.
+
+Confirmed disk structure:
+
+```c
+#pragma pack(push, 1)
+struct SRPCChunkDisk {
+    uint32_t count;
+    SRPCEntry16 entries[count];
+};
+
+struct SRPCEntry16 {
+    uint32_t unknown_00;       // often dialogue/resource id; not required for playback lookup
+    uint16_t rate_or_timing;   // sample rate scalar; 2048 -> 22050 Hz
+    uint16_t unknown_06;       // usually 0 in observed data
+    uint32_t cvs_offset;       // byte offset into Music/ENGLISH.CVS
+    uint32_t cvs_size;         // byte size before runtime 0x800 alignment
+};
+#pragma pack(pop)
+```
+
+Sample rate conversion from `sub_546620`:
 
 ```text
-+0x00 u16 flags
-+0x02 u8  texture page index
-+0x03 u8  extra/source/animation byte, often 0xFF
-+0x04 u8  source x0
-+0x08 u8  source x1
-+0x0C u8  source y0
-+0x10 u8  source y1
+sample_rate_hz = rate_or_timing * 44100 / 4096
 ```
 
-`sub_407240` converts the source rectangle to UV floats as:
+Typical observed value:
 
 ```text
-u0 = x0 / texture_width
-u1 = (x1 + 1) / texture_width
-v0 = y0 / texture_height
-v1 = (y1 + 1) / texture_height
+rate_or_timing = 2048 -> 22050 Hz
 ```
 
-Default material/texture outputs:
+Decoded exporter outputs under `srpc/`:
 
 ```text
-materials/
-  runtime_material_table_20.csv
-  texture_inventory.csv
-  texture_material_usage_summary.csv
-  trak_terrain_material_usage.csv
-  stpc_material_usage.csv
-  summary.json
-
-world/
-  terrain.obj
-  terrain_textured.obj
-  world.mtl
-  textures/texture_XX.png
+srpc_entries.csv         # decoded 16-byte table, offsets, sizes, durations
+summary.txt              # concise SRPC reverse-engineering summary
+cvs_slices/*.cvs         # raw CVS slices, preserving original ADPCM data
+wav/*.wav                # decoded PCM WAV speech files
+mp3/*.mp3                # optional, requires ffmpeg and --srpc-mp3
 ```
 
-`terrain_textured.obj` is now the normal textured terrain export. It uses the
-visually confirmed terrain UV mapping reconstructed from the game's
-`sub_556510` renderer path. The older UV variant folders and texture-index
-remap diagnostics have been removed from the default project.
+The raw chunk is still preserved as `raw/srpc.bin` when raw export is enabled.
 
-## Validated terrain texture and UV behavior
+Usage examples:
 
-Texture PNG export defaults to BGR channel order, which matches the original
-colors after the observed red/blue channel swap. The older RGB order is still
-available only for comparison:
-
-```bash
-python wad_extractor.py t1l1m001.wad --texture-channel-order rgb
+```bat
+python wad_extractor.py T1L1M001.WAD --srpc-cvs Music\ENGLISH.CVS
+python wad_extractor.py T1L1M001.WAD --srpc-cvs english.CVS --srpc-mp3
 ```
 
-Terrain texture page mapping uses the direct runtime material texture page id.
-Earlier texture-index remap probes looked worse than direct mapping, so those
-comparison outputs are no longer generated.
-
-Terrain UVs are generated from the validated EXE logic:
-
-```text
-material +0x04 = u0
-material +0x08 = u1
-material +0x0C = v0
-material +0x10 = v1
-
-TRAK face flags:
-0x0800  selects the main terrain UV branch
-0x0010  selects the alternate top-row branch when 0x0800 is set
-0x0020  swaps the material U endpoints
-```
-
-The exporter applies this mapping directly to `world/terrain_textured.obj`.
-There are no UV-variant command-line flags anymore because this mapping is the
-validated default.
-
-## Latest executable-backed reverse-engineering updates
-
-This project now includes a dedicated reverse-engineering handoff document:
-
-```text
-REVERSE_ENGINEERING_BIBLE.md
-```
-
-That file is the canonical long-form reference for the current state of the WAD reverse engineering. It documents the known chunks, the relevant decompiled functions, function inputs/outputs, runtime globals, structs, field offsets, data conversions, and remaining uncertainties.
-
-### MAP object / actor bootstrap update
-
-The `MAP ` object table is now decoded through the actual executable path:
-
-```text
-sub_42AC50      reads packed MapObjectDisk58 records
-sub_54CFC0      converts MapObjectRuntime72 records into SpawnParams + Transform32
-sub_54BFC0      allocates and initializes Actor340 runtime actors
-```
-
-New/updated `map_full/` outputs:
-
-```text
-objects_58_disk.csv       packed 58-byte MAP object records with EXE-backed names
-objects_72_runtime.csv    runtime-expanded 72-byte object records
-actors_spawn_preview.csv  predicted Actor340 spawn inputs from each object
-object_spawn_points.obj   confirmed fixed12 object position markers
-```
-
-Important object facts:
-
-- Disk object records are 58 bytes.
-- Runtime object records are 72 bytes.
-- Object position fields are 12.12 fixed-point.
-- Object rotations are 16-bit disk units shifted left by 12 before being copied to `Actor340` transforms.
-- `flags & 0x0002` means the object is skipped during initial actor bootstrap.
-- `script_offset` becomes `dword_6D9DBC + script_offset`, so object script/data lives inside the loaded `STPC/CPTS` blob.
-
-### Actor340 runtime struct update
-
-The runtime actor pool is now documented in `docs/REVERSE_ENGINEERING_BIBLE.md`.
-
-Confirmed highlights:
-
-- Actor stride is `0x154` / 340 bytes.
-- `dword_6D9DC0` is the actor pool base.
-- `dword_6D9E38` is the active actor list head.
-- `dword_6D9E3C` is the free actor list head.
-- `sub_54CEF0` resets actor defaults.
-- `sub_54BC30` builds the actor 3x4 transform matrix from rotation, position, and scale.
-- `sub_54D180` is the actor script VM loop.
-- `sub_54BC00` and `sub_54BBD0` are script stack pop/push helpers.
-
-### LGHT update
-
-The `LGHT` parser now follows the executable-confirmed typed disk layout:
-
-- type `1`: directional light
-- type `2`: point/ranged light
-- type `4`: special/negative point light, converted to runtime type `2`
-
-`lights/lights.csv` includes decoded colors, runtime color conversion, normalized directions, positions, inner/outer radii, squared radii, and inverse radius range.
-
-### Geometry / TRAK / STPC update
-
-Core geometry records are now documented as:
-
-```text
-GeometryRecord84  132-byte direct geometry record used by dword_5846EC / TRAK
-GeometryRecord8C  140-byte extended geometry record used by CPTS/STPC transform-group paths
-```
-
-Confirmed fields include:
-
-- `+0x0C..+0x6B`: 8 culling/bounds points used by `sub_402840`
-- `+0x6C`: vertex count
-- `+0x6E`: triangle count
-- `+0x70`: `Vertex24 *`
-- `+0x74`: `Triangle28 *`
-- `+0x78/+0x7A/+0x7C`: collision group counts
-- `+0x80`: `CollisionEntry32 *`
-
-`TRAK` collision/contact entries are decoded as 32-byte plane/edge-test records in `trak/table_cde_entries.csv`.
-
+If no CVS file is provided or found next to the WAD, the tool still exports `srpc/srpc_entries.csv` and `srpc/summary.txt`, but it cannot write speech slices or standard audio files.

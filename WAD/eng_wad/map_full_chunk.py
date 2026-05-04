@@ -213,134 +213,35 @@ class MapColorBlock:
 
 @dataclass
 class MapObjectRecord:
-    """One packed 58-byte MAP object record as it appears on disk.
+    """
+    One 58-byte object/logic-like record near the end of MAP.
 
-    sub_42AC50 expands this to a 72-byte runtime object record.  sub_54CFC0
-    later converts that runtime record into SpawnParams + Transform32 and calls
-    sub_54BFC0 to create an Actor340.  Field names below follow that proven
-    path where possible.
+    The executable expands this to 72 bytes and fixes up two fields into
+    pointers: one into Section2 and one into Section4.  This is likely a real
+    gameplay/logic/entity table, but the field meanings are still not fully
+    decoded.
     """
 
     index: int
     file_offset: int
     raw: bytes
-
-    rot_x_units: int           # +0x00 u16, runtime u32; actor receives << 12
-    rot_y_units: int           # +0x02 u16
-    rot_z_units: int           # +0x04 u16
-
-    pos_x_fixed12: int         # +0x06 s/u32, copied directly to Transform32
-    pos_y_fixed12: int         # +0x0A
-    pos_z_fixed12: int         # +0x0E
-
-    script_offset: int         # +0x12, runtime pointer = CPTS base + offset
-    local_count: int           # +0x16, Actor340 +0x100
-    section2_index_raw: int    # +0x1A, sentinel => NULL, else section2 + 4*idx
-    stack_word_count: int      # +0x1E, passed as sub_54BFC0 a4
-    stack_arg_count: int       # +0x22, SpawnParams.initial_stack_count
-    spawn_flags: int           # +0x26, Actor340 +0xEC and +0x138
-    extra_count: int           # +0x2A, optional extra array count
-    section4_index_raw: int    # +0x2E, sentinel => NULL, else section4 + 48*idx
-    spawn_aux_raw: int         # +0x32, runtime +0x40; may become section4 tail ptr
-    flags: int                 # +0x36 u16; bit 1 means skip initial spawn
-    extra_u16: int             # +0x38 u16
-
-    @property
-    def skip_initial_spawn(self) -> bool:
-        return bool(self.flags & 0x0002)
-
-    @property
-    def pos_x(self) -> float:
-        return self.pos_x_fixed12 / 4096.0
-
-    @property
-    def pos_y(self) -> float:
-        return self.pos_y_fixed12 / 4096.0
-
-    @property
-    def pos_z(self) -> float:
-        return self.pos_z_fixed12 / 4096.0
-
-    @property
-    def actor_rot_x_fixed(self) -> int:
-        return self.rot_x_units << 12
-
-    @property
-    def actor_rot_y_fixed(self) -> int:
-        return self.rot_y_units << 12
-
-    @property
-    def actor_rot_z_fixed(self) -> int:
-        return self.rot_z_units << 12
-
-    # Backward-compatible aliases used by older world_rebuild.py paths.
-    @property
-    def small_00(self) -> int:
-        return self.rot_x_units
-
-    @property
-    def small_04(self) -> int:
-        return self.rot_y_units
-
-    @property
-    def small_08(self) -> int:
-        return self.rot_z_units
-
-    @property
-    def u32_16(self) -> int:
-        return self.pos_x_fixed12 & 0xFFFFFFFF
-
-    @property
-    def u32_20(self) -> int:
-        return self.pos_y_fixed12 & 0xFFFFFFFF
-
-    @property
-    def u32_24(self) -> int:
-        return self.pos_z_fixed12 & 0xFFFFFFFF
-
-    @property
-    def name_or_string_offset(self) -> int:
-        return self.script_offset
-
-    @property
-    def u32_36(self) -> int:
-        return self.local_count
-
-    @property
-    def section2_index_or_sentinel(self) -> int:
-        return self.section2_index_raw
-
-    @property
-    def u32_44(self) -> int:
-        return self.stack_word_count
-
-    @property
-    def u32_48(self) -> int:
-        return self.stack_arg_count
-
-    @property
-    def u32_52(self) -> int:
-        return self.spawn_flags
-
-    @property
-    def u32_56(self) -> int:
-        return self.extra_count
-
-    @property
-    def section4_index_or_sentinel(self) -> int:
-        return self.section4_index_raw
-
-    @property
-    def u32_64(self) -> int:
-        return self.spawn_aux_raw
-
-    @property
-    def u16_68(self) -> int:
-        return self.flags
-
-    @property
-    def u16_70(self) -> int:
-        return self.extra_u16
+    small_00: int
+    small_04: int
+    small_08: int
+    u32_16: int
+    u32_20: int
+    u32_24: int
+    name_or_string_offset: int
+    u32_36: int
+    section2_index_or_sentinel: int
+    u32_44: int
+    u32_48: int
+    u32_52: int
+    u32_56: int
+    section4_index_or_sentinel: int
+    u32_64: int
+    u16_68: int
+    u16_70: int
 
 
 @dataclass
@@ -535,23 +436,23 @@ def parse_map_full_exe(map_data: bytes, trak: TrakFile, *, assume_optional20: bo
             index=i,
             file_offset=off,
             raw=raw,
-            rot_x_units=struct.unpack_from("<H", raw, 0)[0],
-            rot_y_units=struct.unpack_from("<H", raw, 2)[0],
-            rot_z_units=struct.unpack_from("<H", raw, 4)[0],
-            pos_x_fixed12=struct.unpack_from("<i", raw, 6)[0],
-            pos_y_fixed12=struct.unpack_from("<i", raw, 10)[0],
-            pos_z_fixed12=struct.unpack_from("<i", raw, 14)[0],
-            script_offset=struct.unpack_from("<I", raw, 18)[0],
-            local_count=struct.unpack_from("<I", raw, 22)[0],
-            section2_index_raw=struct.unpack_from("<I", raw, 26)[0],
-            stack_word_count=struct.unpack_from("<I", raw, 30)[0],
-            stack_arg_count=struct.unpack_from("<I", raw, 34)[0],
-            spawn_flags=struct.unpack_from("<I", raw, 38)[0],
-            extra_count=struct.unpack_from("<I", raw, 42)[0],
-            section4_index_raw=struct.unpack_from("<I", raw, 46)[0],
-            spawn_aux_raw=struct.unpack_from("<I", raw, 50)[0],
-            flags=struct.unpack_from("<H", raw, 54)[0],
-            extra_u16=struct.unpack_from("<H", raw, 56)[0],
+            small_00=struct.unpack_from("<H", raw, 0)[0],
+            small_04=struct.unpack_from("<H", raw, 2)[0],
+            small_08=struct.unpack_from("<H", raw, 4)[0],
+            u32_16=struct.unpack_from("<I", raw, 6)[0],
+            u32_20=struct.unpack_from("<I", raw, 10)[0],
+            u32_24=struct.unpack_from("<I", raw, 14)[0],
+            name_or_string_offset=struct.unpack_from("<I", raw, 18)[0],
+            u32_36=struct.unpack_from("<I", raw, 22)[0],
+            section2_index_or_sentinel=struct.unpack_from("<I", raw, 26)[0],
+            u32_44=struct.unpack_from("<I", raw, 30)[0],
+            u32_48=struct.unpack_from("<I", raw, 34)[0],
+            u32_52=struct.unpack_from("<I", raw, 38)[0],
+            u32_56=struct.unpack_from("<I", raw, 42)[0],
+            section4_index_or_sentinel=struct.unpack_from("<I", raw, 46)[0],
+            u32_64=struct.unpack_from("<I", raw, 50)[0],
+            u16_68=struct.unpack_from("<H", raw, 54)[0],
+            u16_70=struct.unpack_from("<H", raw, 56)[0],
         ))
 
     # The first four tested PC levels have no optional 0x200000 chain table, but
@@ -613,8 +514,6 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
         "color_block_count": len(parsed.colors),
         "color_total_bytes": sum(c.byte_size + c.extra_byte_size for c in parsed.colors),
         "object_count": len(parsed.objects),
-        "object_skip_initial_spawn_count": sum(1 for o in parsed.objects if o.skip_initial_spawn),
-        "object_initial_spawn_count": sum(1 for o in parsed.objects if not o.skip_initial_spawn),
         "object_count_unknown_b": parsed.object_count_unknown_b,
         "final_optional_dword": parsed.final_optional_dword,
         "final_u16": parsed.final_u16,
@@ -639,141 +538,35 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
     _write_csv(out_dir / "tile_trak_record_indices.csv", ["tile_index","trak_record_index"], ({"tile_index":i,"trak_record_index":v} for i,v in enumerate(parsed.tile_trak_indices)))
     _write_csv(out_dir / "optional20_records.csv", ["index","file_offset","u32_00","u32_04","u32_08","u32_12","trak_record_index_16","block_tile_index"], (r.__dict__ for r in parsed.optional20))
     _write_csv(out_dir / "vertex_color_blocks.csv", ["tile_index","trak_record_index","vertex_count","color_offset","layer_count","byte_size","max_alpha_first_layer","extra_trak_record_index","extra_vertex_count","extra_color_offset","extra_layer_count","extra_byte_size"], (c.__dict__ for c in parsed.colors))
-    object_fields = [
-        "index","file_offset","raw_hex",
-        "rot_x_units","rot_y_units","rot_z_units",
-        "actor_rot_x_fixed","actor_rot_y_fixed","actor_rot_z_fixed",
-        "pos_x_fixed12","pos_y_fixed12","pos_z_fixed12","pos_x","pos_y","pos_z",
-        "script_offset","script_offset_hex",
-        "local_count","section2_index_raw","section2_valid",
-        "stack_word_count","stack_arg_count","spawn_flags","spawn_flags_hex","extra_count",
-        "section4_index_raw","section4_valid","spawn_aux_raw","spawn_aux_raw_hex",
-        "flags","flags_hex","skip_initial_spawn","extra_u16",
-    ]
-    _write_csv(out_dir / "objects_58_disk.csv", object_fields, (
-        {
-            "index": o.index,
-            "file_offset": o.file_offset,
-            "raw_hex": _hex(o.raw),
-            "rot_x_units": o.rot_x_units,
-            "rot_y_units": o.rot_y_units,
-            "rot_z_units": o.rot_z_units,
-            "actor_rot_x_fixed": o.actor_rot_x_fixed,
-            "actor_rot_y_fixed": o.actor_rot_y_fixed,
-            "actor_rot_z_fixed": o.actor_rot_z_fixed,
-            "pos_x_fixed12": o.pos_x_fixed12,
-            "pos_y_fixed12": o.pos_y_fixed12,
-            "pos_z_fixed12": o.pos_z_fixed12,
-            "pos_x": f"{o.pos_x:.9g}",
-            "pos_y": f"{o.pos_y:.9g}",
-            "pos_z": f"{o.pos_z:.9g}",
-            "script_offset": o.script_offset,
-            "script_offset_hex": f"0x{o.script_offset:08X}",
-            "local_count": o.local_count,
-            "section2_index_raw": o.section2_index_raw,
-            "section2_valid": 0 <= o.section2_index_raw < len(parsed.section2),
-            "stack_word_count": o.stack_word_count,
-            "stack_arg_count": o.stack_arg_count,
-            "spawn_flags": o.spawn_flags,
-            "spawn_flags_hex": f"0x{o.spawn_flags:08X}",
-            "extra_count": o.extra_count,
-            "section4_index_raw": o.section4_index_raw,
-            "section4_valid": 0 <= o.section4_index_raw < len(parsed.section4),
-            "spawn_aux_raw": o.spawn_aux_raw,
-            "spawn_aux_raw_hex": f"0x{o.spawn_aux_raw:08X}",
-            "flags": o.flags,
-            "flags_hex": f"0x{o.flags:04X}",
-            "skip_initial_spawn": o.skip_initial_spawn,
-            "extra_u16": o.extra_u16,
-        } for o in parsed.objects
+    _write_csv(out_dir / "objects_58.csv", ["index","file_offset","raw_hex","small_00","small_04","small_08","u32_16","u32_20","u32_24","name_or_string_offset","u32_36","section2_index_or_sentinel","u32_44","u32_48","u32_52","u32_56","section4_index_or_sentinel","u32_64","u16_68","u16_70"], (
+        {"index":o.index,"file_offset":o.file_offset,"raw_hex":_hex(o.raw),"small_00":o.small_00,"small_04":o.small_04,"small_08":o.small_08,"u32_16":o.u32_16,"u32_20":o.u32_20,"u32_24":o.u32_24,"name_or_string_offset":o.name_or_string_offset,"u32_36":o.u32_36,"section2_index_or_sentinel":o.section2_index_or_sentinel,"u32_44":o.u32_44,"u32_48":o.u32_48,"u32_52":o.u32_52,"u32_56":o.u32_56,"section4_index_or_sentinel":o.section4_index_or_sentinel,"u32_64":o.u32_64,"u16_68":o.u16_68,"u16_70":o.u16_70} for o in parsed.objects
     ))
 
-    # Backward-compatible alias for older scripts.
-    try:
-        import shutil
-        shutil.copyfile(out_dir / "objects_58_disk.csv", out_dir / "objects_58.csv")
-    except Exception:
-        pass
-
-    _write_csv(out_dir / "objects_72_runtime.csv", [
-        "index", "runtime_stride", "rt_00_rot_x_units", "rt_04_rot_y_units", "rt_08_rot_z_units",
-        "rt_0C_unwritten", "rt_10_pos_x_fixed12", "rt_14_pos_y_fixed12", "rt_18_pos_z_fixed12",
-        "rt_1C_unwritten", "rt_20_script_ptr_expr", "rt_24_local_count",
-        "rt_28_section2_ptr_expr", "rt_2C_stack_word_count", "rt_30_stack_arg_count",
-        "rt_34_spawn_flags", "rt_38_extra_count", "rt_3C_section4_ptr_expr",
-        "rt_40_spawn_aux_or_section4_tail", "rt_44_flags", "rt_46_extra_u16",
-    ], (
-        {
-            "index": o.index,
-            "runtime_stride": 72,
-            "rt_00_rot_x_units": o.rot_x_units,
-            "rt_04_rot_y_units": o.rot_y_units,
-            "rt_08_rot_z_units": o.rot_z_units,
-            "rt_0C_unwritten": 0,
-            "rt_10_pos_x_fixed12": o.pos_x_fixed12,
-            "rt_14_pos_y_fixed12": o.pos_y_fixed12,
-            "rt_18_pos_z_fixed12": o.pos_z_fixed12,
-            "rt_1C_unwritten": 0,
-            "rt_20_script_ptr_expr": f"CPTS_base+0x{o.script_offset:X}",
-            "rt_24_local_count": o.local_count,
-            "rt_28_section2_ptr_expr": (f"section2+4*{o.section2_index_raw}" if 0 <= o.section2_index_raw < len(parsed.section2) else "NULL/sentinel"),
-            "rt_2C_stack_word_count": o.stack_word_count,
-            "rt_30_stack_arg_count": o.stack_arg_count,
-            "rt_34_spawn_flags": f"0x{o.spawn_flags:08X}",
-            "rt_38_extra_count": o.extra_count,
-            "rt_3C_section4_ptr_expr": (f"section4+48*{o.section4_index_raw}" if 0 <= o.section4_index_raw < len(parsed.section4) else "NULL/sentinel"),
-            "rt_40_spawn_aux_or_section4_tail": f"0x{o.spawn_aux_raw:08X}",
-            "rt_44_flags": f"0x{o.flags:04X}",
-            "rt_46_extra_u16": o.extra_u16,
-        } for o in parsed.objects
-    ))
-
-    _write_csv(out_dir / "actors_spawn_preview.csv", [
-        "object_index", "spawns_initially", "actor_script_pc", "actor_rot_x", "actor_rot_y", "actor_rot_z",
-        "actor_pos_x_fixed12", "actor_pos_y_fixed12", "actor_pos_z_fixed12", "actor_pos_x", "actor_pos_y", "actor_pos_z",
-        "actor_spawn_flags", "actor_local_count", "actor_stack_word_count", "actor_stack_arg_count", "actor_extra_count", "actor_spawn_aux",
-    ], (
-        {
-            "object_index": o.index,
-            "spawns_initially": not o.skip_initial_spawn,
-            "actor_script_pc": f"CPTS_base+0x{o.script_offset:X}",
-            "actor_rot_x": o.actor_rot_x_fixed,
-            "actor_rot_y": o.actor_rot_y_fixed,
-            "actor_rot_z": o.actor_rot_z_fixed,
-            "actor_pos_x_fixed12": o.pos_x_fixed12,
-            "actor_pos_y_fixed12": o.pos_y_fixed12,
-            "actor_pos_z_fixed12": o.pos_z_fixed12,
-            "actor_pos_x": f"{o.pos_x:.9g}",
-            "actor_pos_y": f"{o.pos_y:.9g}",
-            "actor_pos_z": f"{o.pos_z:.9g}",
-            "actor_spawn_flags": f"0x{o.spawn_flags:08X}",
-            "actor_local_count": o.local_count,
-            "actor_stack_word_count": o.stack_word_count,
-            "actor_stack_arg_count": o.stack_arg_count,
-            "actor_extra_count": o.extra_count,
-            "actor_spawn_aux": f"0x{o.spawn_aux_raw:08X}",
-        } for o in parsed.objects
-    ))
-
-    # Confirmed fixed-point object position marker file. Runtime Z mirroring is
-    # handled by higher-level world export; this diagnostic keeps MAP coordinates.
-    with (out_dir / "object_spawn_points.obj").open("w", encoding="utf-8") as f:
-        f.write("# MAP object spawn positions from MapObjectDisk58 / sub_42AC50 -> sub_54CFC0.\n")
-        f.write("# Position units are fixed12 divided by 4096. Objects with flags&2 are marked skip_initial_spawn in CSV.\n")
+    # Small OBJ marker file for object-like MAP records. Some fields may be fixed
+    # point, indices, or flags; this file is only a visual diagnostic for fields
+    # that look like plausible coordinates after reinterpretation.
+    # We intentionally keep it conservative and do not claim these are instances.
+    with (out_dir / "object_record_float_probe.obj").open("w", encoding="utf-8") as f:
+        f.write("# Diagnostic only: each object record exports several u32 fields reinterpreted as float triplets when finite.\n")
         vi = 1
         for o in parsed.objects:
-            x, y, z = o.pos_x, o.pos_y, o.pos_z
-            s = 0.75
-            f.write(f"o map_object_{o.index:03d}{'_skip' if o.skip_initial_spawn else ''}\n")
-            f.write(f"v {x-s:.9g} {y:.9g} {z:.9g}\n")
-            f.write(f"v {x+s:.9g} {y:.9g} {z:.9g}\n")
-            f.write(f"v {x:.9g} {y-s:.9g} {z:.9g}\n")
-            f.write(f"v {x:.9g} {y+s:.9g} {z:.9g}\n")
-            f.write(f"v {x:.9g} {y:.9g} {z-s:.9g}\n")
-            f.write(f"v {x:.9g} {y:.9g} {z+s:.9g}\n")
-            f.write(f"l {vi} {vi+1}\n")
-            f.write(f"l {vi+2} {vi+3}\n")
-            f.write(f"l {vi+4} {vi+5}\n")
-            vi += 6
+            vals = [o.u32_16, o.u32_20, o.u32_24, o.u32_44, o.u32_48, o.u32_52, o.u32_56]
+            floats = [_safe_float(v) for v in vals]
+            # Emit two candidate triplets if they look finite and not tiny denormals.
+            for triplet_index, triplet in enumerate((floats[0:3], floats[3:6])):
+                if all(math.isfinite(x) and abs(x) < 1_000_000 for x in triplet) and any(abs(x) > 0.001 for x in triplet):
+                    x, y, z = triplet
+                    s = 10.0
+                    f.write(f"o object_{o.index:03d}_candidate_{triplet_index}\n")
+                    f.write(f"v {x-s} {y} {z}\n")
+                    f.write(f"v {x+s} {y} {z}\n")
+                    f.write(f"v {x} {y-s} {z}\n")
+                    f.write(f"v {x} {y+s} {z}\n")
+                    f.write(f"v {x} {y} {z-s}\n")
+                    f.write(f"v {x} {y} {z+s}\n")
+                    f.write(f"l {vi} {vi+1}\n")
+                    f.write(f"l {vi+2} {vi+3}\n")
+                    f.write(f"l {vi+4} {vi+5}\n")
+                    vi += 6
 
 

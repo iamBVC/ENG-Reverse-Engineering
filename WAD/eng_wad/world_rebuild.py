@@ -40,12 +40,8 @@ from pathlib import Path
 from typing import Iterable
 
 from .map_full_chunk import MapFullExe, MapObjectRecord
-from .stpc_chunk import MeshCandidate, STPCExportResult, stpc_triangle_uvs
+from .stpc_chunk import MeshCandidate, STPCExportResult
 from .trak_chunk import TrakFile
-from .text_chunk import TextChunk
-from .material_chunk import RuntimeMaterial, parse_runtime_materials, copy_textures_for_world
-from .world_terrain import write_world_mtl, write_textured_terrain_obj
-from .world_viewer import _collect_world_obj_assets, write_world_viewer_html
 
 
 # ---------------------------------------------------------------------------
@@ -60,23 +56,19 @@ class WorldObjectInstance:
     world_x: float
     world_y: float
     world_z: float
-    rot_x_units: int
-    rot_y_units: int
-    rot_z_units: int
-    actor_rot_x_fixed: int
-    actor_rot_y_fixed: int
-    actor_rot_z_fixed: int
-    local_count: int
+    small_00: int
+    small_04: int
+    small_08: int
+    field_16: int
     section2_index_or_sentinel: int
-    stack_word_count: int
-    stack_arg_count: int
-    spawn_flags: int
-    extra_count: int
+    field_1e: int
+    field_22: int
+    field_26_angle_candidate: int
+    field_2a: int
     section4_index_or_sentinel: int
-    spawn_aux: int
-    flags: int
-    skip_initial_spawn: bool
-    extra_u16: int
+    field_32: int
+    field_36: int
+    field_38: int
 
 
 @dataclass
@@ -208,23 +200,19 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
             world_x=_fixed12(o.u32_16),
             world_y=_fixed12(o.u32_20),
             world_z=_fixed12(o.u32_24),
-            rot_x_units=o.rot_x_units,
-            rot_y_units=o.rot_y_units,
-            rot_z_units=o.rot_z_units,
-            actor_rot_x_fixed=o.actor_rot_x_fixed,
-            actor_rot_y_fixed=o.actor_rot_y_fixed,
-            actor_rot_z_fixed=o.actor_rot_z_fixed,
-            local_count=o.local_count,
-            section2_index_or_sentinel=o.section2_index_raw,
-            stack_word_count=o.stack_word_count,
-            stack_arg_count=o.stack_arg_count,
-            spawn_flags=o.spawn_flags,
-            extra_count=o.extra_count,
-            section4_index_or_sentinel=o.section4_index_raw,
-            spawn_aux=o.spawn_aux_raw,
-            flags=o.flags,
-            skip_initial_spawn=o.skip_initial_spawn,
-            extra_u16=o.extra_u16,
+            small_00=o.small_00,
+            small_04=o.small_04,
+            small_08=o.small_08,
+            field_16=o.u32_36,
+            section2_index_or_sentinel=o.section2_index_or_sentinel,
+            field_1e=o.u32_44,
+            field_22=o.u32_48,
+            field_26_angle_candidate=o.u32_52,
+            field_2a=o.u32_56,
+            section4_index_or_sentinel=o.section4_index_or_sentinel,
+            field_32=o.u32_64,
+            field_36=o.u16_68,
+            field_38=o.u16_70,
         ))
     return out
 
@@ -476,7 +464,6 @@ def _write_instanced_mesh_obj(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 0.0,
-    materials: list[RuntimeMaterial] | None = None,
 ) -> int:
     """Append one STPC mesh instance to an open OBJ file.
 
@@ -521,9 +508,6 @@ def _write_instanced_mesh_obj(
             rnz = -rnz
         f.write(_obj_normal_line(rnx, v.ny, rnz, flip_z=flip_z))
     current_mat: int | None = None
-    mat_by_i = {m.index: m for m in (materials or [])}
-    vt_index = getattr(f, "_eng_next_vt_index", 1)
-    normal_base = vertex_base
     for tri in mesh.triangles:
         if not (tri.i0 < mesh.vertex_count and tri.i1 < mesh.vertex_count and tri.i2 < mesh.vertex_count):
             continue
@@ -532,19 +516,10 @@ def _write_instanced_mesh_obj(
         if tri.material != current_mat:
             current_mat = tri.material
             f.write(f"usemtl stpc_mat_{current_mat:04d}\n")
-        uv0, uv1, uv2 = stpc_triangle_uvs(mat_by_i.get(tri.material), tri.flags)
-        f.write(f"vt {uv0[0]:.9g} {uv0[1]:.9g}\n")
-        f.write(f"vt {uv1[0]:.9g} {uv1[1]:.9g}\n")
-        f.write(f"vt {uv2[0]:.9g} {uv2[1]:.9g}\n")
         a = vertex_base + tri.i0
         b = vertex_base + tri.i1
         c = vertex_base + tri.i2
-        na = normal_base + tri.i0
-        nb = normal_base + tri.i1
-        nc = normal_base + tri.i2
-        f.write(f"f {a}/{vt_index}/{na} {b}/{vt_index + 1}/{nb} {c}/{vt_index + 2}/{nc}\n")
-        vt_index += 3
-    setattr(f, "_eng_next_vt_index", vt_index)
+        f.write(f"f {a}//{a} {b}//{b} {c}//{c}\n")
     return vertex_base + mesh.vertex_count
 
 
@@ -556,7 +531,7 @@ def write_instanced_stpc_objs(
     meshes: list[MeshCandidate],
     scale: float = 1.0,
     flip_z: bool = False,
-    write_per_object: bool = False,
+    write_per_object: bool = True,
     object_z_sign: int = -1,
     local_z_sign: int = -1,
     apply_object_yaw: bool = True,
@@ -565,7 +540,6 @@ def write_instanced_stpc_objs(
     object_x_offset: float = 0.0,
     object_y_offset: float = 0.0,
     object_z_offset: float = 0.0,
-    materials: list[RuntimeMaterial] | None = None,
 ) -> Path | None:
     """Write combined and single-hit STPC instance OBJ files.
 
@@ -601,7 +575,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{inst.object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
 
     # Single-hit files: exactly one STPC mesh per OBJ file.
     by_hit_dir = out_dir / "objects_by_hit"
@@ -621,11 +595,10 @@ def write_instanced_stpc_objs(
                 object_z_sign=object_z_sign, local_z_sign=local_z_sign,
                 apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign,
                 object_z_mirror_center=object_z_mirror_center,
-                object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials,
             )
 
     # Primary-only file: first/earliest hit per object.  This is often the most
-    # useful visual export while the STPC object-definition script is unknown.
+    # useful visual probe while the STPC object-definition script is unknown.
     first_by_object: dict[int, StpcMeshReferenceHit] = {}
     for hit in sorted(hits, key=lambda h: (h.object_index, h.hit_relative_offset, h.mesh_index)):
         first_by_object.setdefault(hit.object_index, hit)
@@ -640,7 +613,7 @@ def write_instanced_stpc_objs(
             if inst is None or mesh is None:
                 continue
             name = f"object_{object_index:03d}_primary_mesh_{mesh.index:03d}"
-            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
+            vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
 
     if write_per_object:
         grouped_dir = out_dir / "diagnostics" / "objects_grouped_by_object"
@@ -664,8 +637,8 @@ def write_instanced_stpc_objs(
                     if mesh is None:
                         continue
                     name = f"object_{object_index:03d}_mesh_{mesh.index:03d}_hit_{hit.duplicate_index_for_object:02d}"
-                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset, materials=materials)
-    return primary
+                    vbase = _write_instanced_mesh_obj(f, mesh, inst, object_name=name, scale=scale, flip_z=flip_z, vertex_base=vbase, object_z_sign=object_z_sign, local_z_sign=local_z_sign, apply_object_yaw=apply_object_yaw, object_yaw_sign=object_yaw_sign, object_z_mirror_center=object_z_mirror_center, object_x_offset=object_x_offset, object_y_offset=object_y_offset, object_z_offset=object_z_offset)
+    return combined
 
 
 
@@ -699,30 +672,23 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
     second file to keep the combined OBJ valid.
     """
     terrain = world_dir / "terrain.obj"
-    primary = world_dir / "objects_primary.obj"
-    all_candidates = world_dir / "objects_all_candidates.obj"
-    inst = primary if primary.exists() else all_candidates
+    inst = world_dir / "objects_all_candidates.obj"
     if not inst.exists() and not terrain.exists():
         return None
     out = world_dir / "combined.obj"
 
     vertex_offset = 0
-    texture_offset = 0
     normal_offset = 0
 
     def copy_obj(src: Path, dst, *, add_offsets: bool) -> tuple[int, int]:
-        nonlocal vertex_offset, texture_offset, normal_offset
+        nonlocal vertex_offset, normal_offset
         local_v = 0
-        local_vt = 0
         local_n = 0
         for line in src.read_text(encoding="utf-8", errors="replace").splitlines():
             if line.startswith("mtllib"):
                 continue
             if line.startswith("v "):
                 local_v += 1
-                dst.write(line + "\n")
-            elif line.startswith("vt "):
-                local_vt += 1
                 dst.write(line + "\n")
             elif line.startswith("vn "):
                 local_n += 1
@@ -732,44 +698,128 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
                 new_parts = []
                 for p in parts:
                     bits = p.split("/")
+                    # Supports v//n emitted by our exporters.
                     vi = int(bits[0]) + vertex_offset
-                    if len(bits) >= 3:
-                        vt = int(bits[1]) + texture_offset if bits[1] else None
-                        ni = int(bits[2]) + normal_offset if bits[2] else None
-                        if vt is not None and ni is not None:
-                            new_parts.append(f"{vi}/{vt}/{ni}")
-                        elif ni is not None:
-                            new_parts.append(f"{vi}//{ni}")
-                        elif vt is not None:
-                            new_parts.append(f"{vi}/{vt}")
-                        else:
-                            new_parts.append(str(vi))
-                    elif len(bits) == 2 and bits[1]:
-                        vt = int(bits[1]) + texture_offset
-                        new_parts.append(f"{vi}/{vt}")
+                    if len(bits) >= 3 and bits[2]:
+                        ni = int(bits[2]) + normal_offset
+                        new_parts.append(f"{vi}//{ni}")
                     else:
                         new_parts.append(str(vi))
                 dst.write("f " + " ".join(new_parts) + "\n")
             else:
                 dst.write(line + "\n")
         vertex_offset += local_v
-        texture_offset += local_vt
         normal_offset += local_n
-        return local_v, local_vt, local_n
+        return local_v, local_n
 
     with out.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
-        f.write("# Combined reconstructed world: TRAK terrain + primary STPC object instances.\n")
+        f.write("# Combined reconstructed world: TRAK terrain + translated STPC object candidates.\n")
         if include_terrain and terrain.exists():
             f.write("\no terrain\n")
             copy_obj(terrain, f, add_offsets=True)
         if inst.exists():
-            f.write("\n# --- STPC primary object instances ---\n")
+            f.write("\n# --- STPC translated candidate instances ---\n")
             copy_obj(inst, f, add_offsets=True)
     return out
 
 
+def write_world_mtl(path: Path) -> None:
+    """Write simple placeholder materials for world probe OBJs."""
+    with path.open("w", encoding="utf-8") as f:
+        f.write("# Placeholder materials for experimental WAD world reconstruction.\n")
+        f.write("newmtl trak_surface\nKd 0.55 0.55 0.55\nKa 0 0 0\n\n")
+        f.write("newmtl stpc_mat_default\nKd 0.75 0.75 0.75\nKa 0 0 0\n\n")
+        # A broad set is enough for most material ids without bloating too much.
+        for i in range(512):
+            shade = 0.25 + ((i * 37) % 100) / 160.0
+            f.write(f"newmtl stpc_mat_{i:04d}\nKd {shade:.3f} {min(1.0, shade+0.12):.3f} {max(0.0, shade-0.08):.3f}\nKa 0 0 0\n\n")
 
+
+# ---------------------------------------------------------------------------
+# HTML viewer
+# ---------------------------------------------------------------------------
+
+def write_world_viewer_html(path: Path, instances: list[WorldObjectInstance], hits: list[StpcMeshReferenceHit], meshes: list[MeshCandidate]) -> None:
+    """Write a lightweight object-placement viewer.
+
+    It previews MAP object positions and highlights those for which an STPC mesh
+    reference was found.  It intentionally does not embed all mesh triangles;
+    the OBJ files are the authoritative geometry exports.
+    """
+    hit_count_by_object: dict[int, int] = {}
+    mesh_ids_by_object: dict[int, list[int]] = {}
+    for h in hits:
+        hit_count_by_object[h.object_index] = hit_count_by_object.get(h.object_index, 0) + 1
+        mesh_ids_by_object.setdefault(h.object_index, []).append(h.mesh_index)
+
+    points = []
+    for o in instances:
+        points.append({
+            "i": o.object_index,
+            "x": o.world_x,
+            "y": o.world_y,
+            "z": o.world_z,
+            "def": o.stpc_def_offset,
+            "hits": hit_count_by_object.get(o.object_index, 0),
+            "meshes": sorted(set(mesh_ids_by_object.get(o.object_index, []))),
+            "angle": o.field_26_angle_candidate,
+            "s2": o.section2_index_or_sentinel,
+            "s4": o.section4_index_or_sentinel,
+        })
+    payload = json.dumps({"objects": points, "mesh_count": len(meshes)}, separators=(",", ":"))
+    html = f"""<!doctype html>
+<html><head><meta charset=\"utf-8\"><title>WAD World Rebuild Probe</title>
+<style>
+body{{margin:0;background:#111;color:#ddd;font-family:system-ui,Segoe UI,sans-serif;overflow:hidden}}
+#bar{{position:fixed;left:0;right:0;top:0;background:#1d1d1d;padding:8px 10px;display:flex;gap:10px;align-items:center;z-index:2;box-shadow:0 2px 8px #0008}}
+button,select,input{{background:#2b2b2b;color:#eee;border:1px solid #555;border-radius:6px;padding:4px 8px}}
+#tip{{position:fixed;pointer-events:none;background:#000d;border:1px solid #777;border-radius:6px;padding:7px 9px;display:none;white-space:pre;font:12px ui-monospace,monospace}}
+canvas{{display:block;width:100vw;height:100vh}}
+.small{{font-size:12px;color:#aaa}}
+</style></head><body>
+<div id=\"bar\">
+  <b>World rebuild probe</b>
+  <label>View <select id=\"view\"><option value=\"top\">top X/Z</option><option value=\"iso\">isometric</option></select></label>
+  <label><input id=\"hitsOnly\" type=\"checkbox\"> only objects with STPC mesh hits</label>
+  <label>min hits <input id=\"minHits\" type=\"range\" min=\"0\" max=\"8\" value=\"0\"></label><span id=\"minHitsText\">0</span>
+  <button id=\"fit\">fit</button>
+  <span class=\"small\">Drag to pan, wheel to zoom. Orange = object has mesh reference hit.</span>
+</div>
+<canvas id=\"c\"></canvas><div id=\"tip\"></div>
+<script>
+const data = {payload};
+const c = document.getElementById('c'), ctx = c.getContext('2d'), tip = document.getElementById('tip');
+const viewSel = document.getElementById('view'), hitsOnly = document.getElementById('hitsOnly'), minHits = document.getElementById('minHits'), minHitsText = document.getElementById('minHitsText');
+let W=0,H=0, zoom=1, panX=0, panY=0, dragging=false, lx=0, ly=0, hover=null;
+function resize(){{ W=c.width=innerWidth*devicePixelRatio; H=c.height=innerHeight*devicePixelRatio; draw(); }}
+addEventListener('resize', resize);
+function project(p){{
+  if(viewSel.value==='iso'){{ const x=(p.x-p.z)*0.7071, y=(p.x+p.z)*0.35-p.y; return [x,y]; }}
+  return [p.x,p.z];
+}}
+function filtered(){{ const mh=+minHits.value; return data.objects.filter(p => (!hitsOnly.checked || p.hits>0) && p.hits>=mh); }}
+function fit(){{ const pts=filtered(); if(!pts.length) return; let xs=[],ys=[]; for(const p of pts){{ const q=project(p); xs.push(q[0]); ys.push(q[1]); }}
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); const sx=W/Math.max(1,maxX-minX), sy=(H-60*devicePixelRatio)/Math.max(1,maxY-minY); zoom=Math.min(sx,sy)*0.82; panX=W/2-(minX+maxX)/2*zoom; panY=H/2-(minY+maxY)/2*zoom+25*devicePixelRatio; draw(); }}
+function screen(p){{ const q=project(p); return [q[0]*zoom+panX, q[1]*zoom+panY]; }}
+function draw(){{ ctx.clearRect(0,0,W,H); ctx.fillStyle='#111'; ctx.fillRect(0,0,W,H); const pts=filtered(); hover=null; const mx=lastMouseX??-9999,my=lastMouseY??-9999;
+  for(const p of pts){{ const [x,y]=screen(p); const r=(p.hits?5:3)*devicePixelRatio; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=p.hits?'#ffb14a':'#6aa6ff'; ctx.fill(); ctx.strokeStyle='#000'; ctx.stroke(); if(Math.hypot(x-mx,y-my)<r+5*devicePixelRatio) hover=p; }}
+  ctx.fillStyle='#ccc'; ctx.font=(12*devicePixelRatio)+'px system-ui'; ctx.fillText(`${{pts.length}} / ${{data.objects.length}} objects shown; STPC mesh bank: ${{data.mesh_count}} meshes`, 12*devicePixelRatio, H-14*devicePixelRatio);
+  if(hover){{ tip.style.display='block'; tip.textContent=`object ${{hover.i}}\nxyz: ${{hover.x.toFixed(3)}}, ${{hover.y.toFixed(3)}}, ${{hover.z.toFixed(3)}}\nstpc def: 0x${{hover.def.toString(16)}}\nmesh hits: ${{hover.hits}} [${{hover.meshes.join(', ')}}]\nangle candidate: 0x${{hover.angle.toString(16)}}\nsection2: ${{hover.s2}}\nsection4: ${{hover.s4}}`; }} else tip.style.display='none'; }}
+let lastMouseX=null,lastMouseY=null;
+c.addEventListener('mousedown',e=>{{dragging=true;lx=e.clientX*devicePixelRatio;ly=e.clientY*devicePixelRatio;}});
+addEventListener('mouseup',()=>dragging=false);
+c.addEventListener('mousemove',e=>{{ const x=e.clientX*devicePixelRatio,y=e.clientY*devicePixelRatio; lastMouseX=x; lastMouseY=y; if(dragging){{panX+=x-lx; panY+=y-ly; lx=x; ly=y;}} tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY+14)+'px'; draw(); }});
+c.addEventListener('wheel',e=>{{e.preventDefault(); const k=e.deltaY<0?1.12:0.89; const mx=e.clientX*devicePixelRatio,my=e.clientY*devicePixelRatio; panX=mx+(panX-mx)*k; panY=my+(panY-my)*k; zoom*=k; draw();}},{{passive:false}});
+for(const el of [viewSel,hitsOnly,minHits]) el.addEventListener('input',()=>{{minHitsText.textContent=minHits.value; fit();}});
+document.getElementById('fit').onclick=fit; resize(); fit();
+</script></body></html>"""
+    path.write_text(html, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Public export API
+# ---------------------------------------------------------------------------
 
 def export_world(
     *,
@@ -778,12 +828,11 @@ def export_world(
     trak: TrakFile,
     stpc_bytes: bytes,
     stpc_result: STPCExportResult,
-    text_chunk: TextChunk | None = None,
     scan_bytes: int = 2048,
     scale: float = 1.0,
     flip_z: bool = False,
     write_terrain: bool = True,
-    write_per_object: bool = False,
+    write_per_object: bool = True,
     terrain_yaw_sign: int = 1,
     mirror_terrain_z: bool = True,
     stpc_object_z_sign: int = -1,
@@ -807,11 +856,7 @@ def export_world(
     * Object scale and material/texture assignment.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    materials = parse_runtime_materials(text_chunk) if text_chunk is not None else []
-    texture_count = len(text_chunk.textures) if text_chunk is not None else 0
-    write_world_mtl(out_dir / "world.mtl", materials, texture_count=texture_count)
-    if text_chunk is not None:
-        copy_textures_for_world(out_dir.parent / "textures", out_dir / "textures")
+    write_world_mtl(out_dir / "world.mtl")
 
     instances = build_world_object_instances(mapx)
     hits = scan_stpc_definition_for_mesh_offsets(
@@ -840,30 +885,8 @@ def export_world(
             scale=scale,
             flip_z=flip_z,
             terrain_yaw_sign=terrain_yaw_sign,
-            write_per_tile_dir=None,
+            write_per_tile_dir=out_dir / "terrain_tiles",
         )
-
-    textured_terrain_obj = None
-    if terrain_obj is not None and materials:
-        try:
-            textured_terrain_obj = write_textured_terrain_obj(
-                path=out_dir / "terrain_textured.obj",
-                mapx=mapx,
-                trak=trak,
-                materials=materials,
-                scale=scale,
-                flip_z=flip_z,
-                terrain_yaw_sign=terrain_yaw_sign,
-                mirror_terrain_z=mirror_terrain_z,
-                mtl_name="world.mtl",
-            )
-        except Exception:
-            # Keep the stable geometry export even if the experimental textured
-            # export hits an unexpected material row.
-            textured_terrain_obj = None
-
-    # UV/texture-index comparison folders were removed after terrain_textured.obj
-    # was validated against the EXE sub_556510 terrain renderer.
 
     terrain_z_min, terrain_z_max = _obj_bounds_z(terrain_obj) if terrain_obj else (None, None)
     object_z_mirror_center = None
@@ -932,18 +955,15 @@ def export_world(
         object_x_offset=object_x_offset,
         object_y_offset=object_y_offset,
         object_z_offset=object_z_offset,
-        materials=materials,
     )
     world_combined = write_world_combined_obj(out_dir)
 
     # CSV: all MAP object placements.
     _write_csv(out_dir / "map_object_instances.csv", [
         "object_index","stpc_def_offset","stpc_def_offset_hex","world_x","world_y","world_z",
-        "mesh_hit_count","mesh_indices",
-        "rot_x_units","rot_y_units","rot_z_units","actor_rot_x_fixed","actor_rot_y_fixed","actor_rot_z_fixed",
-        "local_count","section2_index_or_sentinel","stack_word_count","stack_arg_count",
-        "spawn_flags","spawn_flags_hex","extra_count","section4_index_or_sentinel",
-        "spawn_aux","spawn_aux_hex","flags","flags_hex","skip_initial_spawn","extra_u16",
+        "mesh_hit_count","mesh_indices","small_00","small_04","small_08","field_16",
+        "section2_index_or_sentinel","field_1e","field_22","field_26_angle_candidate",
+        "field_26_hex","field_2a","section4_index_or_sentinel","field_32","field_36","field_38",
     ], (
         {
             "object_index": o.object_index,
@@ -954,26 +974,20 @@ def export_world(
             "world_z": o.world_z,
             "mesh_hit_count": len(hits_by_object.get(o.object_index, [])),
             "mesh_indices": " ".join(str(h.mesh_index) for h in hits_by_object.get(o.object_index, [])),
-            "rot_x_units": o.rot_x_units,
-            "rot_y_units": o.rot_y_units,
-            "rot_z_units": o.rot_z_units,
-            "actor_rot_x_fixed": o.actor_rot_x_fixed,
-            "actor_rot_y_fixed": o.actor_rot_y_fixed,
-            "actor_rot_z_fixed": o.actor_rot_z_fixed,
-            "local_count": o.local_count,
+            "small_00": o.small_00,
+            "small_04": o.small_04,
+            "small_08": o.small_08,
+            "field_16": o.field_16,
             "section2_index_or_sentinel": o.section2_index_or_sentinel,
-            "stack_word_count": o.stack_word_count,
-            "stack_arg_count": o.stack_arg_count,
-            "spawn_flags": o.spawn_flags,
-            "spawn_flags_hex": _hex(o.spawn_flags),
-            "extra_count": o.extra_count,
+            "field_1e": o.field_1e,
+            "field_22": o.field_22,
+            "field_26_angle_candidate": o.field_26_angle_candidate,
+            "field_26_hex": _hex(o.field_26_angle_candidate),
+            "field_2a": o.field_2a,
             "section4_index_or_sentinel": o.section4_index_or_sentinel,
-            "spawn_aux": o.spawn_aux,
-            "spawn_aux_hex": _hex(o.spawn_aux),
-            "flags": o.flags,
-            "flags_hex": f"0x{o.flags:04X}",
-            "skip_initial_spawn": o.skip_initial_spawn,
-            "extra_u16": o.extra_u16,
+            "field_32": o.field_32,
+            "field_36": o.field_36,
+            "field_38": o.field_38,
         } for o in instances
     ))
 
@@ -1017,7 +1031,7 @@ def export_world(
         } for off, info in sorted(defs.items())
     ))
 
-    write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))
+    write_world_viewer_html(out_dir / "world_viewer.html", instances, hits, stpc_result.meshes)
 
     summary = {
         "map_object_count": len(instances),
@@ -1027,8 +1041,6 @@ def export_world(
         "objects_with_mesh_hits": len({h.object_index for h in hits}),
         "unique_meshes_referenced": len({h.mesh_index for h in hits}),
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
-        "terrain_textured_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
-        "terrain_uv_mapping": "validated game terrain UV mapping",
         "terrain_placement": "MAP tile fixed XYZ + tile yaw + tile_trak_record_index + TRAK local vertices",
         "terrain_yaw_sign": terrain_yaw_sign,
         "mirror_terrain_z": mirror_terrain_z,
@@ -1041,11 +1053,11 @@ def export_world(
         "stpc_object_yaw_sign": stpc_object_yaw_sign,
         "terrain_tiles_written": terrain_tiles_written,
         "terrain_tiles_skipped": terrain_tiles_skipped,
-        "objects_all_candidates_obj": "objects_all_candidates.obj" if hits else None,
+        "objects_all_candidates_obj": str(combined_obj.name) if combined_obj else None,
         "objects_by_hit_folder": "objects_by_hit/",
-        "objects_primary_obj": str(combined_obj.name) if combined_obj else None,
+        "objects_primary_obj": "objects_primary.obj" if hits else None,
         "combined_obj": str(world_combined.name) if world_combined else None,
-        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale and full object-definition semantics are still unresolved; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale, materials, and full object-definition semantics are still unresolved; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")
@@ -1062,9 +1074,9 @@ def export_world(
 
 
 # Backwards-compatible name used by earlier project patches.
-def export_world_rebuild_export(**kwargs):
+def export_world_rebuild_probe(**kwargs):
     return export_world(**kwargs)
 
 # Backwards-compatible internal name.
-def write_world_combined_export_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
+def write_world_combined_probe_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
     return write_world_combined_obj(world_dir, include_terrain=include_terrain)
