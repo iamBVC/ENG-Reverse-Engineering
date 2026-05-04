@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from eng_wad.binary import Reader, u32
+from eng_wad.lgpc_chunk import export_lgpc, parse_lgpc_chunk
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
 from eng_wad.smpc_chunk import export_all as export_smpc, parse as parse_smpc
 from eng_wad.sprt_chunk import export_sprt, parse_sprt_chunk
@@ -50,6 +51,9 @@ def _write_level_metadata(data: bytes, by_tag: dict, out_dir: Path, info_lines: 
     if "LNFO" in by_tag and by_tag["LNFO"].size >= 8:
         off = by_tag["LNFO"].offset
         info_lines.append(f"Light info  : count={u32(data, off)}, version={u32(data, off + 4)}")
+    if "LGPC" in by_tag and by_tag["LGPC"].size >= 12:
+        off = by_tag["LGPC"].offset
+        info_lines.append(f"LGPC table  : rows={u32(data, off) + 1}, columns={u32(data, off + 4)}")
     if "WFPC" in by_tag and by_tag["WFPC"].size >= 4:
         info_lines.append(f"WFPC flags  : 0x{u32(data, by_tag['WFPC'].offset):08X}")
     if "SPRT" in by_tag and by_tag["SPRT"].size >= 4:
@@ -187,6 +191,16 @@ def extract_wad(
             export_lights(lights, out_dir / "lights")
         except Exception as exc:
             print(f"  [LGHT] Parse/export error: {exc}", file=sys.stderr)
+
+    # LGPC: localized dialogue/text table.
+    if "LGPC" in by_tag:
+        print("  [LGPC] Parsing localized dialogue/text table ...")
+        try:
+            lgpc = parse_lgpc_chunk(chunk_bytes(data, by_tag["LGPC"]))
+            summary = export_lgpc(lgpc, out_dir / "lgpc")
+            print(f"  -> lgpc/ (rows={summary['row_count']}, columns={summary['column_count']})")
+        except Exception as exc:
+            print(f"  [LGPC] Parse/export error: {exc}", file=sys.stderr)
 
     # SMPC: level sounds.  Exports .cvg blobs, manifest CSV, and raw audio bins.
     if extract_sounds and "SMPC" in by_tag:

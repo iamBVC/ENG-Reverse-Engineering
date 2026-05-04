@@ -35,7 +35,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 |---:|---|---|---|
 | `1179602516` | `FONT` | font-ish 256 x 8-byte table | `sub_558C90` |
 | `1279739988` | `LGHT` | light records | `sub_42C180` |
-| `1279742019` | `LGPC` / `CPGL` | variable blob/grid/list | `sub_558DB0` |
+| `1279742019` | `LGPC` / `CPGL` | localized dialogue/text table | `sub_558DB0` |
 | `1280198223` | unknown | small loader path | `sub_42AB10` |
 | `1296125984` | `MAP ` | main map/full placement chunk | `sub_42AC50` |
 | `1095585859` | `AMPC` / `CPMA` | audio/resource | `sub_558D70` |
@@ -396,6 +396,68 @@ Observed sample values:
 | `t1l1m004` | `0x180102D0` | `0x10`, `0x40`, `0x80`, `0x200`, `0x10000`, `0x08000000`, `0x10000000` |
 
 The extractor writes `wfpc/summary.txt`, `wfpc/summary.json`, and `wfpc/flags.csv`.  `parse_map_full_exe` now receives `assume_optional20` from `WFPC & 0x10000` and `assume_final_dword` from `WFPC & 0x10`, matching the executable's gated MAP read order.
+
+## LGPC localized dialogue/text chunk
+
+`LGPC` is the localized text/dialogue table.  It is unrelated to `LGHT` lighting despite the similar prefix.  The dispatcher compares tag integer `0x4C475043` and calls `sub_558DB0`.
+
+### Loader behavior
+
+`sub_558DB0` reads:
+
+```text
++0x00  u32 row_count_minus_one -> dword_6DA338, then incremented
++0x04  u32 column_count
++0x08  u32 unknown_header_08   -> read into a stack local; no confirmed consumer yet
+
+u32 blob_sizes[row_count * column_count]
+u8  blobs[row_count * column_count][blob_sizes[i]]
+```
+
+Runtime allocation:
+
+```text
+dword_6DA338 = row_count_minus_one + 1
+dword_6DA334 = pointer matrix, row_count * column_count entries
+```
+
+The table is stored column-major:
+
+```text
+entry_index = column * row_count + row
+```
+
+### Runtime lookup
+
+`sub_40D4C0` reads a dialogue index from the script/runtime stream, then:
+
+```text
+voice_or_id_entry = dword_6DA334[(dialogue_index + 1) * dword_6DA338 - 1]
+text_entry        = dword_6DA334[dialogue_index * dword_6DA338 + dword_584F04]
+```
+
+The last row is treated as a `#...` voice/id tag.  If it begins with `'#'`, the code strips the `#`, parses the following number through `sub_40D890`, and calls the audio/speech path through `sub_546620`.  The selected visible string row is controlled by `dword_584F04`; in the current Italian PC WAD samples row `0` is the displayed localized string and row `1` is the `#...` tag.
+
+Observed samples:
+
+| WAD | Size | Rows | Columns | `unknown_header_08` | Payload bytes |
+|---|---:|---:|---:|---:|---:|
+| `t0i0m000` | 12 | 2 | 0 | 0 | 0 |
+| `t0i0m998` | 12 | 2 | 0 | 0 | 0 |
+| `t0i0m999` | 12 | 2 | 0 | 0 | 0 |
+| `t1l1m001` | 6871 | 2 | 120 | 1474 | 5899 |
+| `t1l1m002` | 5411 | 2 | 97 | 1155 | 4623 |
+| `t1l1m003` | 2910 | 2 | 61 | 602 | 2410 |
+| `t1l1m004` | 5397 | 2 | 96 | 1154 | 4617 |
+
+Exporter outputs:
+
+```text
+lgpc/summary.txt
+lgpc/summary.json
+lgpc/entries.csv          raw row/column matrix
+lgpc/dialogue_lines.csv   row 0 text paired with final-row voice/id tag
+```
 
 ## SRPC / CPRS streamed speech chunk
 
@@ -1081,6 +1143,8 @@ Fallback d-pad values:
 - `map_full/object_spawn_points.obj`: confirmed fixed12 object position markers.
 - `wfpc/summary.txt`: copied `dword_6DA330` feature mask and active/unknown masks.
 - `wfpc/flags.csv`: per-bit WFPC diagnostics with confirmed consumers where known.
+- `lgpc/entries.csv`: decoded localized text matrix as stored by `sub_558DB0`.
+- `lgpc/dialogue_lines.csv`: row-0 visible text paired with final-row `#...` voice/id tags.
 - `lights/lights.csv`: typed directional/point/negative point lights with runtime conversions.
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
 - `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
@@ -1103,6 +1167,7 @@ Fallback d-pad values:
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 8. `SPRT` optional table behind `dword_6DA330 & 0x100000` is loader-confirmed but not observed in current sample WADs; high-level sprite records and animation/frame command semantics remain unnamed.
 9. Several observed WFPC bits are still unnamed: `0x40`, `0x80`, `0x200`, `0x400`, `0x00400000`, and `0x08000000`.
+10. `LGPC +0x08` is read by the loader but not consumed in the confirmed path yet; `dword_584F04` row-selection semantics need a precise name.
 
 ## Recommended next reverse-engineering targets
 
@@ -1113,6 +1178,7 @@ Fallback d-pad values:
 5. `sub_550E60` and `sub_5509F0` — called by multiple opcodes as the primary function-dispatch path; understanding them would clarify ~10 opcodes at once.
 6. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
 7. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
+8. `dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection.
 
 ---
 
