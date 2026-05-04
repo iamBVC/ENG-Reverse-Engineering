@@ -56,11 +56,13 @@ preserved verbatim by this parser.
 
 from __future__ import annotations
 
+import array
 import csv
 import struct
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -198,6 +200,94 @@ def parse(data: bytes | memoryview, base_offset: int = 0) -> SmpcChunk:
 
 
 # ---------------------------------------------------------------------------
+# IMA ADPCM decoder (best-effort WAV export)
+# ---------------------------------------------------------------------------
+# CVG audio encoding is Argonaut-proprietary (handled by AAL at runtime).
+# Block-based IMA ADPCM matches the observed block_align values and era:
+#   11025 Hz → block_align 1024, 22050 Hz → block_align 2048.
+# The last block may be shorter than block_align (partial block is normal).
+
+_IMA_STEP_TABLE = [
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31,
+    34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130,
+    143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
+    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411,
+    1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026,
+    4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442,
+    11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623,
+    27086, 29794, 32767,
+]
+_IMA_INDEX_TABLE = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8]
+
+
+def _ima_nibble(nibble: int, predictor: int, step_index: int):
+    step = _IMA_STEP_TABLE[step_index]
+    diff = step >> 3
+    if nibble & 4: diff += step
+    if nibble & 2: diff += step >> 1
+    if nibble & 1: diff += step >> 2
+    if nibble & 8: diff = -diff
+    predictor = max(-32768, min(32767, predictor + diff))
+    step_index = max(0, min(88, step_index + _IMA_INDEX_TABLE[nibble]))
+    return predictor, step_index
+
+
+def _decode_ima_adpcm(data: bytes, block_align: int) -> array.array:
+    """Decode block-based IMA ADPCM to signed 16-bit PCM samples.
+
+    Block layout (mono):
+      int16  initial_predictor   (== first output sample)
+      uint8  step_index          (0–88)
+      uint8  reserved
+      bytes  nibble_pairs        (low nibble first per byte)
+
+    The last block may be shorter than block_align.
+    Returns an array.array('h') in native byte order.
+    """
+    samples: list[int] = []
+    pos = 0
+    n = len(data)
+
+    while pos < n:
+        if pos + 4 > n:
+            break
+        predictor = struct.unpack_from("<h", data, pos)[0]
+        step_index = max(0, min(data[pos + 2], 88))
+        pos += 4
+        samples.append(predictor)
+
+        block_end = min(pos + block_align - 4, n)
+        while pos < block_end:
+            byte = data[pos]; pos += 1
+            predictor, step_index = _ima_nibble(byte & 0x0F, predictor, step_index)
+            samples.append(predictor)
+            predictor, step_index = _ima_nibble((byte >> 4) & 0x0F, predictor, step_index)
+            samples.append(predictor)
+
+    return array.array("h", samples)
+
+
+def _write_wav_pcm16(path: Path, pcm: array.array, sample_rate: int) -> None:
+    """Write a minimal mono 16-bit PCM WAV file."""
+    if sys.byteorder != "little":
+        pcm = array.array("h", pcm)
+        pcm.byteswap()
+    data_bytes = len(pcm) * 2
+    with open(path, "wb") as f:
+        f.write(b"RIFF")
+        f.write(struct.pack("<I", 36 + data_bytes))
+        f.write(b"WAVE")
+        f.write(b"fmt ")
+        f.write(struct.pack("<I", 16))
+        f.write(struct.pack("<HH", 1, 1))             # PCM, mono
+        f.write(struct.pack("<II", sample_rate, sample_rate * 2))  # rate, byte rate
+        f.write(struct.pack("<HH", 2, 16))            # block align, bits/sample
+        f.write(b"data")
+        f.write(struct.pack("<I", data_bytes))
+        pcm.tofile(f)
+
+
+# ---------------------------------------------------------------------------
 # Exporters
 # ---------------------------------------------------------------------------
 
@@ -268,11 +358,34 @@ def export_raw_audio(chunk: SmpcChunk, out_dir: Path) -> None:
         bin_path.write_bytes(snd.audio_data)
 
 
+def export_wav(chunk: SmpcChunk, out_dir: Path) -> None:
+    """Export sounds as WAV files decoded from IMA ADPCM (best-effort).
+
+    The CVG audio codec is proprietary (Argonaut AAL).  Block-based IMA
+    ADPCM is the most likely encoding given the block_align values and era.
+    Sounds with non-standard ``channels`` values are decoded as mono; if
+    decoding fails for any sound that file is silently skipped.
+
+    If the resulting audio sounds like noise, use the raw .cvg or raw_audio
+    files for further codec investigation.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for snd in chunk.sounds:
+        wav_path = out_dir / f"sound_{snd.index:03d}.wav"
+        try:
+            pcm = _decode_ima_adpcm(snd.audio_data, snd.header.block_align)
+            if pcm:
+                _write_wav_pcm16(wav_path, pcm, snd.header.sample_rate)
+        except Exception:
+            pass
+
+
 def export_all(chunk: SmpcChunk, out_dir: Path) -> None:
-    """Run all exporters: .cvg files, manifest CSV, and raw audio bins."""
+    """Run all exporters: .cvg files, manifest CSV, raw audio bins, and WAV."""
     export_sounds(chunk, out_dir / "cvg")
     export_manifest_csv(chunk, out_dir / "smpc_manifest.csv")
     export_raw_audio(chunk, out_dir / "raw_audio")
+    export_wav(chunk, out_dir / "wav")
 
 
 # ---------------------------------------------------------------------------

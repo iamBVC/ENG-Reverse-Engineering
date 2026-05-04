@@ -15,6 +15,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can:
 - parse the `MAP ` chunk into world-space tile XYZ data
 - generate MAP CSV files, OBJ marker meshes, a PNG grid, and an HTML map viewer
 - parse the `LGHT` chunk into `lights.csv`
+- decode the `SMPC` chunk into individual `.cvg` sound files, a manifest CSV, and best-effort WAV files
 - decode the `TRAK` chunk into records, vertex/triangle tables, OBJ surfaces, and an HTML viewer
 - export `STPC` static geometry as OBJ meshes
 - export a `world/` folder that reconstructs the level world from TRAK terrain, MAP tile/object placement, and STPC mesh candidates
@@ -61,6 +62,7 @@ Most extraction features are enabled by default.  Use these flags to disable par
 --no-stpc-obj         skip STPC OBJ mesh export
 --no-trak             skip TRAK CSV/OBJ/viewer export
 --no-lights           skip LGHT light CSV export
+--no-sounds           skip SMPC sound export
 --no-raw              do not export raw undecoded chunks
 --no-world            skip reconstructed TRAK + MAP-object + STPC world export
 --world-probe          also run the older Section-4 instance-hunting diagnostics, now deprecated
@@ -135,6 +137,20 @@ extracted/t1l1m001/
   lights/
     lights.csv
     summary.txt
+
+  sounds/
+    smpc_manifest.csv
+    cvg/
+      sound_000.cvg
+      sound_001.cvg
+      ...
+    wav/
+      sound_000.wav          # IMA ADPCM decode, best-effort
+      sound_001.wav
+      ...
+    raw_audio/
+      sound_000_audio.bin    # raw CVG payload without header
+      ...
 
   trak/
     summary.txt
@@ -680,6 +696,31 @@ Known remaining LGHT uncertainty:
 - The final byte in type `2`/`4` is still named `falloff_or_mode`; it should be renamed once the lighting evaluator using runtime offset `+0x64` is reversed.
 - `RuntimeLight112 +0x0C/+0x1C` are copied by `sub_41BEE0`, but are not initialized by the constructor pseudocode we have.
 
+## Chunk reversal progress
+
+Percentage of known fields per chunk, based on confirmed executable analysis.
+"Fields" counts named struct members, not raw bytes.  A field is "reversed"
+when its offset, size, and semantic meaning are all confirmed from the EXE.
+
+| Chunk  | Reversed | Notes on remaining unknowns |
+|--------|----------|-----------------------------|
+| `INFO` | ~95 %    | level identifier fully read; minor metadata flags unconfirmed |
+| `VERS` | ~95 %    | version number fully read |
+| `NAME` | ~90 %    | level name string decoded; exact encoding edge-cases unconfirmed |
+| `TEXT` | ~75 %    | RGB555 RLE textures 100 %; material table format confirmed; `flags`, `extra` byte, and full texture-binding semantics ~50 % |
+| `LGHT` | ~90 %    | all 3 light types decoded; final type-2/4 byte (`falloff_or_mode`) name not confirmed |
+| `TRAK` | ~72 %    | `Vertex24`, `Triangle28`, `CollisionEntry32` mostly decoded; header `+0x00/+0x04/+0x08/+0x7E` and collision group 0/1/2 split still unnamed; 3+ triangle flag bits unknown |
+| `MAP ` | ~55 %    | tile XYZ and most object58 fields confirmed; `flags`/`type_idx` semantic meaning unknown; Section 3 (90 B) and Section 4 (34 B) content unnamed |
+| `STPC` | ~45 %    | 3-section container confirmed; `GeometryRecord8C` ~70 %; `GeometryAnimRecord32` ~30 %; Section 3 disabled in PC WADs; object-definition bytecode ~20 % |
+| `SMPC` | ~65 %    | `sound_count` + CVG entry structure 100 %; CVG header fields named; `channels` encoding for non-1 values unclear; audio codec proprietary (AAL) |
+| `AMPC` | ~10 %    | same loader structure as SMPC confirmed; content not yet parsed |
+| `FONT` | ~10 %    | raw bytes preserved; glyph layout not decoded |
+| `SRPC` | ~5 %     | WAD position known; content not decoded |
+| `LGPC` | ~5 %     | WAD position known; content not decoded |
+| `WFPC` | ~5 %     | WAD position known; content not decoded |
+| `SPRT` | ~5 %     | WAD position known; content not decoded |
+| `LNFO` | ~5 %     | WAD position known; content not decoded |
+
 ## Chunks and files not fully decoded yet
 
 These are preserved in `raw/` for later analysis:
@@ -687,7 +728,7 @@ These are preserved in `raw/` for later analysis:
 | Chunk | Raw output | Current status |
 |---|---|---|
 | `STPC` | `raw/stpc.bin` | Static mesh records decoded; culling header and triangle flags documented; full container/material binding still partial |
-| `SMPC` | `raw/smpc.bin` | Not decoded; likely sprite/mesh compressed or related geometry data |
+| `SMPC` | `raw/smpc.bin`, `sounds/` | Level sounds decoded: `sound_count` + CVG entries; exports .cvg blobs, manifest CSV, best-effort WAV (IMA ADPCM); audio codec proprietary (AAL) |
 | `SRPC` | `raw/srpc.bin` | Not decoded; likely sound/resource config |
 | `TRAK` | `raw/trak.bin`, `trak/` | Main record table and A/B/CDE table packing decoded; A/B exported as surfaces; C/D/E semantics still unknown |
 | `AMPC` | `raw/ambient_audio.bin` | Exported raw; semantic structure not decoded |
@@ -728,6 +769,7 @@ eng_wad/instance_hunter.py deprecated Section-4 world-probe diagnostics
 eng_wad/stpc_chunk.py     STPC mesh scanner/exporter library
 eng_wad/trak_chunk.py     TRAK parser/exporter library
 eng_wad/light_chunk.py    LGHT parser/exporter
+eng_wad/smpc_chunk.py     SMPC parser/exporter (CVG sound entries + IMA ADPCM WAV)
 eng_wad/raw_export.py     raw binary chunk exporters
 ```
 
