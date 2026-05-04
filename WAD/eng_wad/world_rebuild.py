@@ -102,6 +102,7 @@ class WorldRebuildResult:
     unique_meshes_referenced: int
     combined_obj_path: Path | None
     terrain_obj_path: Path | None
+    terrain_and_objects_obj_path: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -491,8 +492,9 @@ def _write_instanced_mesh_obj(
     """
     f.write(f"\no {object_name}\n")
     f.write(f"# MAP object {inst.object_index}; STPC mesh {mesh.index}; mesh_offset=0x{mesh.offset:08X}\n")
-    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={inst.small_04 if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}; object_alignment_offset={object_x_offset:.9g},{object_y_offset:.9g},{object_z_offset:.9g}\n")
-    yaw = _angle4096_to_radians(inst.small_04, sign=object_yaw_sign) if apply_object_yaw else 0.0
+    yaw_units = inst.rot_y_units
+    f.write(f"# raw_translation={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}; render_z_sign={object_z_sign}; local_z_sign={local_z_sign}; object_yaw={yaw_units if apply_object_yaw else 0}; object_z_mirror_center={object_z_mirror_center}; object_alignment_offset={object_x_offset:.9g},{object_y_offset:.9g},{object_z_offset:.9g}\n")
+    yaw = _angle4096_to_radians(yaw_units, sign=object_yaw_sign) if apply_object_yaw else 0.0
     base_x = inst.world_x
     base_y = inst.world_y
     base_z = object_z_sign * inst.world_z
@@ -691,20 +693,31 @@ def _obj_bounds_z(path: Path) -> tuple[float | None, float | None]:
             z_max = z if z_max is None else max(z_max, z)
     return z_min, z_max
 
-def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -> Path | None:
+def write_world_combined_obj(
+    world_dir: Path,
+    *,
+    include_terrain: bool = True,
+    terrain_name: str = "terrain.obj",
+    object_name: str | None = None,
+    output_name: str = "combined.obj",
+    description: str = "Combined reconstructed world: TRAK terrain + primary STPC object instances.",
+) -> Path | None:
     """Create a tiny OBJ wrapper that references terrain and instance geometry.
 
     OBJ cannot include other OBJ files, so this function concatenates the two
     generated OBJs when both exist.  It rewrites face indices while copying the
     second file to keep the combined OBJ valid.
     """
-    terrain = world_dir / "terrain.obj"
-    primary = world_dir / "objects_primary.obj"
-    all_candidates = world_dir / "objects_all_candidates.obj"
-    inst = primary if primary.exists() else all_candidates
+    terrain = world_dir / terrain_name
+    if object_name is None:
+        primary = world_dir / "objects_primary.obj"
+        all_candidates = world_dir / "objects_all_candidates.obj"
+        inst = primary if primary.exists() else all_candidates
+    else:
+        inst = world_dir / object_name
     if not inst.exists() and not terrain.exists():
         return None
-    out = world_dir / "combined.obj"
+    out = world_dir / output_name
 
     vertex_offset = 0
     texture_offset = 0
@@ -759,14 +772,40 @@ def write_world_combined_obj(world_dir: Path, *, include_terrain: bool = True) -
 
     with out.open("w", encoding="utf-8", newline="\n") as f:
         f.write("mtllib world.mtl\n")
-        f.write("# Combined reconstructed world: TRAK terrain + primary STPC object instances.\n")
+        f.write(f"# {description}\n")
         if include_terrain and terrain.exists():
             f.write("\no terrain\n")
             copy_obj(terrain, f, add_offsets=True)
         if inst.exists():
-            f.write("\n# --- STPC primary object instances ---\n")
+            f.write("\n# --- STPC object instances ---\n")
             copy_obj(inst, f, add_offsets=True)
     return out
+
+
+def write_terrain_and_objects_obj(
+    world_dir: Path,
+    *,
+    textured_terrain_obj: Path | None = None,
+    object_obj: Path | None = None,
+) -> Path | None:
+    """Write the single textured terrain + placed primary objects OBJ."""
+    terrain_name = "terrain.obj"
+    if textured_terrain_obj is not None and textured_terrain_obj.exists():
+        terrain_name = textured_terrain_obj.name
+    elif (world_dir / "terrain_textured.obj").exists():
+        terrain_name = "terrain_textured.obj"
+
+    object_name = "objects_primary.obj"
+    if object_obj is not None and object_obj.exists():
+        object_name = object_obj.name
+
+    return write_world_combined_obj(
+        world_dir,
+        terrain_name=terrain_name,
+        object_name=object_name,
+        output_name="terrain_and_objects.obj",
+        description="Textured terrain plus placed STPC object instances.",
+    )
 
 
 
@@ -910,8 +949,8 @@ def export_world(
             "object_x_offset": object_x_offset,
             "object_y_offset": object_y_offset,
             "object_z_offset": object_z_offset,
-            "yaw_units_4096": o.small_04,
-            "yaw_degrees": (o.small_04 / 4096.0) * 360.0 * stpc_object_yaw_sign if apply_stpc_object_yaw else 0.0,
+            "yaw_units_4096": o.rot_y_units,
+            "yaw_degrees": (o.rot_y_units / 4096.0) * 360.0 * stpc_object_yaw_sign if apply_stpc_object_yaw else 0.0,
             "apply_yaw": apply_stpc_object_yaw,
         } for o in instances
     ))
@@ -935,6 +974,11 @@ def export_world(
         materials=materials,
     )
     world_combined = write_world_combined_obj(out_dir)
+    terrain_and_objects = write_terrain_and_objects_obj(
+        out_dir,
+        textured_terrain_obj=textured_terrain_obj,
+        object_obj=combined_obj,
+    )
 
     # CSV: all MAP object placements.
     _write_csv(out_dir / "map_object_instances.csv", [
@@ -1045,7 +1089,8 @@ def export_world(
         "objects_by_hit_folder": "objects_by_hit/",
         "objects_primary_obj": str(combined_obj.name) if combined_obj else None,
         "combined_obj": str(world_combined.name) if world_combined else None,
-        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from small_04, and final object alignment offsets. Scale and full object-definition semantics are still unresolved; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
+        "terrain_and_objects_obj": str(terrain_and_objects.name) if terrain_and_objects else None,
+        "important_note": "Terrain is the validated orientation. STPC instances use MAP object XYZ, centered Z mirror, experimental object yaw from rot_y_units, and final object alignment offsets. Scale and full object-definition semantics are still unresolved; STPC UVs/material texture pages are exported from the current EXE-derived material path where available; use objects_by_hit/ and diagnostics/ for validation.",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "summary.txt").write_text("\n".join(f"{k}: {v}" for k, v in summary.items()) + "\n", encoding="utf-8")
@@ -1058,6 +1103,7 @@ def export_world(
         unique_meshes_referenced=summary["unique_meshes_referenced"],
         combined_obj_path=combined_obj,
         terrain_obj_path=terrain_obj,
+        terrain_and_objects_obj_path=terrain_and_objects,
     )
 
 

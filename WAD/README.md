@@ -160,7 +160,8 @@ Useful first files to inspect:
 | `trak/viewer.html` | Interactive terrain/sector preview. |
 | `stpc/manifest.csv` | Table-decoded STPC geometry records, offsets, matrix groups, and counts. |
 | `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
-| `world/combined.obj` | Current best-effort combined world reconstruction. |
+| `world/terrain_and_objects.obj` | Textured terrain plus placed STPC object instances in one OBJ. |
+| `world/combined.obj` | Current best-effort diagnostic combined world reconstruction. |
 | `lights/lights.csv` | Runtime-derived light positions, colors, radii, and types. |
 | `sounds/smpc_manifest.csv` | Level sound table and decoded WAV metadata. |
 | `srpc/srpc_entries.csv` | Speech table pointing into `ENGLISH.CVS`. |

@@ -23,6 +23,7 @@ def _collect_world_obj_assets(world_dir: Path) -> list[Path]:
         world_dir / "objects_primary.obj",
         world_dir / "objects_all_candidates.obj",
         world_dir / "map_object_markers.obj",
+        world_dir / "terrain_and_objects.obj",
         world_dir / "combined.obj",
     ]
     assets: list[Path] = [p for p in preferred if p.exists()]
