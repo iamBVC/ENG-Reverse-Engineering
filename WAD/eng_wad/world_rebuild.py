@@ -12,14 +12,15 @@ reverse-engineering notes.  At runtime the game converts it to:
 
     dword_6D9DBC + stpc_object_def_offset
 
-where dword_6D9DBC is the raw STPC chunk base.  Many of those object-definition
-records contain 32-bit values that match decoded STPC mesh-record offsets.
+where dword_6D9DBC is the raw STPC chunk base.  Some of those object-definition
+records contain 0x00B2 script operands that point at decoded STPC mesh-record
+offsets.
 
 This exporter is deliberately conservative around unresolved STPC object-definition details:
 
-* It only instances STPC meshes when an exact little-endian u32 match to a
-  decoded mesh-record offset is found inside the object's STPC definition scan
-  window.
+* It only instances STPC meshes when an STPC object script 0x00B2 operand
+  resolves to a decoded mesh-record offset inside the object's bounded
+  definition scan window.
 * It uses the confirmed MAP object XYZ as translation.
 * It applies the confirmed MAP tile placement/yaw to TRAK terrain.
 * It applies the confirmed MAP object XYZ and the validated coordinate-basis fix
@@ -237,33 +238,85 @@ def scan_stpc_definition_for_mesh_offsets(
     meshes: list[MeshCandidate],
     scan_bytes: int = 2048,
     dedupe_per_object_mesh: bool = True,
+    stop_at_next_definition: bool = True,
+    follow_script_pointers: bool = True,
+    max_script_pointer_depth: int = 1,
 ) -> list[StpcMeshReferenceHit]:
-    """Find exact u32 references to decoded STPC mesh-record offsets.
+    """Find script opcode 0x00B2 references to decoded STPC mesh records.
 
-    The STPC object-definition format is still not fully decoded, so we do not
-    parse opcodes yet.  We scan each object's definition window byte-by-byte for
-    little-endian u32 values equal to one of the known mesh record offsets.  A
-    byte-by-byte scan is intentional because object definitions are not always
-    4-byte aligned.
+    The STPC object-definition VM is only partially decoded, but the executable
+    pattern for mesh references is clear in the object streams:
+
+        u16 opcode = 0x00B2
+        u16 arg_or_zero
+        u32 stpc_relative_geometry_offset
+
+    Earlier exports byte-scanned every u32 value.  That produced false positives
+    such as ordinary constants equal to 4, and long scan windows could bleed into
+    the next object definition.  Restricting to the B2 operand and stopping at
+    the next known MAP object-definition offset keeps the binding conservative.
+
+    Some B2 operands point at shared object-script blocks instead of geometry.
+    For objects without a direct geometry operand, follow those immediate script
+    pointers one bounded level and use mesh operands found there.  This recovers
+    delegated definitions without letting a common script chain pull unrelated
+    meshes into objects that already named their geometry directly.
     """
     mesh_by_offset = {m.offset: m for m in meshes}
     if not mesh_by_offset:
         return []
+
+    unique_definition_offsets = sorted({
+        inst.stpc_def_offset for inst in instances
+        if 0 <= inst.stpc_def_offset < len(stpc_bytes)
+    })
+    def bounded_scan_end(start: int) -> int:
+        end = min(len(stpc_bytes), start + max(0, scan_bytes))
+        if stop_at_next_definition:
+            for def_off in unique_definition_offsets:
+                if def_off > start:
+                    end = min(end, def_off)
+                    break
+        return end
+
+    def iter_b2_operands(start: int, end: int) -> Iterable[tuple[int, int]]:
+        if start < 0 or start >= len(stpc_bytes):
+            return
+        for off in range(start, max(start, end - 7)):
+            if struct.unpack_from("<H", stpc_bytes, off)[0] != 0x00B2:
+                continue
+            target = struct.unpack_from("<I", stpc_bytes, off + 4)[0]
+            yield off, target
 
     hits: list[StpcMeshReferenceHit] = []
     for inst in instances:
         start = inst.stpc_def_offset
         if start < 0 or start >= len(stpc_bytes):
             continue
-        end = min(len(stpc_bytes), start + max(0, scan_bytes))
+        end = bounded_scan_end(start)
+        direct_operands = list(iter_b2_operands(start, end))
+        candidate_refs: list[tuple[int, int, int]] = []
+
+        for off, target in direct_operands:
+            if target in mesh_by_offset:
+                candidate_refs.append((off - start, off, target))
+
+        if not candidate_refs and follow_script_pointers and max_script_pointer_depth > 0:
+            for ptr_off, ptr_target in direct_operands:
+                if ptr_target in mesh_by_offset or not (0 <= ptr_target < len(stpc_bytes)):
+                    continue
+                ptr_end = bounded_scan_end(ptr_target)
+                for nested_off, nested_target in iter_b2_operands(ptr_target, ptr_end):
+                    if nested_target not in mesh_by_offset:
+                        continue
+                    # Keep primary-hit ordering tied to the object's own script
+                    # operand, not the absolute position of the shared block.
+                    candidate_refs.append((ptr_off - start, nested_off, nested_target))
+
         seen_meshes: set[int] = set()
         dup_index = 0
-        # Need at least four bytes for a u32.
-        for off in range(start, max(start, end - 3)):
-            val = struct.unpack_from("<I", stpc_bytes, off)[0]
-            mesh = mesh_by_offset.get(val)
-            if mesh is None:
-                continue
+        for selection_offset, off, target in sorted(candidate_refs):
+            mesh = mesh_by_offset[target]
             if dedupe_per_object_mesh and mesh.index in seen_meshes:
                 continue
             seen_meshes.add(mesh.index)
@@ -273,9 +326,9 @@ def scan_stpc_definition_for_mesh_offsets(
                 scan_start=start,
                 scan_end=end,
                 hit_file_offset=off,
-                hit_relative_offset=off - start,
+                hit_relative_offset=selection_offset,
                 mesh_index=mesh.index,
-                mesh_offset=mesh.offset,
+                mesh_offset=target,
                 duplicate_index_for_object=dup_index,
             ))
             dup_index += 1
@@ -629,7 +682,7 @@ def write_instanced_stpc_objs(
     # Primary-only file: first/earliest hit per object.  This is often the most
     # useful visual export while the STPC object-definition script is unknown.
     first_by_object: dict[int, StpcMeshReferenceHit] = {}
-    for hit in sorted(hits, key=lambda h: (h.object_index, h.hit_relative_offset, h.mesh_index)):
+    for hit in sorted(hits, key=lambda h: (h.object_index, h.duplicate_index_for_object)):
         first_by_object.setdefault(hit.object_index, hit)
     primary = out_dir / "objects_primary.obj"
     with primary.open("w", encoding="utf-8", newline="\n") as f:
@@ -661,7 +714,7 @@ def write_instanced_stpc_objs(
                 f.write("# This may intentionally contain multiple meshes; use objects_by_hit/ for singular meshes.\n")
                 f.write(f"# position={inst.world_x:.9g},{inst.world_y:.9g},{inst.world_z:.9g}\n")
                 vbase = 1
-                for hit in sorted(obj_hits, key=lambda h: (h.hit_relative_offset, h.mesh_index)):
+                for hit in sorted(obj_hits, key=lambda h: h.duplicate_index_for_object):
                     mesh = by_mesh.get(hit.mesh_index)
                     if mesh is None:
                         continue
