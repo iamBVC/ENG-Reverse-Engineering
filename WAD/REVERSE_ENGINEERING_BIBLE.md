@@ -46,7 +46,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1398034499` | `STPC` / `CPTS` | packed scene/static mesh/animation container | `sub_42AB50` |
 | `1413830740` | `TEXT`-material-related | material/texture table | `sub_4067B0` |
 | `1414676811` | `TRAK` / `KART` integer | terrain/track geometry records | `sub_42AAC0` |
-| `1464225859` | flags/version | WAD capability flags | reads `dword_6DA330` |
+| `1464225859` | `WFPC` | WAD feature/capability flags | reads `dword_6DA330` |
 
 `sub_558C30(a1)` resets per-level state, frees light handles through `sub_42C460`, clears material pointers, clears the world container, and resets chunk allocator state.
 
@@ -355,6 +355,47 @@ Observed sample bases against parsed `TEXT` material counts:
 | `t0i0m000` | 366 | 389 | 23 | 11 |
 
 The exporter writes `sprt/summary.txt`, `sprt/summary.json`, and `sprt/sprite_material_slots.csv`, mapping each derived two-material sprite slot to the corresponding parsed `TEXT` material rectangle and texture index.
+
+## WFPC feature flags chunk
+
+`WFPC` is a 4-byte feature/capability mask.  The loader branch at `loc_558B8B` reads the payload directly into `dword_6DA330`:
+
+```text
++0x00  u32 flags -> dword_6DA330
+```
+
+Later chunk loaders and runtime paths test individual bits.  Confirmed or observed bits from current disassembly pass:
+
+| Mask | Status | Consumer | Meaning |
+|---:|---|---|---|
+| `0x00000010` | confirmed | `sub_42AC50`, `loc_42BECC` | MAP has `final_optional_dword` before `final_u16`; otherwise `dword_6DA328` defaults to 200. |
+| `0x00000080` | observed only | no confirmed `dword_6DA330` consumer yet | Active in all sampled WADs. |
+| `0x00000100` | loader-confirmed, unobserved | `sub_42AB50`, `loc_42ABE8` | STPC has an extra tail count and repeated 16-byte records with variable 8-byte subrecords. |
+| `0x00000200` | observed only | no confirmed consumer yet | Active in tested full level WADs. |
+| `0x00000400` | observed only | no confirmed consumer yet | Active in several WADs; absent in `t1l1m003/t1l1m004`. |
+| `0x00000800` | runtime-confirmed, unobserved | `sub_419676`, nearby init paths | Passed into `sub_424B60/sub_424B90` during render/camera initialization. |
+| `0x00010000` | confirmed | `sub_42AC50`, `loc_42B273` | MAP includes optional 20-byte records and extra vertex-color blocks for marked tiles. |
+| `0x00080000` | runtime-confirmed, unobserved | `sub_550E60` jump-table case 142 | Passed to `sub_54BBD0`; semantic name still unknown. |
+| `0x00100000` | loader-confirmed, unobserved | `SPRT` branch at `loc_558AD1` | SPRT includes `optional_count` and a u32 table after `material_base_index`. |
+| `0x00200000` | loader-confirmed, unobserved | `sub_42AC50`, `loc_42BBFB` | MAP includes a global chain/table structure at `dword_6D9C90/dword_6D9CC0`. |
+| `0x00400000` | observed only | no confirmed consumer yet | Active only in `t1l1m001` among current samples. |
+| `0x04000000` | loader-confirmed, unobserved | `sub_42AC50`, `loc_42BD57` | When the MAP chain table exists, each chain record includes an extra dword at runtime `+0x14`. |
+| `0x08000000` | observed only | no confirmed `dword_6DA330` consumer yet | Active in all sampled WADs. |
+| `0x10000000` | confirmed | `sub_42AC50`, `loc_42B335`; `sub_42C790` | MAP allocates wider per-tile vertex-list pointers and uses optional20 records in follow-up processing. |
+
+Observed sample values:
+
+| WAD | WFPC flags | Active masks |
+|---|---:|---|
+| `t0i0m000` | `0x08000490` | `0x10`, `0x80`, `0x400`, `0x08000000` |
+| `t0i0m998` | `0x08000080` | `0x80`, `0x08000000` |
+| `t0i0m999` | `0x08000080` | `0x80`, `0x08000000` |
+| `t1l1m001` | `0x18410690` | `0x10`, `0x80`, `0x200`, `0x400`, `0x10000`, `0x00400000`, `0x08000000`, `0x10000000` |
+| `t1l1m002` | `0x18010690` | `0x10`, `0x80`, `0x200`, `0x400`, `0x10000`, `0x08000000`, `0x10000000` |
+| `t1l1m003` | `0x18010290` | `0x10`, `0x80`, `0x200`, `0x10000`, `0x08000000`, `0x10000000` |
+| `t1l1m004` | `0x180102D0` | `0x10`, `0x40`, `0x80`, `0x200`, `0x10000`, `0x08000000`, `0x10000000` |
+
+The extractor writes `wfpc/summary.txt`, `wfpc/summary.json`, and `wfpc/flags.csv`.  `parse_map_full_exe` now receives `assume_optional20` from `WFPC & 0x10000` and `assume_final_dword` from `WFPC & 0x10`, matching the executable's gated MAP read order.
 
 ## SRPC / CPRS streamed speech chunk
 
@@ -1038,6 +1079,8 @@ Fallback d-pad values:
 - `map_full/objects_72_runtime.csv`: how the disk records expand into the runtime 72-byte table.
 - `map_full/actors_spawn_preview.csv`: predicted initial `Actor340` spawn fields.
 - `map_full/object_spawn_points.obj`: confirmed fixed12 object position markers.
+- `wfpc/summary.txt`: copied `dword_6DA330` feature mask and active/unknown masks.
+- `wfpc/flags.csv`: per-bit WFPC diagnostics with confirmed consumers where known.
 - `lights/lights.csv`: typed directional/point/negative point lights with runtime conversions.
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
 - `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
@@ -1059,6 +1102,7 @@ Fallback d-pad values:
 6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing, mesh binding, child-transform inheritance, and Section4 route transforms are confirmed, but complete actor/object behavior still needs VM semantics.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 8. `SPRT` optional table behind `dword_6DA330 & 0x100000` is loader-confirmed but not observed in current sample WADs; high-level sprite records and animation/frame command semantics remain unnamed.
+9. Several observed WFPC bits are still unnamed: `0x40`, `0x80`, `0x200`, `0x400`, `0x00400000`, and `0x08000000`.
 
 ## Recommended next reverse-engineering targets
 
@@ -1068,6 +1112,7 @@ Fallback d-pad values:
 4. `sub_553920`–`sub_5539E0` (opcodes 0x37–0x3B) and `sub_553A10`–`sub_553B00` (0x3D–0x43) — likely geometry/transform opcodes worth decoding next.
 5. `sub_550E60` and `sub_5509F0` — called by multiple opcodes as the primary function-dispatch path; understanding them would clarify ~10 opcodes at once.
 6. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
+7. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
 
 ---
 

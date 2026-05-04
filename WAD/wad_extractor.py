@@ -27,6 +27,7 @@ from eng_wad.stpc_chunk import export_stpc_meshes_from_bytes
 from eng_wad.text_chunk import export_textures, parse_text_chunk
 from eng_wad.trak_chunk import export_trak_from_bytes
 from eng_wad.trak_viewer import write_map_placed_trak_viewer_html
+from eng_wad.wfpc_chunk import export_wfpc, parse_wfpc_chunk
 from eng_wad.world_rebuild import export_world
 from eng_wad.wad import chunk_bytes, chunk_manifest_lines, read_wad
 
@@ -49,6 +50,8 @@ def _write_level_metadata(data: bytes, by_tag: dict, out_dir: Path, info_lines: 
     if "LNFO" in by_tag and by_tag["LNFO"].size >= 8:
         off = by_tag["LNFO"].offset
         info_lines.append(f"Light info  : count={u32(data, off)}, version={u32(data, off + 4)}")
+    if "WFPC" in by_tag and by_tag["WFPC"].size >= 4:
+        info_lines.append(f"WFPC flags  : 0x{u32(data, by_tag['WFPC'].offset):08X}")
     if "SPRT" in by_tag and by_tag["SPRT"].size >= 4:
         info_lines.append(f"SPRT material base: {u32(data, by_tag['SPRT'].offset)}")
 
@@ -114,11 +117,22 @@ def extract_wad(
     mapx = None
     stpc_bytes_for_world = None
     text_chunk_for_materials = None
+    wfpc = None
 
     info_lines = chunk_manifest_lines(wad_path, data, chunks)
     _write_level_metadata(data, by_tag, out_dir, info_lines)
     (out_dir / "info.txt").write_text("\n".join(info_lines) + "\n", encoding="utf-8")
     print("  → info.txt")
+
+    # WFPC: feature flags copied by the executable to dword_6DA330.
+    if "WFPC" in by_tag:
+        print("  [WFPC] Parsing WAD feature flags ...")
+        try:
+            wfpc = parse_wfpc_chunk(chunk_bytes(data, by_tag["WFPC"]))
+            summary = export_wfpc(wfpc, out_dir / "wfpc")
+            print(f"  -> wfpc/ (flags={summary['flags_hex']})")
+        except Exception as exc:
+            print(f"  [WFPC] Parse/export error: {exc}", file=sys.stderr)
 
     # TEXT: textures and palette/control-map diagnostics.
     if extract_textures and "TEXT" in by_tag:
@@ -245,7 +259,12 @@ def extract_wad(
         if map_bytes_for_probe is not None and trak_result is not None:
             print("  [MAPX] Parsing executable-confirmed MAP structure …")
             try:
-                mapx = parse_map_full_exe(map_bytes_for_probe, trak_result.trak)
+                mapx = parse_map_full_exe(
+                    map_bytes_for_probe,
+                    trak_result.trak,
+                    assume_optional20=wfpc.has(0x10000) if wfpc is not None else True,
+                    assume_final_dword=wfpc.has(0x10) if wfpc is not None else True,
+                )
                 export_map_full_exe(mapx, out_dir / "map_full")
                 if trak_result is not None:
                     write_map_placed_trak_viewer_html(

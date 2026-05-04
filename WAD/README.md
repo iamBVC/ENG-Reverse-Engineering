@@ -18,6 +18,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 - decode `SRPC` streamed speech tables and, when `Music/ENGLISH.CVS` is available, export speech `.cvs` slices and WAV files
 - decode `TRAK` terrain/world geometry records, vertices, triangles, collision/contact entries, OBJ surfaces, and an HTML viewer
 - parse `STPC` with the executable-confirmed table/cursor layout and export all decoded geometry records as OBJ meshes
+- decode `WFPC` feature flags that gate optional MAP, STPC, and SPRT payloads
 - generate a `world/` reconstruction using TRAK terrain, MAP object placement, and STPC mesh candidates
 - preserve raw chunks for anything still unknown or only partially decoded
 
@@ -134,6 +135,7 @@ extracted/t1l1m001/
   level_name.txt
 
   raw/                  preserved source chunks
+  wfpc/                 WFPC feature flag summary and bit diagnostics
   textures/             decoded TEXT PNG textures
   texture_fields/       optional diagnostic field images
   palette/              palette/material diagnostics
@@ -157,6 +159,7 @@ Useful first files to inspect:
 | File | Why it matters |
 |---|---|
 | `info.txt` | Shows chunk order, offsets, sizes, and basic metadata. |
+| `wfpc/flags.csv` | Active WFPC feature bits, confirmed consumers, and unknown observed bits. |
 | `textures/*.png` | Decoded level texture pages. |
 | `map_full/objects_58_disk.csv` | Executable-confirmed MAP object table. |
 | `trak/viewer.html` | Interactive terrain/sector preview. |
@@ -212,7 +215,7 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `MAP ` | ~60% | Parses tile placement, grid, object58 table, vertex colors, MAP diagnostics. | Section 3/4 semantics, some flags/type ids, complete object runtime behavior. |
 | `LGHT` | ~90% | Exports directional, point, and negative/special point lights. | Final type-2/type-4 byte currently named `falloff_or_mode`; two copied runtime color fields. |
 | `LGPC` | ~5% | Preserves raw bytes. | Structure and purpose unknown. |
-| `WFPC` | ~5% | Preserves raw bytes. | Structure and purpose unknown. |
+| `WFPC` | ~55% | Reads the executable-confirmed `dword_6DA330` feature flags, exports flag diagnostics, and uses confirmed MAP layout bits. | Exact names for several observed-only bits and some runtime-only consumers. |
 
 ## Chunk summary
 
@@ -232,6 +235,10 @@ Stores the main world/terrain geometry record table.  Each decoded geometry reco
 
 Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data.  The exporter also scans the script tail for opcode `0xB2` references back to decoded geometry offsets.  The old scanner remains available internally as a fallback.
 
+### `WFPC`
+
+Stores a single 32-bit feature/capability mask.  The executable copies it into `dword_6DA330`; later loaders test bits to decide whether optional chunk payloads exist.  Confirmed examples include `0x10` for a final MAP dword, `0x10000` for MAP optional20/extra color records, `0x100000` for the SPRT optional table, and `0x10000000` for extended MAP vertex-list processing.
+
 ### `LGHT`
 
 Stores level lights.  Directional lights and point-like lights are mostly decoded.  Runtime conversion doubles color intensity to a `0.0..2.0` range and negates Z in several cases.
@@ -250,7 +257,7 @@ Stores sprite rendering metadata, not pixels.  The first `u32` is copied by the 
 
 ### Raw/low-knowledge chunks
 
-`AMPC`, `FONT`, `LGPC`, `WFPC`, and parts of `LNFO` are preserved for later analysis.  `SPRT` now has confirmed material-base decoding, but the higher-level sprite/animation structures that consume those slots still need more runtime analysis.
+`AMPC`, `FONT`, `LGPC`, and parts of `LNFO` are preserved for later analysis.  `WFPC` and `SPRT` now have confirmed first-pass decoding, but several WFPC bits and the higher-level sprite/animation structures that consume SPRT slots still need more runtime analysis.
 
 ## Development notes
 
@@ -273,6 +280,7 @@ eng_wad/map_export.py     MAP CSV, PNG, OBJ, and HTML exports
 eng_wad/trak_chunk.py     TRAK parser/exporter
 eng_wad/stpc_chunk.py     STPC table parser/exporter plus scanner fallback
 eng_wad/world_rebuild.py  TRAK + MAP + STPC reconstruction
+eng_wad/wfpc_chunk.py     WFPC feature flag parser/exporter
 eng_wad/light_chunk.py    LGHT parser/exporter
 eng_wad/smpc_chunk.py     SMPC sound parser/exporter
 eng_wad/srpc_chunk.py     SRPC speech parser/exporter
@@ -286,5 +294,5 @@ eng_wad/raw_export.py     raw chunk preservation
 2. Finish naming MAP Section 3/4 and object-definition data.
 3. Validate MAP object placement against more levels and in-game positions.
 4. Name the remaining TRAK/STPC geometry header fields and collision group roles.
-5. Finish decoding `AMPC`, `LGPC`, `WFPC`, `FONT`, and the remaining high-level `SPRT` sprite/animation consumers.
+5. Finish decoding `AMPC`, `LGPC`, `FONT`, remaining observed-only `WFPC` bits, and high-level `SPRT` sprite/animation consumers.
 6. Build a single viewer that combines decoded textures, TRAK terrain, STPC objects, MAP placement, and LGHT lights.
