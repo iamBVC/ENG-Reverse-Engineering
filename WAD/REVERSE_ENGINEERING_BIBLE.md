@@ -131,6 +131,18 @@ Two closely related geometry record formats exist:
 - `GeometryRecord84`: 132 bytes, used by `dword_5846EC` for TRAK/world geometry and many render/collision paths.
 - `GeometryRecord8C`: 140 bytes, used by packed `CPTS/STPC` container sections and extended/skinned/morphed geometry paths.
 
+### BRender source comparison notes
+
+- The public BRender model structs do **not** match the WAD geometry records directly.  In the source tree, 32-bit `br_model` is 92 bytes, `br_vertex` is 40 bytes, and `br_face` is 40 bytes (`BRender/inc/model.h`).  The game chunks use 132-byte/140-byte geometry records, 24-byte vertices, and 28-byte triangles.
+- The game triangle record still looks BRender-derived: it keeps three u16 vertex indices, a material pointer slot at runtime, and a face plane equation.  However, the game packs flags/material/equation differently than public `br_face`.
+- BRender's internal prepared render format is a better conceptual match than public `br_model`.  `BRender/core/fw/formats.h` defines `v11model`/`v11group` with grouped faces by material, `vertex_numbers`, `edges`, `eqn`, `position`, `map`, `normal`, face colours, and vertex colours.  The game's geometry records appear to be a custom packed/static variant that can feed similar renderer concepts without storing a full public `br_model`.
+- `BRender/core/v1db/prepmesh.c` confirms that BRender prepares models by grouping faces by material, copying vertex positions/maps/normals, copying face equations, and optionally building stored renderer geometry.  This explains why the game geometry carries precomputed bounds/cull data and face plane equations.
+- `br_actor` (`BRender/inc/actor.h`) is not the same as the game's large `Actor340` runtime object.  The game actor embeds script VM fields, movement/state fields, and game-specific lists; BRender's actor is a smaller scene-graph node with model/material pointers and a `br_transform`.
+- BRender scalar/angle conventions are useful but not always identical.  BRender can be built with fixed or float scalars (`BRender/inc/scalar.h`), and its `br_angle` uses 65536 units per full turn in the float macro path.  The game MAP object yaw values observed so far use 4096 units per full turn, so object angles are game-side units, not raw `br_angle`.
+- BRender material names/flags are a strong naming source for TEXT/SPRT analysis.  `br_material` has `flags`, `map_transform`, `colour_map`, and mode bits such as two-sided, depth-write inhibition, blend modes, wrap/clamp/mirror, and colour-key toggles (`BRender/inc/material.h`).  The game's compact 20-byte runtime material table is not public `br_material`, but many render-state semantics likely descend from BRender material state.
+
+Practical use: use BRender to name renderer concepts, material modes, actor hierarchy transforms, prepared-model fields, and possible library helper functions.  Do not rewrite WAD parsers to public BRender structs unless an executable loader explicitly proves that a chunk uses a BRender file/chunk format.
+
 ### `GeometryRecord84`
 
 Confirmed from `sub_5563F0`, `sub_402840`, `sub_556510`, `sub_41FB30`, collision functions, and MAP render dispatch.
