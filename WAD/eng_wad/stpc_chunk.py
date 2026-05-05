@@ -40,6 +40,7 @@ headers first and all vertex/triangle data later.
         Block32 blocks[header.u16_78 + header.u16_7A + header.u16_7C]
     u32 section2_count
     GeometryAnimRecord32 section2[section2_count]
+    Section2 variable arrays relocated by sub_41F8B0
     raw script / constants / string tail
 
 Recognized mesh record shape
@@ -289,6 +290,42 @@ class ScriptGeometryReference:
 
 
 @dataclass
+class ScriptB2Operand:
+    """One byte-scan candidate STPC VM opcode 0x00B2 pointer operand."""
+    script_offset: int
+    raw_u32: int
+    signed_value: int
+    target_kind: str
+    resolved_index: int | None
+    mesh_index: int | None
+
+
+@dataclass
+class STPCSection2Record:
+    """One 32-byte STPC section2/animation-style record.
+
+    The executable relocates these records with sub_41F8B0.  The names below
+    stay structural until the animation semantics are fully known, but the
+    counts and derived payload offsets are loader-confirmed.
+    """
+    index: int
+    offset: int
+    raw_words: tuple[int, int, int, int, int, int, int, int]
+    table0_count: int
+    key_count: int
+    inline_disable_flag: int
+    per_key_format: int
+    payload64_count: int
+    table0_offset: int | None
+    fixed8_table_offset: int | None
+    per_key_pointer_table_offset: int | None
+    per_key_payload_offsets: list[int | None]
+    payload64_pointer_table_offset: int | None
+    payload64_offsets: list[int | None]
+    end_offset: int
+
+
+@dataclass
 class STPCExportResult:
     """Summary returned by the library export API."""
     top_count: int
@@ -303,9 +340,13 @@ class STPCExportResult:
     geometry_end_offset: int | None = None
     section2_count: int | None = None
     section2_offset: int | None = None
+    section2_records: list[STPCSection2Record] | None = None
+    section2_records_path: Path | None = None
     script_tail_offset: int | None = None
     script_reference_path: Path | None = None
     script_references: list[ScriptGeometryReference] | None = None
+    script_b2_operands_path: Path | None = None
+    script_b2_operands: list[ScriptB2Operand] | None = None
     parser_warning: str | None = None
 
 
@@ -550,20 +591,20 @@ def parse_stpc_geometry_table(
     max_vertices: int = 20000,
     max_triangles: int = 50000,
     min_score: float = 0.0,
-) -> tuple[list[MeshCandidate], int, int | None, int | None, str | None]:
+) -> tuple[list[MeshCandidate], int, int | None, int | None, list[STPCSection2Record], str | None]:
     """
     Parse STPC geometry using the sub_42AB50/sub_41F770 cursor layout.
 
     Returns (meshes, geometry_end_offset, section2_count, script_tail_offset,
-    warning).  A non-empty warning means the table parser rejected the blob and
-    the caller may choose the legacy scanner fallback.
+    section2_records, warning).  A non-empty warning means the table parser
+    rejected the blob and the caller may choose the legacy scanner fallback.
     """
     if len(buf) < 8:
-        return [], 0, None, None, "STPC blob is too small"
+        return [], 0, None, None, [], "STPC blob is too small"
 
     stored_count = u32(buf, 0)
     if stored_count == 0 or stored_count > 10000:
-        return [], 4, None, None, f"implausible stored_count={stored_count}"
+        return [], 4, None, None, [], f"implausible stored_count={stored_count}"
 
     record_count = stored_count - 1
     cur = 4
@@ -572,7 +613,7 @@ def parse_stpc_geometry_table(
     for i in range(record_count):
         rec_off = cur
         if rec_off + HEADER_SIZE > len(buf):
-            return meshes, cur, None, None, f"record {i} header exceeds STPC size"
+            return meshes, cur, None, None, [], f"record {i} header exceeds STPC size"
         cur += HEADER_SIZE
 
         vertex_count = u16(buf, rec_off + 0x6C)
@@ -587,7 +628,7 @@ def parse_stpc_geometry_table(
         matrix_counts_off = cur
         matrix_counts_end = cur + matrix_group_count * 2
         if matrix_counts_end > len(buf):
-            return meshes, cur, None, None, f"record {i} matrix-count array exceeds STPC size"
+            return meshes, cur, None, None, [], f"record {i} matrix-count array exceeds STPC size"
         matrix_counts = [u16(buf, cur + 2 * j) for j in range(matrix_group_count)]
         cur = matrix_counts_end
 
@@ -620,7 +661,7 @@ def parse_stpc_geometry_table(
             max_triangles=max_triangles,
         )
         if mesh is None:
-            return meshes, rec_off, None, None, f"record {i} failed geometry validation at 0x{rec_off:08X}"
+            return meshes, rec_off, None, None, [], f"record {i} failed geometry validation at 0x{rec_off:08X}"
         if mesh.score >= min_score:
             meshes.append(mesh)
         cur = end_off
@@ -628,15 +669,117 @@ def parse_stpc_geometry_table(
     geometry_end_offset = cur
     section2_count: int | None = None
     script_tail_offset: int | None = None
+    section2_records: list[STPCSection2Record] = []
     if cur + 4 <= len(buf):
         section2_count = u32(buf, cur)
         section2_offset = cur + 4
-        section2_end = section2_offset + section2_count * ANIM_RECORD_STRIDE
-        if section2_count < 100000 and section2_end <= len(buf):
-            script_tail_offset = section2_end
+        if section2_count < 100000:
+            section2_records, section2_end, section2_warning = parse_stpc_section2_records(
+                buf,
+                section2_offset,
+                section2_count,
+            )
+            if section2_warning is None:
+                script_tail_offset = section2_end
+            else:
+                script_tail_offset = section2_offset
         else:
             script_tail_offset = section2_offset
-    return meshes, geometry_end_offset, section2_count, script_tail_offset, None
+    return meshes, geometry_end_offset, section2_count, script_tail_offset, section2_records, None
+
+
+def parse_stpc_section2_records(
+    buf: bytes,
+    section2_offset: int,
+    count: int,
+) -> tuple[list[STPCSection2Record], int, str | None]:
+    """Decode the executable-confirmed sub_41F8B0 Section2 cursor layout.
+
+    sub_41F8B0 first reserves count * 0x20 bytes for fixed records, then walks
+    each record and relocates several count-driven payload areas that follow the
+    fixed table.  The returned end offset is therefore the real start of the
+    script/object-definition tail.
+    """
+    fixed_end = section2_offset + count * ANIM_RECORD_STRIDE
+    if count < 0 or section2_offset < 0 or fixed_end > len(buf):
+        return [], section2_offset, "section2 fixed table exceeds STPC size"
+
+    cur = fixed_end
+    records: list[STPCSection2Record] = []
+
+    def take(size: int) -> int | None:
+        nonlocal cur
+        if size <= 0:
+            return None
+        off = cur
+        cur += size
+        return off
+
+    for i in range(count):
+        off = section2_offset + i * ANIM_RECORD_STRIDE
+        words = struct.unpack_from("<8I", buf, off)
+        table0_count = words[0]
+        key_count = words[2]
+        inline_disable_flag = words[3]
+        per_key_format = words[4]
+        payload64_count = words[6]
+
+        if (
+            table0_count > 100000
+            or key_count > 100000
+            or per_key_format > 100000
+            or payload64_count > 100000
+        ):
+            return records, cur, f"section2 record {i} has implausible counts"
+
+        table0_offset = take(table0_count * 4)
+
+        # If disk +0x0C is nonzero, the loader clears runtime +0x0C and does
+        # not consume the count*8 table.  If it is zero, count*8 bytes follow.
+        fixed8_table_offset = None
+        if inline_disable_flag == 0:
+            fixed8_table_offset = take(key_count * 8)
+
+        per_key_pointer_table_offset = None
+        per_key_payload_offsets: list[int | None] = []
+        if per_key_format > 0:
+            per_key_pointer_table_offset = take(key_count * 4)
+            for key_i in range(key_count):
+                if key_i == 0:
+                    size = per_key_format * 8
+                elif per_key_format & 1:
+                    size = per_key_format * 2 + 2
+                else:
+                    size = per_key_format * 2
+                per_key_payload_offsets.append(take(size))
+
+        payload64_pointer_table_offset = take(key_count * 4)
+        payload64_offsets: list[int | None] = []
+        for _ in range(key_count):
+            payload64_offsets.append(take(payload64_count * 64))
+
+        if cur > len(buf):
+            return records, cur, f"section2 record {i} variable data exceeds STPC size"
+
+        records.append(STPCSection2Record(
+            index=i,
+            offset=off,
+            raw_words=words,
+            table0_count=table0_count,
+            key_count=key_count,
+            inline_disable_flag=inline_disable_flag,
+            per_key_format=per_key_format,
+            payload64_count=payload64_count,
+            table0_offset=table0_offset,
+            fixed8_table_offset=fixed8_table_offset,
+            per_key_pointer_table_offset=per_key_pointer_table_offset,
+            per_key_payload_offsets=per_key_payload_offsets,
+            payload64_pointer_table_offset=payload64_pointer_table_offset,
+            payload64_offsets=payload64_offsets,
+            end_offset=cur,
+        ))
+
+    return records, cur, None
 
 
 def scan_meshes(
@@ -692,8 +835,7 @@ def find_script_geometry_references(
 
     In tested STPC script streams the instruction appears as:
 
-        u16 opcode = 0x00B2
-        u16 zero_or_arg
+        u32 opcode_word = 0x000000B2
         u32 stpc_relative_geometry_offset
 
     Therefore the geometry pointer-sized immediate starts at opcode + 4.
@@ -705,7 +847,7 @@ def find_script_geometry_references(
 
     start = 0 if start_offset is None else max(0, min(start_offset, len(buf)))
     for pos in range(start, len(buf) - 8 + 1):
-        if u16(buf, pos) != 0x00B2:
+        if u32(buf, pos) != 0x000000B2:
             continue
         target = u32(buf, pos + 4)
         mesh_index = by_offset.get(target)
@@ -713,6 +855,53 @@ def find_script_geometry_references(
             continue
         refs.append(ScriptGeometryReference(pos, target, mesh_index))
     return refs
+
+
+def find_script_b2_operands(
+    buf: bytes,
+    meshes: list[MeshCandidate],
+    *,
+    start_offset: int | None = None,
+) -> list[ScriptB2Operand]:
+    """Return byte-scan candidate opcode 0x00B2 operands.
+
+    sub_553630 treats non-negative operands as STPC-relative pointers.  Negative
+    operands resolve through the global DEFANIM.WAD pointer table with index
+    ``-operand - 1``.  This helper only accepts the observed full opcode word
+    0x000000B2 to avoid matching arbitrary halfwords in data payloads.  It is
+    still a broad diagnostic because the STPC tail mixes scripts and data.
+    """
+    by_offset = {m.offset: m.index for m in meshes}
+    out: list[ScriptB2Operand] = []
+    if len(buf) < 8:
+        return out
+    start = 0 if start_offset is None else max(0, min(start_offset, len(buf)))
+    for pos in range(start, len(buf) - 8 + 1):
+        if u32(buf, pos) != 0x000000B2:
+            continue
+        raw = u32(buf, pos + 4)
+        signed = struct.unpack("<i", struct.pack("<I", raw))[0]
+        if signed >= 0:
+            if signed >= len(buf):
+                continue
+            out.append(ScriptB2Operand(
+                script_offset=pos,
+                raw_u32=raw,
+                signed_value=signed,
+                target_kind="stpc_relative",
+                resolved_index=signed,
+                mesh_index=by_offset.get(signed),
+            ))
+        else:
+            out.append(ScriptB2Operand(
+                script_offset=pos,
+                raw_u32=raw,
+                signed_value=signed,
+                target_kind="defanim_table",
+                resolved_index=-signed - 1,
+                mesh_index=None,
+            ))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1054,6 +1243,75 @@ def write_script_references(refs: list[ScriptGeometryReference], path: Path) -> 
             ])
 
 
+def write_script_b2_operands(ops: list[ScriptB2Operand], path: Path) -> None:
+    """Write byte-scan candidate opcode 0x00B2 pointer operands."""
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "script_offset_hex",
+            "script_offset_dec",
+            "raw_u32_hex",
+            "signed_value",
+            "target_kind",
+            "resolved_index_or_offset_hex",
+            "resolved_index_or_offset_dec",
+            "mesh",
+        ])
+        for op in ops:
+            resolved = op.resolved_index
+            w.writerow([
+                f"0x{op.script_offset:08X}",
+                op.script_offset,
+                f"0x{op.raw_u32:08X}",
+                op.signed_value,
+                op.target_kind,
+                f"0x{resolved:08X}" if resolved is not None else "",
+                resolved if resolved is not None else "",
+                "" if op.mesh_index is None else op.mesh_index,
+            ])
+
+
+def write_section2_records(records: list[STPCSection2Record], path: Path) -> None:
+    """Write STPC Section2 relocation diagnostics."""
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "index",
+            "offset_hex",
+            "raw_words_hex",
+            "table0_count",
+            "key_count",
+            "inline_disable_flag",
+            "per_key_format",
+            "payload64_count",
+            "table0_offset_hex",
+            "fixed8_table_offset_hex",
+            "per_key_pointer_table_offset_hex",
+            "per_key_payload_offsets_hex",
+            "payload64_pointer_table_offset_hex",
+            "payload64_offsets_hex",
+            "end_offset_hex",
+        ])
+        for rec in records:
+            w.writerow([
+                rec.index,
+                f"0x{rec.offset:08X}",
+                " ".join(f"0x{x:08X}" for x in rec.raw_words),
+                rec.table0_count,
+                rec.key_count,
+                rec.inline_disable_flag,
+                rec.per_key_format,
+                rec.payload64_count,
+                f"0x{rec.table0_offset:08X}" if rec.table0_offset is not None else "",
+                f"0x{rec.fixed8_table_offset:08X}" if rec.fixed8_table_offset is not None else "",
+                f"0x{rec.per_key_pointer_table_offset:08X}" if rec.per_key_pointer_table_offset is not None else "",
+                ";".join("" if x is None else f"0x{x:08X}" for x in rec.per_key_payload_offsets),
+                f"0x{rec.payload64_pointer_table_offset:08X}" if rec.payload64_pointer_table_offset is not None else "",
+                ";".join("" if x is None else f"0x{x:08X}" for x in rec.payload64_offsets),
+                f"0x{rec.end_offset:08X}",
+            ])
+
+
 def write_debug_faces(meshes: list[MeshCandidate], out_dir: Path) -> Path:
     """Write a per-face metadata CSV for reverse-engineering flags/materials."""
     path = out_dir / "faces_debug.csv"
@@ -1147,6 +1405,7 @@ def export_stpc_meshes_from_bytes(
     geometry_end_offset: int | None = None
     section2_count: int | None = None
     section2_offset: int | None = None
+    section2_records: list[STPCSection2Record] = []
     script_tail_offset: int | None = None
     parser_warning: str | None = None
 
@@ -1162,7 +1421,7 @@ def export_stpc_meshes_from_bytes(
             max_triangles=max_triangles,
         )
     else:
-        meshes, geometry_end_offset, section2_count, script_tail_offset, parser_warning = parse_stpc_geometry_table(
+        meshes, geometry_end_offset, section2_count, script_tail_offset, section2_records, parser_warning = parse_stpc_geometry_table(
             buf,
             min_score=0.0,
             min_vertices=min_vertices,
@@ -1182,6 +1441,7 @@ def export_stpc_meshes_from_bytes(
             geometry_end_offset = meshes[-1].end_offset if meshes else None
             section2_count = None
             section2_offset = None
+            section2_records = []
             script_tail_offset = geometry_end_offset
         else:
             parse_mode = "table"
@@ -1191,10 +1451,21 @@ def export_stpc_meshes_from_bytes(
     write_manifest(meshes, manifest_path)
 
     script_refs = find_script_geometry_references(buf, meshes, start_offset=script_tail_offset)
+    script_b2_operands = find_script_b2_operands(buf, meshes, start_offset=script_tail_offset)
     script_reference_path: Path | None = None
     if parse_mode == "table" or script_refs:
         script_reference_path = out_dir / "script_geometry_refs.csv"
         write_script_references(script_refs, script_reference_path)
+
+    script_b2_operands_path: Path | None = None
+    if parse_mode == "table" or script_b2_operands:
+        script_b2_operands_path = out_dir / "script_b2_operand_candidates.csv"
+        write_script_b2_operands(script_b2_operands, script_b2_operands_path)
+
+    section2_records_path: Path | None = None
+    if section2_records:
+        section2_records_path = out_dir / "section2_records.csv"
+        write_section2_records(section2_records, section2_records_path)
 
     mtl_path: Path | None = None
     mtl_name: str | None = None
@@ -1254,9 +1525,13 @@ def export_stpc_meshes_from_bytes(
         geometry_end_offset=geometry_end_offset,
         section2_count=section2_count,
         section2_offset=section2_offset,
+        section2_records=section2_records,
+        section2_records_path=section2_records_path,
         script_tail_offset=script_tail_offset,
         script_reference_path=script_reference_path,
         script_references=script_refs,
+        script_b2_operands_path=script_b2_operands_path,
+        script_b2_operands=script_b2_operands,
         parser_warning=parser_warning,
     )
 
@@ -1322,6 +1597,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[STPC] geometry_end=0x{result.geometry_end_offset:08X}")
     if result.section2_count is not None:
         print(f"[STPC] section2_count={result.section2_count}")
+    if result.script_tail_offset is not None:
+        print(f"[STPC] script_tail=0x{result.script_tail_offset:08X}")
     if result.parser_warning:
         print(f"[STPC] parser_warning={result.parser_warning}")
     print(f"[STPC] meshes={len(result.meshes)}")
@@ -1332,6 +1609,11 @@ def main(argv: list[str] | None = None) -> int:
     if result.script_reference_path is not None:
         ref_count = len(result.script_references or [])
         print(f"[STPC] wrote {result.script_reference_path} ({ref_count} geometry refs)")
+    if result.script_b2_operands_path is not None:
+        op_count = len(result.script_b2_operands or [])
+        print(f"[STPC] wrote {result.script_b2_operands_path} ({op_count} B2 operand candidates)")
+    if result.section2_records_path is not None:
+        print(f"[STPC] wrote {result.section2_records_path}")
     print(f"[STPC] wrote {result.manifest_path}")
 
     if not result.meshes:

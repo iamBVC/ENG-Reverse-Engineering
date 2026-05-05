@@ -1031,10 +1031,13 @@ Confirmed Section4 transform use:
 
 - Opcode `0xFE` dispatches to `sub_54DFE0`.
 - `sub_54DFE0` reads the actor's `+0x120` Section4 pointer and copies Section4 runtime fields into the active actor transform:
-  - `section4 +0x18` -> actor `pos_x` (`+0x30`) after `<< 12`
-  - `section4 +0x1C` -> actor `pos_y` (`+0x34`) after `<< 12`
-  - `section4 +0x20` -> actor `pos_z` (`+0x38`) after `<< 12`
+  - `section4 +0x08` -> actor `rot_x` (`+0x20`) after `<< 12`
   - `section4 +0x0C` -> actor `rot_y` (`+0x24`) after `<< 12`
+  - `section4 +0x10` -> actor `rot_z` (`+0x28`) after `<< 12`
+  - `section4 +0x18` -> actor `pos_x` (`+0x30`) copied directly
+  - `section4 +0x1C` -> actor `pos_y` (`+0x34`) copied directly
+  - `section4 +0x20` -> actor `pos_z` (`+0x38`) copied directly
+  - `section4 +0x24` -> actor transform field `+0x3C` copied directly
 - This explains the object-placement outliers where the MAP object origin is correct for initial spawn, but the visible mesh is offset to a Section4 route/waypoint transform before model binding.
 
 ### Section3 runtime table
@@ -1268,7 +1271,9 @@ Fallback d-pad values:
 - `lights/lights.csv`: typed directional/point/negative point lights with runtime conversions.
 - `trak/table_cde_entries.csv`: decoded `CollisionEntry32` rows.
 - `stpc/manifest.csv`: table-decoded `GeometryRecord8C` records with exact offsets, counts, Block32 totals, and matrix-group arrays.
+- `stpc/section2_records.csv`: Section2/animation-style record relocation diagnostics when `section2_count > 0`.
 - `stpc/script_geometry_refs.csv`: opcode `0x00B2` references from the STPC script tail to decoded geometry-record offsets.
+- `stpc/script_b2_operand_candidates.csv`: byte-scan candidates for opcode `0x00B2` pointer operands, including positive STPC-relative references and negative DEFANIM table references.
 - `sprt/summary.txt`: confirmed `SPRT` material-base value and derived material-slot counts.
 - `sprt/sprite_material_slots.csv`: derived sprite slots mapped to `TEXT` material indices, texture pages, rectangles, and flags.
 - `world/map_object_instances.csv`: MAP object placements plus spawn/script metadata used by STPC object binding, including decoded Section4 route transforms when present.
@@ -1280,7 +1285,7 @@ Fallback d-pad values:
 
 1. Exact semantics of `MapObjectDisk58` script data. `script_offset` points into `dword_6D9DBC`, but the bytecode/data structure there still needs further decoding.
 2. Exact meaning of `MapObjectDisk58.flags` bits besides `0x0002` skip-initial-spawn.
-3. Exact meaning of `section2` and the non-transform fields in `section4`; Section4 position/yaw use through opcode `0xFE` is confirmed.
+3. Exact meaning of STPC Section2 animation payloads and the non-transform fields in MAP Section4; Section4 position and XYZ rotation use through opcode `0xFE` is confirmed.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
 6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing, mesh binding, child-transform inheritance, and Section4 route transforms are confirmed, but complete actor/object behavior still needs VM semantics.
@@ -1331,9 +1336,39 @@ STPC blob layout, tested PC WADs, all little-endian:
 
   u32 section2_count
   GeometryAnimRecord32 section2[section2_count]
+  Section2 variable arrays relocated by sub_41F8B0
 
   raw script / constants / string / object-definition tail
 ```
+
+The important Section2 correction is that the script tail does **not** begin
+immediately after `section2_count * 0x20`.  `sub_41F8B0` first reserves the
+fixed 32-byte records, then walks each record and consumes several count-driven
+arrays.  The extractor now computes this relocated end and exports
+`stpc/section2_records.csv` when Section2 records are present.  The currently
+tested PC level STPC chunks all have `section2_count = 0`, so this layout is
+loader-confirmed but not yet data-rich in the sampled WADs.
+
+### STPC Section2 / animation-style record relocation
+
+Confirmed from `sub_41F8B0`, one fixed record is 32 bytes:
+
+```text
++0x00 u32 table0_count         variable array: table0_count * 4 bytes; runtime ptr at +0x04
++0x04 u32 runtime table0 ptr   relocated in-place
++0x08 u32 key_count            drives several following arrays
++0x0C u32 inline_disable_flag  if nonzero, runtime +0x0C becomes NULL; if zero, key_count * 8 bytes follow
++0x10 u32 per_key_format       if >0, runtime +0x14 points to key_count pointers plus per-key payloads
++0x14 u32 runtime ptr table    relocated in-place
++0x18 u32 payload64_count      each key consumes payload64_count * 64 bytes
++0x1C u32 runtime ptr table    key_count pointers to the payload64 blocks
+```
+
+For the `+0x14` per-key payload table, the loader uses a special first-key
+size: key 0 consumes `per_key_format * 8` bytes.  Later keys consume
+`per_key_format * 2` bytes when the format is even, or
+`per_key_format * 2 + 2` bytes when it is odd.  This strongly suggests compact
+animation/keyframe data, but the semantic field names are not confirmed yet.
 
 Confirmed table-walk results:
 
@@ -1396,6 +1431,15 @@ else {
 
 A `script_offset` of zero resolves to the very start of the STPC blob (`dword_6D9DBC`), which is the first GeometryRecord8C record header.  Use an existing object's `script_offset` as a template rather than guessing.
 
+`dword_6DA324` is built by `sub_558E90` from `Wads/DEFANIM.WAD`.  That loader
+reads a count into `dword_6DA31C`, reads a packed animation blob, then relocates
+each entry with the same `sub_41F8B0` Section2 record relocator described
+above.  Therefore negative `0xB2` operands are external/default-animation
+references, not huge unsigned STPC offsets.  The extractor writes the broad
+byte-scan diagnostic `stpc/script_b2_operand_candidates.csv` to expose candidate
+positive STPC offsets and negative DEFANIM table indices; exact mesh binds
+still come from `stpc/script_geometry_refs.csv` and the world exporter VM subset.
+
 ### STPC object mesh binding and placement transforms
 
 The current world OBJ exporter uses the following confirmed subset of the STPC VM:
@@ -1409,12 +1453,12 @@ The current world OBJ exporter uses the following confirmed subset of the STPC V
 | `0x61` | `sub_550720` | Pop amount; move actor along the other local horizontal axis. |
 | `0x62` | `sub_550750` | Pop amount; opposite of `0x61`. |
 | `0x94` | `sub_5531D0` | Spawn child actor after `sub_553170` reads inline spawn-state words; child inherits current actor transform. |
-| `0xB2` | `sub_553630` | Read next dword and push resolved pointer. Positive values are STPC-relative (`dword_6D9DBC + value`). |
+| `0xB2` | `sub_553630` | Read next dword and push resolved pointer. Positive values are STPC-relative (`dword_6D9DBC + value`); negative values index the DEFANIM table as `-value - 1`. |
 | `0xD4` | `sub_553EF0` | Consume two dwords and set an alternate script pointer at actor `+0x18`; no actor placement change by itself. |
 | `0xE0` | `sub_553230` | Spawn child actor variant after `sub_553170`; child inherits current actor transform. |
 | `0xE3` | `sub_550690` | Pop amount; yaw-relative horizontal move. |
 | `0xE4` | `sub_550600` | Pop amount; opposite yaw-relative horizontal move. |
-| `0xFE` | `sub_54DFE0` | Copy Section4 route transform into actor position/yaw (see Section4 notes). |
+| `0xFE` | `sub_54DFE0` | Copy Section4 route transform into actor position and XYZ rotation (see Section4 notes). |
 | `0x103` | `sub_5508F0` | Pop amount; add to actor Y (`+0x34`). |
 | `0x104` | `sub_550940` | Pop amount; subtract from actor Y (`+0x34`). |
 | `0x125` | `sub_550790` | Pop amount; yaw-relative horizontal strafe/move. |
@@ -1424,7 +1468,7 @@ The exporter only treats a `0xB2` operand as a mesh when a later `0x54` binds th
 
 Child actors matter for placement: parent scripts can move the actor, spawn a child with `0x94`/`0xE0`, and the mesh bind can occur inside the child script.  In that case the visible mesh should use the inherited child transform, not just the parent MAP object origin.
 
-Section4 route transforms matter too: if `0xFE` executes before the mesh bind, the visible actor position/yaw comes from the referenced Section4 record rather than the initial MAP object position.
+Section4 route transforms matter too: if `0xFE` executes before the mesh bind, the visible actor position/rotation comes from the referenced Section4 record rather than the initial MAP object transform.
 
 ---
 
@@ -1606,12 +1650,12 @@ The 34-byte disk records are read in this order and expanded to 48-byte runtime 
 Disk offset   Size   Runtime offset   Notes
 0x00          u32    +0x00            raw next/link flag; nonzero becomes pointer to next record
 0x04          u32    +0x04            raw prev/link value; overwritten with previous pointer when chained
-0x08          u16    +0x08            small_a (zero-extended to u32)
-0x0A          u16    +0x0C            yaw/angle units used by opcode 0xFE
-0x0C          u16    +0x10            small_c (zero-extended to u32)
-0x0E          u32    +0x18            route/waypoint X
-0x12          u32    +0x1C            route/waypoint Y
-0x16          u32    +0x20            route/waypoint Z
+0x08          u16    +0x08            route rot_x units; opcode 0xFE shifts left 12 into actor +0x20
+0x0A          u16    +0x0C            route rot_y/yaw units; opcode 0xFE shifts left 12 into actor +0x24
+0x0C          u16    +0x10            route rot_z units; opcode 0xFE shifts left 12 into actor +0x28
+0x0E          u32    +0x18            route/waypoint X; fixed12 actor coordinate copied directly
+0x12          u32    +0x1C            route/waypoint Y; fixed12 actor coordinate copied directly
+0x16          u32    +0x20            route/waypoint Z; fixed12 actor coordinate copied directly
 0x1A          u32    +0x28            unnamed
 0x1E          u32    +0x2C            unnamed
 ```

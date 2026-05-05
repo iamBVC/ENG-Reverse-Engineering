@@ -175,7 +175,9 @@ Useful first files to inspect:
 | `map_full/section4_records_34.csv` | Exact 34-byte Section4 disk records, route transform fields, and link metadata. |
 | `trak/viewer.html` | Interactive terrain/sector preview. |
 | `stpc/manifest.csv` | Table-decoded STPC geometry records, offsets, matrix groups, and counts. |
+| `stpc/section2_records.csv` | STPC Section2 relocation diagnostics when animation-style records are present. |
 | `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
+| `stpc/script_b2_operand_candidates.csv` | Byte-scan candidates for STPC script opcode `0xB2` operands, including negative DEFANIM table references. |
 | `sprt/sprite_material_slots.csv` | SPRT-derived sprite slots mapped onto TEXT runtime material rows. |
 | `world/terrain_and_objects.obj` | Textured terrain plus placed STPC object instances in one OBJ. |
 | `world/combined.obj` | Current best-effort diagnostic combined world reconstruction. |

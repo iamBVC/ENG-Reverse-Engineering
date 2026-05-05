@@ -81,7 +81,9 @@ class WorldObjectInstance:
     route_transform_x: float | None = None
     route_transform_y: float | None = None
     route_transform_z: float | None = None
+    route_transform_rot_x_units: int | None = None
     route_transform_yaw_units: int | None = None
+    route_transform_rot_z_units: int | None = None
 
 
 @dataclass
@@ -214,15 +216,20 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
     out: list[WorldObjectInstance] = []
     for o in mapx.objects:
         route_x = route_y = route_z = None
+        route_rot_x_units = None
         route_yaw_units = None
+        route_rot_z_units = None
         if 0 <= o.section4_index_raw < len(mapx.section4):
             route = mapx.section4[o.section4_index_raw]
             # Opcode 0xFE (sub_54DFE0) copies Section4 +0x18/+0x1C/+0x20
-            # into actor +0x30/+0x34/+0x38 and Section4 +0x0C into yaw.
+            # into actor +0x30/+0x34/+0x38, and Section4 +0x08/+0x0C/+0x10
+            # into actor rotations +0x20/+0x24/+0x28 after << 12.
             route_x = _fixed12(route.u32_24)
             route_y = _fixed12(route.u32_28)
             route_z = _fixed12(route.u32_32)
+            route_rot_x_units = route.small_a
             route_yaw_units = route.small_b
+            route_rot_z_units = route.small_c
         out.append(WorldObjectInstance(
             object_index=o.index,
             stpc_def_offset=o.name_or_string_offset,
@@ -249,7 +256,9 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
             route_transform_x=route_x,
             route_transform_y=route_y,
             route_transform_z=route_z,
+            route_transform_rot_x_units=route_rot_x_units,
             route_transform_yaw_units=route_yaw_units,
+            route_transform_rot_z_units=route_rot_z_units,
         ))
     return out
 
@@ -306,7 +315,7 @@ def scan_stpc_definition_for_mesh_offsets(
         if start < 0 or start >= len(stpc_bytes):
             return
         for off in range(start, max(start, end - 7)):
-            if struct.unpack_from("<H", stpc_bytes, off)[0] != 0x00B2:
+            if struct.unpack_from("<I", stpc_bytes, off)[0] != 0x000000B2:
                 continue
             target = struct.unpack_from("<I", stpc_bytes, off + 4)[0]
             yield off, target
@@ -412,12 +421,15 @@ def scan_stpc_definition_for_mesh_offsets(
             if op == 0x00B2:
                 if pc + 4 > end:
                     break
-                target = struct.unpack_from("<I", stpc_bytes, pc)[0]
+                target = struct.unpack_from("<i", stpc_bytes, pc)[0]
                 pc += 4
                 if target >= 0:
                     stack.append(_StackValue(target, "stpc_ptr", op_offset))
                 else:
-                    stack.append(_StackValue(0, "stpc_ptr", op_offset))
+                    # Negative operands resolve through the DEFANIM.WAD pointer
+                    # table at runtime; the WAD-local exporter cannot bind them
+                    # to an STPC mesh without that external table.
+                    stack.append(_StackValue(target, "external_anim_ptr", op_offset))
                 continue
 
             if op == 0x0054:
@@ -1299,7 +1311,8 @@ def export_world(
         "local_count","section2_index_or_sentinel","stack_word_count","stack_arg_count",
         "spawn_flags","spawn_flags_hex","extra_count","section4_index_or_sentinel",
         "spawn_aux","spawn_aux_hex","flags","flags_hex","skip_initial_spawn","extra_u16",
-        "route_transform_x","route_transform_y","route_transform_z","route_transform_yaw_units",
+        "route_transform_x","route_transform_y","route_transform_z",
+        "route_transform_rot_x_units","route_transform_yaw_units","route_transform_rot_z_units",
     ], (
         {
             "object_index": o.object_index,
@@ -1333,7 +1346,9 @@ def export_world(
             "route_transform_x": o.route_transform_x if o.route_transform_x is not None else "",
             "route_transform_y": o.route_transform_y if o.route_transform_y is not None else "",
             "route_transform_z": o.route_transform_z if o.route_transform_z is not None else "",
+            "route_transform_rot_x_units": o.route_transform_rot_x_units if o.route_transform_rot_x_units is not None else "",
             "route_transform_yaw_units": o.route_transform_yaw_units if o.route_transform_yaw_units is not None else "",
+            "route_transform_rot_z_units": o.route_transform_rot_z_units if o.route_transform_rot_z_units is not None else "",
         } for o in instances
     ))
 

@@ -207,7 +207,11 @@ class MapSection3Record:
 
 @dataclass
 class MapSection4Record:
-    """One 34-byte Section 4 disk record, expanded by the game to 48 bytes."""
+    """One 34-byte Section 4 disk record, expanded by the game to 48 bytes.
+
+    Opcode 0xFE copies +0x18/+0x1C/+0x20 directly into actor position and
+    shifts +0x08/+0x0C/+0x10 left by 12 into actor XYZ rotation.
+    """
 
     index: int
     file_offset: int
@@ -241,6 +245,18 @@ class MapSection4Record:
 
     @property
     def small_c(self) -> int:
+        return self.rt_10_u16
+
+    @property
+    def rot_x_units(self) -> int:
+        return self.rt_08_u16
+
+    @property
+    def rot_y_units(self) -> int:
+        return self.yaw_units_0C
+
+    @property
+    def rot_z_units(self) -> int:
         return self.rt_10_u16
 
     @property
@@ -824,6 +840,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
     section4_fields = [
         "index","file_offset","raw_hex",
         "link_next_raw_00","link_prev_raw_04","rt_08_u16","yaw_units_0C","rt_10_u16",
+        "rot_x_units","rot_y_units","rot_z_units",
         "route_x_18","route_x_18_fixed12","route_y_1C","route_y_1C_fixed12",
         "route_z_20","route_z_20_fixed12","rt_28","rt_2C",
         "link_next_flag","link_prev_file_value","small_a","small_b","small_c",
@@ -839,6 +856,9 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
             "rt_08_u16": r.rt_08_u16,
             "yaw_units_0C": r.yaw_units_0C,
             "rt_10_u16": r.rt_10_u16,
+            "rot_x_units": r.rot_x_units,
+            "rot_y_units": r.rot_y_units,
+            "rot_z_units": r.rot_z_units,
             "route_x_18": r.route_x_18,
             "route_x_18_fixed12": _fixed12(r.route_x_18),
             "route_y_1C": r.route_y_1C,
