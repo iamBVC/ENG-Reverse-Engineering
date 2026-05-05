@@ -38,7 +38,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1279742019` | `LGPC` / `CPGL` | localized dialogue/text table | `sub_558DB0` |
 | `1280198223` | unknown | small loader path | `sub_42AB10` |
 | `1296125984` | `MAP ` | main map/full placement chunk | `sub_42AC50` |
-| `1095585859` | `AMPC` / `CPMA` | audio/resource | `sub_558D70` |
+| `1095585859` | `AMPC` / `CPMA` | ambient-audio resource bank and emitters | `sub_558D70` |
 | `1162757152` | `END ` | terminator | closes WAD |
 | `1397575747` | `SMPC` / `CPMS` | audio/resource | `sub_558D30` |
 | `1397772884` | `SPRT` | sprite material-base metadata | inline branch at `loc_558AD1` |
@@ -76,6 +76,53 @@ Confirmed consumers:
 - `sub_436A80` treats `#` and `=` as inline color/control markers in one text path, so those bytes are not always rendered as glyphs.
 
 The extractor exports this as `font/summary.*`, `font/glyph_metrics.csv`, and `font/text_width_samples.csv`.  When TEXT material data is available, `glyph_metrics.csv` also cross-references each FONT `material_index` to the runtime material table and texture rectangle.
+
+## AMPC chunk
+
+AMPC is loaded only when the audio system is initialized (`dword_5834DC != 0`).  The WAD dispatch reads tag `AMPC`/`CPMA`, then calls `sub_558D70(context, stream)`.
+
+`sub_558D70`:
+
+- Reads one u32 into `context +0x24`.
+- If that value is zero, writes `context +0x20 = 0` and stops.
+- If nonzero, calls the shared audio/resource loader `sub_545350(context, stream, 4)`.
+
+Case `4` of `sub_545350` confirms the disk format:
+
+```text
+u32 resource_count
+for each resource:
+    u32 resource_id_00
+    u32 magic_04              // observed 0x69626D61 = "ambi"
+    u32 payload_size_08
+    u8  payload[payload_size]
+
+u32 ambient_record_count
+AmbientRecord40 ambient_records[ambient_record_count]
+```
+
+The first tested levels all carry three resource records.  The first payload starts with `pBAV`, the second with `pQES`, and the third appears to be the associated packed/sample payload.  The loader passes resource 0 and resource 2 to `sub_5472A0`, and resource 1 to `sub_5471F0`.
+
+Confirmed 40-byte ambient record layout:
+
+```c
+struct AmbientRecord40 {
+    int32_t  pos_x_fixed12;          // +0x00, used by sub_547C00 distance check
+    int32_t  pos_y_fixed12;          // +0x04, not used by the confirmed horizontal-distance path
+    int32_t  pos_z_fixed12;          // +0x08, used by sub_547C00 distance check
+    uint32_t unknown_0C;             // +0x0C, zero in current samples
+    uint32_t near_distance;          // +0x10
+    uint32_t far_distance;           // +0x14
+    uint32_t sound_id_flags;         // +0x18, low word is ambient sound id; bit 0x10000 has special/global-volume handling
+    uint32_t target_volume;          // +0x1C
+    uint32_t runtime_active_mask;    // +0x20, updated by sub_5458D0
+    uint32_t runtime_current_level;  // +0x24, updated by sub_5458D0/sub_549A00
+}; // 40 bytes
+```
+
+`sub_547C00(record)` computes a horizontal listener distance using `record +0x00` and `record +0x08` against globals `dword_5790B0`/`dword_5790B8`; Y is ignored in that path.  `sub_5458D0` compares that distance with `near_distance`/`far_distance`, scales `target_volume`, and starts/stops/updates the referenced ambient sound through `sub_5499A0`, `sub_549A00`, `sub_549A70`, and `sub_549AC0`.
+
+The extractor exports this as `ampc/summary.*`, `ampc/resources.csv`, `ampc/resource_payloads/*.bin`, and `ampc/ambient_records_40.csv`.
 
 ## Core geometry record formats
 

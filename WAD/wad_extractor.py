@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from eng_wad.ampc_chunk import export_ampc, parse_ampc_chunk
 from eng_wad.binary import Reader, u32
 from eng_wad.font_chunk import export_font, parse_font_chunk
 from eng_wad.lgpc_chunk import export_lgpc, parse_lgpc_chunk
@@ -61,6 +62,8 @@ def _write_level_metadata(data: bytes, by_tag: dict, out_dir: Path, info_lines: 
         info_lines.append(f"SPRT material base: {u32(data, by_tag['SPRT'].offset)}")
     if "FONT" in by_tag:
         info_lines.append(f"FONT table  : {by_tag['FONT'].size // 8} records, {by_tag['FONT'].size} bytes")
+    if "AMPC" in by_tag and by_tag["AMPC"].size >= 4:
+        info_lines.append(f"AMPC ambient: resources={u32(data, by_tag['AMPC'].offset)}, bytes={by_tag['AMPC'].size}")
 
 
 def extract_wad(
@@ -252,6 +255,16 @@ def extract_wad(
                 print(f"  [SRPC] → srpc/ ({stats['entries']} entries; CVS source not found, metadata only)")
         except Exception as exc:
             print(f"  [SRPC] Parse/export error: {exc}", file=sys.stderr)
+
+    # AMPC: ambient-audio resource bank and 40-byte ambient emitter records.
+    if "AMPC" in by_tag:
+        print("  [AMPC] Parsing ambient audio table ...")
+        try:
+            ampc = parse_ampc_chunk(chunk_bytes(data, by_tag["AMPC"]))
+            summary = export_ampc(ampc, out_dir / "ampc")
+            print(f"  -> ampc/ (resources={summary['resource_count']}, ambient_records={summary['ambient_record_count']})")
+        except Exception as exc:
+            print(f"  [AMPC] Parse/export error: {exc}", file=sys.stderr)
 
     # Raw exports: keep source bytes for chunks that are not fully decoded yet.
     if extract_raw:
