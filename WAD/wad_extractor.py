@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from eng_wad.binary import Reader, u32
+from eng_wad.font_chunk import export_font, parse_font_chunk
 from eng_wad.lgpc_chunk import export_lgpc, parse_lgpc_chunk
 from eng_wad.light_chunk import export_lights, parse_lght_chunk
 from eng_wad.smpc_chunk import export_all as export_smpc, parse as parse_smpc
@@ -58,6 +59,8 @@ def _write_level_metadata(data: bytes, by_tag: dict, out_dir: Path, info_lines: 
         info_lines.append(f"WFPC flags  : 0x{u32(data, by_tag['WFPC'].offset):08X}")
     if "SPRT" in by_tag and by_tag["SPRT"].size >= 4:
         info_lines.append(f"SPRT material base: {u32(data, by_tag['SPRT'].offset)}")
+    if "FONT" in by_tag:
+        info_lines.append(f"FONT table  : {by_tag['FONT'].size // 8} records, {by_tag['FONT'].size} bytes")
 
 
 def extract_wad(
@@ -170,6 +173,24 @@ def extract_wad(
             print(f"  -> sprt/ (material_base={sprt.material_base_index}{slot_text})")
         except Exception as exc:
             print(f"  [SPRT] Parse/export error: {exc}", file=sys.stderr)
+
+    # FONT: 256-entry glyph material/metric table loaded into dword_6DA354.
+    if "FONT" in by_tag:
+        print("  [FONT] Parsing glyph metrics ...")
+        try:
+            font = parse_font_chunk(chunk_bytes(data, by_tag["FONT"]))
+            if text_chunk_for_materials is None and "TEXT" in by_tag:
+                text_chunk_for_materials = parse_text_chunk(chunk_bytes(data, by_tag["TEXT"]))
+            materials = parse_runtime_materials(text_chunk_for_materials) if text_chunk_for_materials is not None else []
+            summary = export_font(
+                font,
+                out_dir / "font",
+                materials=materials,
+                texture_count=len(text_chunk_for_materials.textures) if text_chunk_for_materials is not None else None,
+            )
+            print(f"  -> font/ ({summary['defined_glyph_count']} defined glyphs)")
+        except Exception as exc:
+            print(f"  [FONT] Parse/export error: {exc}", file=sys.stderr)
 
     # MAP: world tile-list, grid, OBJ marker geometry, and HTML viewer.
     if extract_map and "MAP " in by_tag:

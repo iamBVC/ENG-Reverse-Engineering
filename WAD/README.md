@@ -15,6 +15,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 - parse `MAP ` tile placement data, grid data, object records, and executable-confirmed MAP diagnostics
 - parse `LGHT` directional, point, and negative/special point lights to CSV
 - decode `LGPC` localized dialogue/text tables to CSV
+- decode `FONT` glyph material/metric tables to CSV
 - decode `SMPC` level audio entries to `.cvg`, raw payloads, and WAV files
 - decode `SRPC` streamed speech tables and, when `Music/ENGLISH.CVS` is available, export speech `.cvs` slices and WAV files
 - decode `TRAK` terrain/world geometry records, vertices, triangles, collision/contact entries, OBJ surfaces, and an HTML viewer
@@ -143,6 +144,7 @@ extracted/t1l1m001/
 
   map/                  legacy/partial-safe MAP outputs
   map_full/             executable-confirmed MAP diagnostics
+  font/                 FONT glyph metrics and material references
   lights/               LGHT CSV + summary
   lgpc/                 localized dialogue/text entries
 
@@ -164,6 +166,7 @@ Useful first files to inspect:
 | `wfpc/flags.csv` | Active WFPC feature bits, confirmed consumers, and unknown observed bits. |
 | `textures/*.png` | Decoded level texture pages. |
 | `lgpc/dialogue_lines.csv` | Localized dialogue lines paired with voice/id tags. |
+| `font/glyph_metrics.csv` | FONT character table with material index, advance width, vertical adjustment, and draw height. |
 | `map_full/objects_58_disk.csv` | Executable-confirmed MAP object table. |
 | `map_full/section3_records_90.csv` | Exact 90-byte Section3 disk records expanded into loader/runtime fields. |
 | `map_full/section4_records_34.csv` | Exact 34-byte Section4 disk records, route transform fields, and link metadata. |
@@ -211,7 +214,7 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `LNFO` | ~20% | Reads count/version-like values when present. | Full purpose and relation to `LGHT`. |
 | `SPRT` | ~45% | Reads the executable-confirmed TEXT material-base index, optional flag-gated table when present, and exports sprite material slot diagnostics. | High-level sprite object records, animation/frame command semantics, and optional table purpose. |
 | `TEXT` | ~80% | Decodes RGB555 RLE textures, palette, material diagnostics. | Some material flags, `extra` byte, and full binding semantics. |
-| `FONT` | ~10% | Preserves raw bytes. | Glyph layout and font renderer mapping. |
+| `FONT` | ~70% | Parses 256 glyph records, exports material index, y-center offset, advance width, draw height, and text-width samples. | Exact semantics of inline text control bytes and uncommon non-printable glyphs. |
 | `SMPC` | ~80% | Exports `.cvg`, raw audio payloads, manifest, WAV. | Some CVG header semantics and uncommon channel/quality modes. |
 | `SRPC` | ~85% | Exports speech table; decodes `.CVS` slices to WAV when CVS is available. | `unknown_00`, `unknown_06`, and exact AAL resource type name. |
 | `AMPC` | ~10% | Preserves raw ambient/audio chunk. | Full structure and relation to SMPC/AAL. |
@@ -266,7 +269,7 @@ Stores sprite rendering metadata, not pixels.  The first `u32` is copied by the 
 
 ### Raw/low-knowledge chunks
 
-`AMPC`, `FONT`, and parts of `LNFO` are preserved for later analysis.  `LGPC`, `WFPC`, and `SPRT` now have confirmed first-pass decoding, but several WFPC bits and the higher-level sprite/animation structures that consume SPRT slots still need more runtime analysis.
+`AMPC` and parts of `LNFO` are preserved for later analysis.  `FONT`, `LGPC`, `WFPC`, and `SPRT` now have confirmed first-pass decoding, but several WFPC bits and the higher-level sprite/animation structures that consume SPRT slots still need more runtime analysis.
 
 ## Development notes
 
@@ -284,6 +287,7 @@ eng_wad/wad.py            WAD scanner/container utilities
 eng_wad/binary.py         binary Reader and endian helpers
 eng_wad/text_chunk.py     TEXT parser and PNG/palette exports
 eng_wad/lgpc_chunk.py     LGPC localized dialogue/text exports
+eng_wad/font_chunk.py     FONT glyph metric/material exports
 eng_wad/map_chunk.py      older partial-safe MAP parser
 eng_wad/map_full_chunk.py executable-confirmed MAP parser/diagnostics
 eng_wad/map_export.py     MAP CSV, PNG, OBJ, and HTML exports
@@ -304,5 +308,5 @@ eng_wad/raw_export.py     raw chunk preservation
 2. Finish semantic naming for MAP Section3 fields and STPC object-definition data.
 3. Validate MAP object placement against more levels and in-game positions.
 4. Name the remaining TRAK/STPC geometry header fields and collision group roles.
-5. Finish decoding `AMPC`, `FONT`, remaining `LGPC` header/row-selection details, observed-only `WFPC` bits, and high-level `SPRT` sprite/animation consumers.
+5. Finish decoding `AMPC`, remaining `FONT` inline-control behavior, remaining `LGPC` header/row-selection details, observed-only `WFPC` bits, and high-level `SPRT` sprite/animation consumers.
 6. Build a single viewer that combines decoded textures, TRAK terrain, STPC objects, MAP placement, and LGHT lights.

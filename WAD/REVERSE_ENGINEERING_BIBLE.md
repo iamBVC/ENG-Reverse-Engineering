@@ -33,7 +33,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 
 | Integer | Tag | Current meaning | Loader function |
 |---:|---|---|---|
-| `1179602516` | `FONT` | font-ish 256 x 8-byte table | `sub_558C90` |
+| `1179602516` | `FONT` | 256-entry glyph material/metric table | `sub_558C90` |
 | `1279739988` | `LGHT` | light records | `sub_42C180` |
 | `1279742019` | `LGPC` / `CPGL` | localized dialogue/text table | `sub_558DB0` |
 | `1280198223` | unknown | small loader path | `sub_42AB10` |
@@ -49,6 +49,33 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1464225859` | `WFPC` | WAD feature/capability flags | reads `dword_6DA330` |
 
 `sub_558C30(a1)` resets per-level state, frees light handles through `sub_42C460`, clears material pointers, clears the world container, and resets chunk allocator state.
+
+## FONT chunk
+
+`sub_558C90(context, stream)` loads the whole FONT chunk into the runtime glyph table:
+
+- Allocates `0x800` bytes with `sub_41EF00`.
+- Stores the pointer at `context +0x10`.
+- Copies the same pointer to global `dword_6DA354`.
+- Reads 256 records.  Each record is four little-endian `u16` values, so the disk and runtime stride is 8 bytes.
+
+```c
+struct FontGlyph8 {
+    uint16_t material_index;    // +0x00, passed as sub_435D10 arg0
+    uint16_t y_center_offset;   // +0x02, draw y uses y - (value / 2)
+    uint16_t advance_width;     // +0x04, used for text width and x advance
+    uint16_t draw_height;       // +0x06, passed as glyph quad height
+}; // 8 bytes, 256 entries
+```
+
+Confirmed consumers:
+
+- `sub_436510(text)` measures a null-terminated string.  Space (`0x20`) is hardcoded to width `10`; other characters add `dword_6DA354[ch].advance_width`.
+- `sub_436A20(ch)` measures one character.  `'#'` returns `3`, space returns `10`, otherwise it returns FONT `+0x04`.
+- `sub_436550` and `sub_436A80` draw text by passing `material_index`, adjusted `x/y`, `advance_width`, and `draw_height` to `sub_435D10`.
+- `sub_436A80` treats `#` and `=` as inline color/control markers in one text path, so those bytes are not always rendered as glyphs.
+
+The extractor exports this as `font/summary.*`, `font/glyph_metrics.csv`, and `font/text_width_samples.csv`.  When TEXT material data is available, `glyph_metrics.csv` also cross-references each FONT `material_index` to the runtime material table and texture rectangle.
 
 ## Core geometry record formats
 
