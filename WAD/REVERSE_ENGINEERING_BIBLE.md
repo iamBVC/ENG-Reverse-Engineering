@@ -1539,14 +1539,19 @@ The current world OBJ exporter uses the following confirmed subset of the STPC V
 | Opcode | Handler | Confirmed effect for world export |
 |---:|---|---|
 | `0x44` | `sub_553610` | Push signed 16-bit immediate onto actor stack.  Commonly used for fixed12 movement amounts. |
+| `0x45` | `sub_5535F0` | Read next dword from the stream and push it. |
 | `0x54` | `sub_553C10` | Pop a pointer and store it in `actor+0x10`; this binds the actor's current geometry/model. |
 | `0x5F` | `sub_550590` | Pop amount; move actor along one local horizontal axis. |
 | `0x60` | `sub_5505C0` | Pop amount; move actor along the opposite local horizontal axis. |
 | `0x61` | `sub_550720` | Pop amount; move actor along the other local horizontal axis. |
 | `0x62` | `sub_550750` | Pop amount; opposite of `0x61`. |
+| `0x63` | `sub_553C90` | Pop amount; subtract from actor yaw/rot_y (`actor+0x24`, masked to 24 bits). |
+| `0x64` | `sub_553CB0` | Pop amount; add to actor yaw/rot_y (`actor+0x24`, masked to 24 bits). |
 | `0x94` | `sub_5531D0` | Spawn child actor after `sub_553170` reads inline spawn-state words; child inherits current actor transform. |
+| `0x95` | `sub_5533F0` | Complex child spawn: after `sub_553170`, consumes one extra dword selecting a transform/matrix cell and spawns with transformed local offset. |
 | `0xB2` | `sub_553630` | Read next dword and push resolved pointer. Positive values are STPC-relative (`dword_6D9DBC + value`); negative values index the DEFANIM table as `-value - 1`. |
 | `0xD4` | `sub_553EF0` | Consume two dwords and set an alternate script pointer at actor `+0x18`; no actor placement change by itself. |
+| `0xD7` | `sub_5535F0` | Alias of `0x45`: read next dword from the stream and push it. |
 | `0xE0` | `sub_553230` | Spawn child actor variant after `sub_553170`; child inherits current actor transform. |
 | `0xE3` | `sub_550690` | Pop amount; yaw-relative horizontal move. |
 | `0xE4` | `sub_550600` | Pop amount; opposite yaw-relative horizontal move. |
@@ -1561,6 +1566,57 @@ The exporter only treats a `0xB2` operand as a mesh when a later `0x54` binds th
 Child actors matter for placement: parent scripts can move the actor, spawn a child with `0x94`/`0xE0`, and the mesh bind can occur inside the child script.  In that case the visible mesh should use the inherited child transform, not just the parent MAP object origin.
 
 Section4 route transforms matter too: if `0xFE` executes before the mesh bind, the visible actor position/rotation comes from the referenced Section4 record rather than the initial MAP object transform.
+
+### STPC high-opcode debug names from the ASM
+
+The high-opcode pointer table begins at opcode `0x45` with `sub_5535F0`; the nearby IDA label `funcs_54D1B8` lands on unrelated bytes before the actual pointer list.  Interpreting the list as base opcode `0x45` aligns the known handlers: `0x54 -> sub_553C10`, `0x94 -> sub_5531D0`, `0x95 -> sub_5533F0`, `0xB2 -> sub_553630`, `0xE0 -> sub_553230`, and `0xFE -> sub_54DFE0`.
+
+Several table entries point at tiny handlers that print a script operation name.  These are useful labels for editor-facing opcode names even when the gameplay side effect still needs deeper analysis:
+
+| Opcode | Handler | ASM debug/script name |
+|---:|---|---|
+| `0x22` | `sub_54D200` | `stCollide_AlienVar` |
+| `0x23` | `sub_54D220` | `stCollide_AlienVarAddress` |
+| `0x3C` | `sub_54D240` | `stCollide_AlienVar_Equals` |
+| `0x5B` | `sub_54D260` | `stFlash` |
+| `0x5C` | `sub_54D280` | `stTrans` |
+| `0x77` | `sub_54D2A0` | `stWpdel` |
+| `0x78` | `sub_54D2C0` | `stWpnew` |
+| `0x81` | `sub_54D2E0` | `stAnimsetspeed` |
+| `0x84` | `sub_54D300` | `stCollheight` |
+| `0x86` | `sub_54D320` | `stCollview` |
+| `0x8D` | `sub_54D340` | `stRelease` |
+| `0x90` | `sub_54D360` | `stMapadd` |
+| `0x91` | `sub_54D380` | `stMapreplace` |
+| `0x96` | `sub_54D3A0` | `stLink` |
+| `0x97` | `sub_54D3C0` | `stUnlink` |
+| `0x9B` | `sub_54D3E0` | `stStreamPlay` |
+| `0x9F` | `sub_54D400` | `stStreamQueue` |
+| `0xA0` | `sub_54D420` | `stIsLight` |
+| `0xA1` | `sub_54D440` | `stLightCol` |
+| `0xA2` | `sub_54D460` | `stLightFade` |
+| `0xA3` | `sub_54D480` | `stLightAtten` |
+| `0xA4` | `sub_54D4A0` | `stLightType` |
+
+### Cross-WAD STPC object-definition VM diagnostics
+
+`world/stpc_object_vm_diagnostics.csv` is a partial, normalized VM fingerprint export for each unique MAP-referenced STPC object definition.  It abstracts pointer-like operands as `B2_MESH`, `B2_STPCPTR`, `B2_DEFANIM`, etc., so reusable object archetypes can be compared across WADs even when raw STPC-relative offsets differ.
+
+The current diagnostic parser models the confirmed dispatch shape and only skips inline payload widths confirmed from handlers (`0x45`, `0x94`, `0x95`, `0xB1`, `0xB2`, `0xD4`, `0xD7`, `0xE0`).  It is therefore safer than a byte scan, but still not a full decompiler.
+
+Observed across extracted MAP object-definition streams:
+
+| WAD | MAP objects | Unique STPC defs | `B2` mesh refs | Other `B2` STPC ptrs | Child spawns | Model binds | Yaw ops | Movement ops | Section4 ops |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `t0i0m000` | 6 | 5 | 8 | 3 | 1 | 4 | 1 | 2 | 1 |
+| `t1l1m001` | 122 | 34 | 34 | 136 | 46 | 36 | 25 | 70 | 12 |
+| `t1l1m002` | 120 | 42 | 57 | 124 | 50 | 58 | 28 | 74 | 14 |
+| `t1l1m003` | 61 | 30 | 32 | 121 | 46 | 33 | 21 | 56 | 13 |
+| `t1l1m004` | 41 | 22 | 31 | 113 | 33 | 31 | 7 | 34 | 8 |
+
+No negative `0xB2` operands are currently observed in these bounded MAP object-definition streams.  Negative `0xB2` remains confirmed by the ASM as the DEFANIM table path; broad byte-scan candidate CSVs can still contain negative values that are data or inactive stream candidates.
+
+Normalized signatures are already useful: among these extracted levels there are 18 signatures reused by at least two WADs, including 4 signatures shared across all four `t1l1m001`..`t1l1m004` WADs.  For an IDE/editor, object type identification should therefore prefer normalized VM signatures plus MAP context instead of raw `stpc_def_offset` values.
 
 ---
 
@@ -1728,7 +1784,7 @@ Three confirmed callers of the main spawn function `sub_54BFC0`:
 | `sub_553230` | ~385565 | Simple clone, spawn_keep_owner=1 |
 | `sub_5533F0` | ~385772 | Complex: decompresses transform matrix from geometry record; uses fixed-point FPU math to convert float positions to actor coordinates before spawning |
 
-`sub_553170` (called from both `sub_5531D0` and `sub_553230`) reads 6 sequential u32 values from the STPC object-definition stream and populates the spawn-state runtime block.
+`sub_553170` (called from `sub_5531D0`, `sub_553230`, and `sub_5533F0`) reads five u32 values and advances past one additional u32-sized stream slot, for a 24-byte inline spawn-state block.  The complex `0x95` path then consumes one more dword for its transform/matrix-cell selection before calling `sub_54BFC0`.
 
 For world placement, both child-spawn variants inherit the current parent actor transform.  If the parent script has already applied movement opcodes or a Section4 route transform, meshes bound inside the child script must use that inherited transform rather than the original MAP object origin.
 

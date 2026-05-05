@@ -32,10 +32,12 @@ This exporter is deliberately conservative around unresolved STPC object-definit
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import shutil
 import struct
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -453,13 +455,19 @@ def scan_stpc_definition_for_mesh_offsets(
                     ))
                 continue
 
-            if op in {0x0094, 0x00E0}:
+            if op in {0x0094, 0x0095, 0x00E0}:
                 child = stack.pop() if stack else _StackValue(0)
                 # sub_553170 consumes five dwords plus one extra output dword
                 # from the parent stream before sub_54BFC0 starts the child.
-                if pc + 24 > end:
+                # The complex 0x95 spawn consumes one more dword selecting a
+                # matrix/transform cell; its transformed local offset is not
+                # simulated yet, so this path is skipped conservatively.
+                payload_size = 28 if op == 0x0095 else 24
+                if pc + payload_size > end:
                     break
-                pc += 24
+                pc += payload_size
+                if op == 0x0095:
+                    continue
                 if (
                     follow_script_pointers
                     and child.kind == "stpc_ptr"
@@ -504,6 +512,17 @@ def scan_stpc_definition_for_mesh_offsets(
                     if route_yaw is not None:
                         current_yaw_units = route_yaw
                         current_yaw_rad = _angle4096_to_radians(route_yaw)
+                continue
+
+            if op in {0x0063, 0x0064}:
+                amount_fixed = _pop_value(stack)
+                delta_units = amount_fixed >> 12
+                current = current_yaw_units or 0
+                if op == 0x0063:
+                    current_yaw_units = (current - delta_units) & 0xFFF
+                else:
+                    current_yaw_units = (current + delta_units) & 0xFFF
+                current_yaw_rad = _angle4096_to_radians(current_yaw_units)
                 continue
 
             delta = _movement_delta(op, _pop_value(stack), current_yaw_rad)
@@ -591,6 +610,141 @@ def scan_stpc_definition_for_mesh_offsets(
             ))
             dup_index += 1
     return hits
+
+
+def summarize_stpc_object_definition_vm(
+    *,
+    stpc_bytes: bytes,
+    instances: list[WorldObjectInstance],
+    meshes: list[MeshCandidate],
+    scan_bytes: int = 2048,
+    stop_at_next_definition: bool = True,
+    max_steps: int = 512,
+) -> list[dict[str, object]]:
+    """Summarize the currently decoded STPC object-definition VM surface.
+
+    This is a diagnostic, not a full decompiler.  It uses the confirmed dispatch
+    shape from sub_54D180 and skips only inline operands whose width has been
+    confirmed from handler analysis.  The normalized signature intentionally
+    abstracts WAD-local pointers so object archetypes can be compared across
+    different level WADs where raw STPC offsets differ.
+    """
+    mesh_offsets = {m.offset for m in meshes}
+    unique_definition_offsets = sorted({
+        inst.stpc_def_offset for inst in instances
+        if 0 <= inst.stpc_def_offset < len(stpc_bytes)
+    })
+    objects_by_def: dict[int, list[int]] = {}
+    for inst in instances:
+        if 0 <= inst.stpc_def_offset < len(stpc_bytes):
+            objects_by_def.setdefault(inst.stpc_def_offset, []).append(inst.object_index)
+
+    def bounded_scan_end(start: int) -> int:
+        end = min(len(stpc_bytes), start + max(0, scan_bytes))
+        if stop_at_next_definition:
+            for def_off in unique_definition_offsets:
+                if def_off > start:
+                    return min(end, def_off)
+        return end
+
+    # High-opcode handlers with confirmed inline payload widths.
+    inline_skip = {
+        0x0045: 4,   # sub_5535F0: push next dword
+        0x0094: 24,  # sub_5531D0 + sub_553170 spawn state block
+        0x0095: 28,  # sub_5533F0 spawn state block + matrix-cell dword
+        0x00B1: 4,   # sub_553DE0 reads one following dword
+        0x00B2: 4,   # sub_553630 pointer/DEFANIM operand
+        0x00D4: 8,   # sub_553EF0 alternate script pointer pair
+        0x00D7: 4,   # sub_5535F0 alias: push next dword
+        0x00E0: 24,  # sub_553230 + sub_553170 spawn state block
+    }
+    model_bind_ops = {0x0054}
+    spawn_ops = {0x0094, 0x0095, 0x00E0}
+    yaw_ops = {0x0063, 0x0064}
+    movement_ops = {0x005D, 0x005F, 0x0060, 0x0061, 0x0062, 0x00E3, 0x00E4, 0x0103, 0x0104, 0x0125, 0x0126}
+    section4_ops = {0x00FE}
+
+    rows: list[dict[str, object]] = []
+    for start in unique_definition_offsets:
+        end = bounded_scan_end(start)
+        pc = start
+        steps = 0
+        op_counts: Counter[int] = Counter()
+        normalized: list[str] = []
+        b2_mesh = b2_stpc_ptr = b2_defanim = b2_zero = b2_invalid = 0
+        model_binds = child_spawns = yaw_count = movement_count = section4_count = 0
+
+        while pc + 4 <= end and steps < max_steps:
+            raw = struct.unpack_from("<I", stpc_bytes, pc)[0]
+            op = raw & 0xFFFF
+            op_counts[op] += 1
+            steps += 1
+            pc += 4
+
+            token = f"{op:03X}"
+            if op in model_bind_ops:
+                model_binds += 1
+                token = "MODEL_BIND"
+            elif op in spawn_ops:
+                child_spawns += 1
+                token = "SPAWN_CHILD"
+            elif op in yaw_ops:
+                yaw_count += 1
+                token = "YAW"
+            elif op in movement_ops:
+                movement_count += 1
+                token = "MOVE"
+            elif op in section4_ops:
+                section4_count += 1
+                token = "SECTION4"
+
+            if op == 0x00B2 and pc + 4 <= end:
+                target = struct.unpack_from("<i", stpc_bytes, pc)[0]
+                if target == 0:
+                    b2_zero += 1
+                    token = "B2_ZERO"
+                elif target < 0:
+                    b2_defanim += 1
+                    token = "B2_DEFANIM"
+                elif target in mesh_offsets:
+                    b2_mesh += 1
+                    token = "B2_MESH"
+                elif target < len(stpc_bytes):
+                    b2_stpc_ptr += 1
+                    token = "B2_STPCPTR"
+                else:
+                    b2_invalid += 1
+                    token = "B2_INVALID"
+
+            normalized.append(token)
+            pc += inline_skip.get(op, 0)
+
+        signature_text = " ".join(normalized[:80])
+        signature_hash = hashlib.sha1(signature_text.encode("ascii", errors="ignore")).hexdigest()[:12]
+        top_ops = " ".join(f"{op:03X}:{count}" for op, count in op_counts.most_common(16))
+        rows.append({
+            "stpc_def_offset": start,
+            "stpc_def_offset_hex": _hex(start),
+            "object_count": len(objects_by_def.get(start, [])),
+            "object_indices": " ".join(str(i) for i in objects_by_def.get(start, [])),
+            "scan_start": start,
+            "scan_end": end,
+            "steps_scanned": steps,
+            "normalized_signature_sha1_12": signature_hash,
+            "normalized_first_80_ops": signature_text,
+            "top_op_counts": top_ops,
+            "b2_mesh_refs": b2_mesh,
+            "b2_other_stpc_ptrs": b2_stpc_ptr,
+            "b2_defanim_refs": b2_defanim,
+            "b2_zero_refs": b2_zero,
+            "b2_invalid_refs": b2_invalid,
+            "model_bind_ops": model_binds,
+            "child_spawn_ops": child_spawns,
+            "yaw_ops": yaw_count,
+            "movement_ops": movement_count,
+            "section4_apply_ops": section4_count,
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -1398,6 +1552,19 @@ def export_world(
         } for off, info in sorted(defs.items())
     ))
 
+    vm_diag_rows = summarize_stpc_object_definition_vm(
+        stpc_bytes=stpc_bytes,
+        instances=instances,
+        meshes=stpc_result.meshes,
+        scan_bytes=scan_bytes,
+    )
+    _write_csv(out_dir / "stpc_object_vm_diagnostics.csv", [
+        "stpc_def_offset","stpc_def_offset_hex","object_count","object_indices","scan_start","scan_end",
+        "steps_scanned","normalized_signature_sha1_12","normalized_first_80_ops","top_op_counts",
+        "b2_mesh_refs","b2_other_stpc_ptrs","b2_defanim_refs","b2_zero_refs","b2_invalid_refs",
+        "model_bind_ops","child_spawn_ops","yaw_ops","movement_ops","section4_apply_ops",
+    ], vm_diag_rows)
+
     write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))
 
     summary = {
@@ -1407,6 +1574,8 @@ def export_world(
         "mesh_reference_hit_count": len(hits),
         "objects_with_mesh_hits": len({h.object_index for h in hits}),
         "unique_meshes_referenced": len({h.mesh_index for h in hits}),
+        "stpc_object_vm_diagnostic_defs": len(vm_diag_rows),
+        "stpc_object_vm_diagnostics_csv": "stpc_object_vm_diagnostics.csv",
         "terrain_obj": str(terrain_obj.name) if terrain_obj else None,
         "terrain_textured_obj": str(textured_terrain_obj.name) if textured_terrain_obj else None,
         "terrain_uv_mapping": "validated game terrain UV mapping",
