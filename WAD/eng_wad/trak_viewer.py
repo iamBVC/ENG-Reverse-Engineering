@@ -95,7 +95,7 @@ def _terrain_z_mirror_center(trak: Any, mapx: Any, *, terrain_yaw_sign: int = 1)
         record = trak.records[rec_i]
         if tile_i < len(mapx.tile_defs):
             tile_def = mapx.tile_defs[tile_i]
-            tz = -_fixed12(tile_def.u32_24)
+            tz = -_fixed12(tile_def.u32_20)
             yaw_units = tile_def.u32_04 & 0xFFFF
         else:
             tz = tile.z
@@ -133,9 +133,9 @@ def write_map_placed_trak_viewer_html(
         record = trak.records[rec_i]
         if tile_i < len(mapx.tile_defs):
             tile_def = mapx.tile_defs[tile_i]
-            tx = _fixed12(tile_def.u32_16)
-            ty = _fixed12(tile_def.u32_20)
-            tz = -_fixed12(tile_def.u32_24)
+            tx = _fixed12(tile_def.u32_12)
+            ty = _fixed12(tile_def.u32_16)
+            tz = -_fixed12(tile_def.u32_20)
             yaw_units = tile_def.u32_04 & 0xFFFF
         else:
             tx, ty, tz = tile.x, tile.y, tile.z

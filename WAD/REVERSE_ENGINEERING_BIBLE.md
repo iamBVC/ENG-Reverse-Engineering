@@ -940,30 +940,49 @@ The executable-confirmed MAP parser follows `sub_42AC50`.
 
 ```c
 struct MapWorld {
-    uint32_t tile_count;       // +0x00
-    uint32_t object_count;     // +0x04
-    uint32_t object_count_b;   // +0x08
-    uint16_t final_u16;        // +0x0C read at end
+    uint32_t tile_count;          // +0x00
+    uint32_t object_count;        // +0x04
+    uint32_t object_count_b;      // +0x08  read after vertex colors; exact semantics unknown
+    uint16_t final_u16;           // +0x0C  read at very end via sub_415AF0
 
-    // ...
-    uint32_t grid_width;       // +0x14 / a1[5]
-    uint32_t grid_height;      // +0x18 / a1[6]
+    uint32_t grid_cell_count;     // +0x10  computed: grid_height * grid_width
+    uint32_t grid_width;          // +0x14
+    uint32_t grid_height;         // +0x18
+    uint32_t section3_count;      // +0x1C
 
-    MapObjectRuntime72 *objects; // +0x38 / a1[14]
-    MapTilePlacement32 *placements; // +0x3C / a1[15]
-    GridNode **grid_heads;     // +0x40 / a1[16]
-    GridNode *grid_nodes;      // +0x44 / a1[17]
-    uint32_t *grid_visibility_mask; // +0x48 / a1[18]
-    uint32_t *tile_trak_indices;    // +0x4C / a1[19]
+    uint32_t optional_count;        // +0x20  when dword_6DA330 & 0x10000
+    MapSection3Runtime92 *section3; // +0x24
+    uint32_t section4_count;        // +0x28
+    MapSection4Runtime48 *section4; // +0x2C
+    uint32_t *section2;             // +0x30  u32 array; section2_count NOT stored in MapWorld
+    // +0x34 unknown
+    MapObjectRuntime72 *objects;    // +0x38
+    MapTilePlacement32 *placements; // +0x3C  tile defs, 32-byte runtime stride
 
-    uint32_t optional_count;   // +0x20 / a1[8], when dword_6DA330 & 0x10000
-    Optional20 *optional20;    // +0x50 / a1[20]
-    uint8_t **vertex_color_blocks; // +0x58 / a1[22]
+    GridNode **grid_heads;          // +0x40  null-init ptr array [grid_cell_count]; spatial hash heads
+    GridNode *grid_nodes;           // +0x44  [tile_count] × 8 bytes: {tile_index, *next}
+    uint32_t *grid_flat;            // +0x48  flat u32 grid[grid_height][grid_width], read from file
 
-    uint32_t light_count;      // +0x5C
-    RuntimeLight112 **lights;  // +0x60
+    uint32_t *tile_trak_indices;    // +0x4C
+    Optional20Runtime24 *optional20;// +0x50
+    // +0x54 unknown
+    uint8_t **vertex_color_blocks;  // +0x58  [tile_count] ptrs; each points to vertex RGBA bytes
+
+    uint32_t light_count;           // +0x5C
+    RuntimeLight112 **lights;       // +0x60
 };
 ```
+
+### MAP initial tile records (24 bytes each)
+
+`sub_42AC50` reads `tile_count` × 24-byte tile records at the start of the MAP chunk.  Each record contains 6 u32s: `x (f32), y (f32), z (f32), unk_float, flags_or_id, nonzero_marker`.
+
+These are **not** stored in a persistent `MapWorld` array.  The loader uses them only to:
+
+1. Compute a grid cell index from `z` and `x` (using the rounding constant `flt_56E158`) and insert the tile into the spatial hash linked list (`world+0x40`/`world+0x44`).
+2. If `nonzero_marker != 0`, append the tile index to the temporary `Block` list that later links optional20 records to tiles.
+
+The `y`, `unk_float`, and `flags_or_id` fields are read but not consumed by the loader.  `flags_or_id` (5th u32) may serve a purpose in a render or collision consumer not yet traced.
 
 ### MAP tile placement / render dispatch
 
@@ -1368,12 +1387,15 @@ Fallback d-pad values:
 ## Recommended next reverse-engineering targets
 
 1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — many schemas still need field-level names.
-2. Consumers of `MapObjectRuntime72 +0x28` and `+0x3C` to name Section2 and Section4.
+2. ~~Consumers of `MapObjectRuntime72 +0x28` and `+0x3C`~~ — **resolved**: `+0x28` is `section2_ptr` (element in the section2 u32 array, or NULL if disk value = 0xFFFFFFFF); `+0x3C` is `section4_ptr` (element in the section4 runtime array, or NULL if sentinel). What section2 u32 values semantically represent (i.e., what `world[0x30][index]` encodes) is still unknown.
 3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
 4. Finish naming the `sub_550E60` / `sub_5509F0` function-dispatch ids used by STPC opcodes.  The calling convention is decoded, but most switch-case semantic names are still pending.
 5. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
 6. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
 7. `dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection.
+8. `MapWorld +0x08` (`object_count_b`) — read from file immediately after `object_count`; exact semantics unknown (actor pool capacity, total count of something, etc.).
+9. Section5 32×8 table (runtime global `dword_6DA350`): 32 × 2 u32 entries read from MAP file into a global (not the `MapWorld` struct).  What these lookup values encode is still unknown.
+10. `MapTileDefDisk24` unnamed fields: `+0x00`, `+0x08`, and disk `+0x0C` (runtime `+0x10`, `+0x1C` is zero-init) have no confirmed semantic names yet.
 
 ---
 
@@ -1734,6 +1756,31 @@ Disk offset   Size   Runtime offset   Notes
 The loader's linked-list stitcher then walks the runtime array.  If the previous runtime pointer is non-NULL, it writes it to current `+0x04`.  If current `+0x00` is nonzero, the loader overwrites current `+0x00` with `current + 0x30` and carries current as the previous pointer; otherwise the chain resets.
 
 In `t1l1m001`, most MAP objects have `section4_index = 0xFFFFFFFF` (sentinel → NULL).  Only a few objects (e.g., index 4) reference a valid Section4 entry.
+
+---
+
+## MAP TileDef disk format (confirmed from `sub_42AC50`)
+
+The 24-byte disk records are read in sequential order and expanded to 32-byte runtime records.  The allocator zero-initialises each entry, so runtime `+0x0C` is never written by the loader.
+
+```text
+Disk offset   Size   Runtime offset   Notes
+0x00          u32    +0x00            unnamed
+0x04          u32    +0x04            unnamed
+0x08          u32    +0x08            unnamed
+0x0C          u32    +0x10            unnamed  (runtime +0x0C is zero-init, skipped)
+0x10          u32    +0x14            unnamed
+0x14          u32    +0x18            unnamed
+```
+
+`sub_42BF40` reads the tile placements table (`world+0x3C`) to dispatch terrain rendering.  Confirmed fields accessed from `sub_42BF40`:
+
+- `+0x04` = `yaw_4096`: tile yaw angle (4096 units/revolution, 2π radians/revolution)
+- `+0x10` = `pos_x_fixed12`: tile world X (12.12 fixed-point)
+- `+0x14` = `pos_y_fixed12`: tile world Y
+- `+0x18` = `pos_z_fixed12`: tile world Z (negated at render time)
+
+The disk fields at `+0x00`, `+0x08`, `+0x0C` (runtime `+0x10`), `+0x10` (runtime `+0x14`), `+0x14` (runtime `+0x18`) map to `MapTilePlacement32.unknown_00`, `unknown_08`, `unknown_0C`, `pos_x_fixed12`, `pos_y_fixed12`, `pos_z_fixed12`, `unknown_1C`.
 
 ---
 

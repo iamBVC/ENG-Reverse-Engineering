@@ -282,16 +282,22 @@ class MapSection4Record:
 
 @dataclass
 class MapTileDefExe:
-    """One 24-byte tile definition record, expanded by the game to 32 bytes."""
+    """One 24-byte tile definition record, expanded by the game to 32 bytes.
+
+    sub_42AC50 reads 6 sequential u32s from the file and stores them at runtime
+    offsets +0x00, +0x04, +0x08, +0x10, +0x14, +0x18 (skipping +0x0C which is
+    zero-initialised by the allocator).  Field names here use the disk sequential
+    byte positions (0, 4, 8, 12, 16, 20).
+    """
 
     index: int
     file_offset: int
-    u32_00: int
-    u32_04: int
-    u32_08: int
-    u32_16: int
-    u32_20: int
-    u32_24: int
+    u32_00: int   # → runtime +0x00
+    u32_04: int   # → runtime +0x04
+    u32_08: int   # → runtime +0x08
+    u32_12: int   # → runtime +0x10  (runtime +0x0C is zero-init, never written)
+    u32_16: int   # → runtime +0x14
+    u32_20: int   # → runtime +0x18
 
 
 @dataclass
@@ -883,7 +889,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
     _write_csv(out_dir / "grid_u32.csv", ["cell_index","x","y","value","value_hex"], (
         {"cell_index":i,"x":i % parsed.grid_width,"y":i // parsed.grid_width,"value":v,"value_hex":f"0x{v:08X}"} for i,v in enumerate(parsed.grid)
     ))
-    _write_csv(out_dir / "tile_defs_24.csv", ["index","file_offset","u32_00","u32_04","u32_08","u32_16","u32_20","u32_24"], (td.__dict__ for td in parsed.tile_defs))
+    _write_csv(out_dir / "tile_defs_24.csv", ["index","file_offset","u32_00","u32_04","u32_08","u32_12","u32_16","u32_20"], (td.__dict__ for td in parsed.tile_defs))
     _write_csv(out_dir / "tile_trak_record_indices.csv", ["tile_index","trak_record_index"], ({"tile_index":i,"trak_record_index":v} for i,v in enumerate(parsed.tile_trak_indices)))
     _write_csv(out_dir / "optional20_records.csv", ["index","file_offset","u32_00","u32_04","u32_08","u32_12","trak_record_index_16","block_tile_index"], (r.__dict__ for r in parsed.optional20))
     _write_csv(out_dir / "vertex_color_blocks.csv", ["tile_index","trak_record_index","vertex_count","color_offset","layer_count","byte_size","max_alpha_first_layer","extra_trak_record_index","extra_vertex_count","extra_color_offset","extra_layer_count","extra_byte_size"], (c.__dict__ for c in parsed.colors))

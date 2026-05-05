@@ -246,7 +246,7 @@ def write_textured_terrain_obj(
                 continue
             if tile_i < len(mapx.tile_defs):
                 td = mapx.tile_defs[tile_i]
-                tz0 = -_fixed12_signed_from_u32(td.u32_24)
+                tz0 = -_fixed12_signed_from_u32(td.u32_20)
                 yaw_units0 = td.u32_04 & 0xFFFF
             else:
                 tz0 = tile.z
@@ -276,9 +276,9 @@ def write_textured_terrain_obj(
                 continue
             if tile_i < len(mapx.tile_defs):
                 td = mapx.tile_defs[tile_i]
-                tx = _fixed12_signed_from_u32(td.u32_16)
-                ty = _fixed12_signed_from_u32(td.u32_20)
-                tz = -_fixed12_signed_from_u32(td.u32_24)
+                tx = _fixed12_signed_from_u32(td.u32_12)
+                ty = _fixed12_signed_from_u32(td.u32_16)
+                tz = -_fixed12_signed_from_u32(td.u32_20)
                 yaw_units = td.u32_04 & 0xFFFF
             else:
                 tx, ty, tz = tile.x, tile.y, tile.z

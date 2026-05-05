@@ -692,7 +692,7 @@ def write_map_placed_trak_terrain_obj(
                 continue
             if tile_i < len(mapx.tile_defs):
                 td = mapx.tile_defs[tile_i]
-                tz0 = -_fixed12_signed_from_u32(td.u32_24)
+                tz0 = -_fixed12_signed_from_u32(td.u32_20)
                 yaw_units0 = td.u32_04 & 0xFFFF
             else:
                 tz0 = tile.z
@@ -730,9 +730,9 @@ def write_map_placed_trak_terrain_obj(
             # tile definition avoids that misleading float interpretation.
             if tile_i < len(mapx.tile_defs):
                 td = mapx.tile_defs[tile_i]
-                tx = _fixed12_signed_from_u32(td.u32_16)
-                ty = _fixed12_signed_from_u32(td.u32_20)
-                tz = -_fixed12_signed_from_u32(td.u32_24)
+                tx = _fixed12_signed_from_u32(td.u32_12)
+                ty = _fixed12_signed_from_u32(td.u32_16)
+                tz = -_fixed12_signed_from_u32(td.u32_20)
                 yaw_units = td.u32_04 & 0xFFFF
             else:
                 tx, ty, tz = tile.x, tile.y, tile.z
@@ -758,9 +758,9 @@ def write_map_placed_trak_terrain_obj(
                 continue
             if tile_i < len(mapx.tile_defs):
                 td = mapx.tile_defs[tile_i]
-                tx = _fixed12_signed_from_u32(td.u32_16)
-                ty = _fixed12_signed_from_u32(td.u32_20)
-                tz = -_fixed12_signed_from_u32(td.u32_24)
+                tx = _fixed12_signed_from_u32(td.u32_12)
+                ty = _fixed12_signed_from_u32(td.u32_16)
+                tz = -_fixed12_signed_from_u32(td.u32_20)
                 yaw_units = td.u32_04 & 0xFFFF
             else:
                 tx, ty, tz, yaw_units = tile.x, tile.y, tile.z, 0
@@ -1240,9 +1240,9 @@ def export_world(
         {
             "tile_index": i,
             "trak_record_index": mapx.tile_trak_indices[i] if i < len(mapx.tile_trak_indices) else -1,
-            "tx": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_16) if i < len(mapx.tile_defs) else t.x,
-            "ty": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_20) if i < len(mapx.tile_defs) else t.y,
-            "raw_tz": -_fixed12_signed_from_u32(mapx.tile_defs[i].u32_24) if i < len(mapx.tile_defs) else t.z,
+            "tx": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_12) if i < len(mapx.tile_defs) else t.x,
+            "ty": _fixed12_signed_from_u32(mapx.tile_defs[i].u32_16) if i < len(mapx.tile_defs) else t.y,
+            "raw_tz": -_fixed12_signed_from_u32(mapx.tile_defs[i].u32_20) if i < len(mapx.tile_defs) else t.z,
             "terrain_z_mirror_enabled": mirror_terrain_z,
             "yaw_units_4096": (mapx.tile_defs[i].u32_04 & 0xFFFF) if i < len(mapx.tile_defs) else 0,
             "yaw_degrees": (((mapx.tile_defs[i].u32_04 & 0xFFFF) / 4096.0) * 360.0 * terrain_yaw_sign) if i < len(mapx.tile_defs) else 0.0,
