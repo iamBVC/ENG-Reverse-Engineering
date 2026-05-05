@@ -1279,14 +1279,13 @@ Fallback d-pad values:
 
 ## Recommended next reverse-engineering targets
 
-1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — schemas not yet read.
+1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — many schemas still need field-level names.
 2. Consumers of `MapObjectRuntime72 +0x28` and `+0x3C` to name Section2 and Section4.
 3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
-4. `sub_553920`–`sub_5539E0` (opcodes 0x37–0x3B) and `sub_553A10`–`sub_553B00` (0x3D–0x43) — likely geometry/transform opcodes worth decoding next.
-5. `sub_550E60` and `sub_5509F0` — called by multiple opcodes as the primary function-dispatch path; understanding them would clarify ~10 opcodes at once.
-6. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
-7. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
-8. `dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection.
+4. Finish naming the `sub_550E60` / `sub_5509F0` function-dispatch ids used by STPC opcodes.  The calling convention is decoded, but most switch-case semantic names are still pending.
+5. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
+6. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
+7. `dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection.
 
 ---
 
@@ -1480,8 +1479,8 @@ opcode  handler         notes (from sub analysis)
 0x07    sub_552AB0      call sub_550E60(actor, imm16)
 0x08    sub_5536F0      push address of [actor+0xF4 + imm16*4] (load-address variant)
 0x09    sub_553790      push address via [actor+0x00 + imm16*4] (script-area relative)
-0x0A    sub_553690      (unknown)
-0x0B    sub_552AD0      (unknown)
+0x0A    sub_553690      push address of global slot dword_6D9E8C[imm16]
+0x0B    sub_552AD0      call sub_5509F0(actor, actor, imm16); push returned pointer/value
 0x0C    sub_54FC40      (unknown)
 0x0D    sub_54DBE0      zero the memory cell at actor+0xF8+imm16*16
 0x0E    sub_54DC20      set high bit (0x80000000) of cell at actor+0xF8+imm16*16
@@ -1498,20 +1497,20 @@ opcode  handler         notes (from sub analysis)
 0x19    sub_553770      push address of same array element (LEA variant of 0x18)
 0x1A    sub_552AF0      function call via sub_550E60 with actor+0x0C context
 0x1B    sub_553730      function call via sub_5509F0; return value pushed
-0x1C    sub_552D20      guarded call: executes sub_550E60 only if dword_6D9E1C≠0
-0x1D    sub_552D50      guarded call (variant); same guard, different path
-0x1E    sub_552B60      (unknown)
-0x1F    sub_552B90      (unknown)
-0x20    sub_552C40      (unknown)
-0x21    sub_552C70      (unknown)
+0x1C    sub_552D20      if dword_6D9E1C exists, call sub_550E60(actor, dword_6D9E1C, imm16), else push 0
+0x1D    sub_552D50      if dword_6D9E1C exists, call sub_5509F0(actor, dword_6D9E1C, imm16), push result, else push 0
+0x1E    sub_552B60      if dword_6D9E28 exists, call sub_550E60(actor, dword_6D9E28, imm16), else push 0
+0x1F    sub_552B90      if dword_6D9E28 exists, call sub_5509F0(actor, dword_6D9E28, imm16), push result, else push 0
+0x20    sub_552C40      if dword_6D9E30 exists, call sub_550E60(actor, dword_6D9E30, imm16), else push 0
+0x21    sub_552C70      if dword_6D9E30 exists, call sub_5509F0(actor, dword_6D9E30, imm16), push result, else push 0
 0x22    sub_54D200      (unknown)
 0x23    sub_54D220      (unknown)
-0x24    sub_552BD0      (unknown)
-0x25    sub_552C00      (unknown)
-0x26    sub_552B10      (unknown)
-0x27    sub_552B30      (unknown)
-0x28    sub_552CB0      (unknown)
-0x29    sub_552CE0      (unknown)
+0x24    sub_552BD0      if dword_6D9E34 exists, call sub_550E60(actor, dword_6D9E34, imm16), else push 0
+0x25    sub_552C00      if dword_6D9E34 exists, call sub_5509F0(actor, dword_6D9E34, imm16), push result, else push 0
+0x26    sub_552B10      call sub_550E60(actor, dword_6D9E24, imm16)
+0x27    sub_552B30      call sub_5509F0(actor, dword_6D9E24, imm16); push returned pointer/value
+0x28    sub_552CB0      if dword_6D9E2C exists, call sub_550E60(actor, dword_6D9E2C, imm16), else push 0
+0x29    sub_552CE0      if dword_6D9E2C exists, call sub_5509F0(actor, dword_6D9E2C, imm16), push result, else push 0
 0x2A    sub_54E8E0      (unknown)
 0x2B    sub_553DA0      (unknown)
 0x2C    nullsub_2       no-op
@@ -1525,19 +1524,19 @@ opcode  handler         notes (from sub analysis)
 0x34    sub_54DD60      (unknown)
 0x35    nullsub_2       no-op
 0x36    nullsub_2       no-op
-0x37    sub_553920      (unknown)
-0x38    sub_553950      (unknown)
-0x39    sub_553980      (unknown)
-0x3A    sub_5539B0      (unknown)
-0x3B    sub_5539E0      (unknown)
+0x37    sub_553920      pop stack; store into sub_5509F0(actor, dword_6D9E1C, imm16) if dword_6D9E1C exists
+0x38    sub_553950      pop stack; store into sub_5509F0(actor, dword_6D9E28, imm16) if dword_6D9E28 exists
+0x39    sub_553980      pop stack; store into sub_5509F0(actor, dword_6D9E30, imm16) if dword_6D9E30 exists
+0x3A    sub_5539B0      pop stack; store into sub_5509F0(actor, dword_6D9E34, imm16) if dword_6D9E34 exists
+0x3B    sub_5539E0      pop stack; store into sub_5509F0(actor, dword_6D9E2C, imm16) if dword_6D9E2C exists
 0x3C    sub_54D240      (unknown)
-0x3D    sub_553A10      (unknown)
-0x3E    sub_553A40      (unknown)
-0x3F    sub_553A60      (unknown)
-0x40    sub_553A90      (unknown)
-0x41    sub_553AC0      (unknown)
-0x42    sub_553AE0      (unknown)
-0x43    sub_553B00      (unknown)
+0x3D    sub_553A10      pop stack; store into sub_5509F0(actor, dword_6D9E24, imm16)
+0x3E    sub_553A40      pop stack; store into [actor+0x0C]->[0xF4][imm16]
+0x3F    sub_553A60      pop stack; store into sub_5509F0(actor, actor+0x0C, imm16)
+0x40    sub_553A90      pop stack; store into sub_5509F0(actor, actor, imm16)
+0x41    sub_553AC0      pop stack; store into [actor+0xF4][imm16]
+0x42    sub_553AE0      pop stack; store into [actor+0x00][imm16]
+0x43    sub_553B00      pop stack; store into global slot dword_6D9E8C[imm16]
 0x44    sub_553610      push signed imm16 onto actor stack
 ```
 
@@ -1547,8 +1546,29 @@ opcode  handler         notes (from sub analysis)
 |---|---|---|
 | `+0x00` (script_pc) | VM loop, 0x09 | instruction pointer; also used as base for 0x09 offset |
 | `+0xE8` (flags0) | 0x01, VM loop | bit 0x12 = halt/pause; bit 0x01000000 toggled by 0x01 |
-| `+0xF4` (mem_base) | 0x04, 0x05, 0x08, 0x18, 0x19 | locals array base pointer |
+| `+0x104` / `+0x108` | `sub_54BBD0`, `sub_54BC00`, many opcodes | VM value-stack pointer and stack depth/count |
+| `+0xF4` (mem_base) | 0x04, 0x05, 0x08, 0x18, 0x19, 0x3E, 0x41 | locals array base pointer |
 | `+0xF8` | 0x0D, 0x0E, 0x0F | cell array base (16-byte stride) |
+
+### STPC VM stack and role-pointer model
+
+`sub_54BBD0(actor, value)` pushes a 32-bit value to the VM stack at `actor+0x104` and increments `actor+0x108`.  `sub_54BC00(actor)` is the exact inverse: it decrements `actor+0x108`, backs `actor+0x104` up by 4, and returns the popped dword.
+
+The decoded `0x37..0x43` group is a store family.  These opcodes pop a stack value and write it either through `sub_5509F0` into a role actor's property/function slot, directly into a local array, directly into the script-relative memory area, or into the global 256-entry table `dword_6D9E8C`.
+
+Role pointers used by the store/load/function-call families:
+
+| Global | Setter | Confirmed opcode consumers | Current role name |
+|---|---|---|---|
+| `dword_6D9E1C` | `sub_550140` | 0x1C, 0x1D, 0x37 | current/primary actor pointer; setter ORs actor flag byte with `0x0800` |
+| `dword_6D9E24` | `sub_550130` | 0x26, 0x27, 0x3D | active list/root actor pointer |
+| `dword_6D9E28` | `sub_5500F0` | 0x1E, 0x1F, 0x38 | highlighted/target actor pointer; setter also sets actor flag `0x08000000` |
+| `dword_6D9E2C` | `sub_550110` | 0x28, 0x29, 0x3B | auxiliary role actor pointer |
+| `dword_6D9E30` | `sub_5500E0` | 0x20, 0x21, 0x39 | auxiliary role actor pointer |
+| `dword_6D9E34` | `sub_5500D0` | 0x24, 0x25, 0x3A | auxiliary role actor pointer |
+| `dword_6D9E8C[256]` | 0x43, cleared by `sub_5536D0` | 0x06, 0x0A, 0x43 | script global variable/object table |
+
+These opcodes are important for full IDE-grade script editing, but they do not directly bind geometry.  The world exporter still only needs the already-confirmed placement subset: stack constants/pointers, `0xB2` STPC-relative pointer load, `0x54` model bind, child-spawn inheritance, movement opcodes, and MAP Section4 route application.
 
 ### Actor spawn variants
 
