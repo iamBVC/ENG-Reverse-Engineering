@@ -3,6 +3,43 @@
 The game loader does not load image pixels from SPRT.  It reads a base material
 index used by the 2D sprite renderer.  Sprite art itself is represented by TEXT
 textures plus runtime material rectangles.
+
+Confirmed loader (loc_558AD1):
+  u32 material_base_index -> dword_5FF728
+  IF WFPC bit 0x100000:
+    u32 count
+    u32 optional_values[count] -> unk_5FCFA0
+All sampled WADs are 4 bytes (no optional table).
+
+Renderer formula (sub_425D40):
+  material_index = material_base + sprite_id * 2 + variant_or_frame
+  material_ptr   = dword_581154 + material_index * 20   (RuntimeMaterial20)
+
+Runtime sprite object (SpriteObject64, stride 0x40, 15 instances at 0x573410):
+  +0x00  u16  alpha          0=invisible, 0x7F=max; guard for draw function
+  +0x02  u8   countdown      fade delay counter
+  +0x03  u8   direction      1=fade-in, 0=fade-out
+  +0x05  u8   frame_idx      current animation frame
+  +0x06  u8   unk (init 1)
+  +0x07  u8   loop_flag
+  +0x08  u8   scale_flag
+  +0x0C  u32  sprite_id      slot: material_base + id*2 + variant
+  +0x14  u32  anim_pos
+  +0x18  i32  screen_x       init -32 (off-screen)
+  +0x28  i32  screen_x_int   if nonzero, integer x override
+  +0x2C  u8   anim_mode      0=frame_idx*2, nonzero=use frame_table
+  +0x2F  u8[] frame_table    lookup indexed by frame_idx when anim_mode!=0
+
+Known sprite_id ranges (from static BSS data section defaults):
+  2/6/8, 3/7/9  character-form pairs (3 game-state variants)
+  0x0A-0x11     8-frame animation set
+  0x13-0x22     16-frame animation set
+  0x23-0x2A     8-frame animation set
+  0x33-0x3A     8-frame animation set (primary HUD element)
+  0x41+         positional/dynamic sprites
+  0x45-0x4C     8-frame animation set
+  0x4D = 77     fixed HUD sprite at screen (32, 166)
+  0x5A+         positional/dynamic sprite
 """
 
 from __future__ import annotations

@@ -416,7 +416,7 @@ If `dword_6DA330 & 0x100000` is set, the loader then reads an optional table:
 +0x08  u32 optional_values[optional_count] -> unk_5FCFA0
 ```
 
-Current sample WADs only contain the 4-byte base value, so the optional table is confirmed from executable control flow but not yet observed in the tested files.
+All sampled WADs contain only the 4-byte base value.  The optional table is confirmed from executable control flow but never observed in practice.  The consumer of `unk_5FCFA0` was not identified via direct IDA cross-references; reads are likely via indexed register access that IDA could not label statically.  The optional table may store sprite_id remappings for the WFPC-extended feature set.
 
 ### Renderer use
 
@@ -427,7 +427,7 @@ material_index = dword_5FF728 + sprite_id * 2 + variant_or_frame
 material_ptr   = dword_581154 + material_index * 20
 ```
 
-`sprite_id` is read from the sprite/runtime object at `+0x0C`.  `variant_or_frame` is usually a two-slot variant/frame value; when the object byte at `+0x2C` is set, the renderer indexes an inline byte table at `+0x2F` using `byte +0x05`.
+`sprite_id` is read from the sprite runtime object at `+0x0C`.  `variant_or_frame` is either `frame_idx * 2` (when object `+0x2C` is zero) or a value looked up in an inline byte table at `+0x2F` indexed by `frame_idx` (when `+0x2C` is nonzero).
 
 Observed sample bases against parsed `TEXT` material counts:
 
@@ -441,6 +441,77 @@ Observed sample bases against parsed `TEXT` material counts:
 | `t0i0m000` | 366 | 389 | 23 | 11 |
 
 The exporter writes `sprt/summary.txt`, `sprt/summary.json`, and `sprt/sprite_material_slots.csv`, mapping each derived two-material sprite slot to the corresponding parsed `TEXT` material rectangle and texture index.
+
+### Runtime sprite object layout
+
+There are 15 static sprite object instances in BSS starting at `0x573410`, each 64 bytes (stride `0x40`), and one additional special sprite at `0x573840`.  All are initialized by `sub_4268C0`.  The alpha-update tick is `sub_4264B0`; the fade-in init is `sub_426870`.
+
+```c
+#pragma pack(push, 1)
+struct SpriteObject64 {
+    uint16_t alpha;          // +0x00  0=invisible, 0x7F=max; used as draw-guard
+    uint8_t  countdown;      // +0x02  frames remaining until direction change
+    uint8_t  direction;      // +0x03  1=fade-in, 0=fade-out
+    uint8_t  unk_04;         // +0x04
+    uint8_t  frame_idx;      // +0x05  current animation frame (indexes +0x2F table or *2 for slot)
+    uint8_t  unk_06;         // +0x06  initialised to 1 by sub_426870
+    uint8_t  loop_flag;      // +0x07  nonzero = cycle at max alpha instead of locking
+    uint8_t  scale_flag;     // +0x08  passed as arg to sub_425D40; controls alpha doubling
+    uint8_t  unk_09[3];      // +0x09..+0x0B
+    uint32_t sprite_id;      // +0x0C  slot: material_base + id*2 + variant
+    uint32_t unk_10;         // +0x10
+    int32_t  anim_pos;       // +0x14  animation position / frame progress counter
+    int32_t  screen_x;       // +0x18  screen X; init -32 (off-screen); updated per frame
+    uint8_t  unk_1C[12];     // +0x1C..+0x27
+    int32_t  screen_x_int;   // +0x28  if nonzero, forces integer screen-X (skips rect-based calc)
+    uint8_t  anim_mode;      // +0x2C  0=use frame_idx*2 for variant, nonzero=use frame_table
+    uint8_t  unk_2D[2];      // +0x2D..+0x2E
+    uint8_t  frame_table[];  // +0x2F  byte lookup indexed by frame_idx when anim_mode != 0
+}; // 0x40 = 64 bytes
+#pragma pack(pop)
+```
+
+### Static sprite object array
+
+| BSS address | sprite_id field | sprite_id value(s) | Notes |
+|---|---|---:|---|
+| `0x573410` | `dword_57341C` | 0x33–0x3A (cycles 8) | animated HUD element, 8-frame loop |
+| `0x573450` | `dword_57345C` | 0x3B + dynamic offset | state-dependent; updated each frame |
+| `0x573490` | `dword_57349C` | unknown | sprite_id set via loop, not direct ref |
+| `0x5734D0` | `dword_5734DC` | unknown | same |
+| `0x573510` | `dword_57351C` | unknown | same |
+| `0x573550` | `dword_57355C` | 3 / 7 / 9 | game-state-dependent pair A |
+| `0x573590` | `dword_57359C` | 2 / 6 / 8 | game-state-dependent pair B (drawn with A) |
+| `0x5735D0` | `dword_5735DC` | unknown | sprite_id set via loop |
+| `0x573610` | `dword_57361C` | 0x13 + (frame & 0xF) | 16-frame animation cycle |
+| `0x573650` | `dword_57365C` | 0x0A + (state & 7) | 8-frame animation cycle |
+| `0x573690` | `dword_57369C` | 0x41 + delta | position-linked sprite |
+| `0x5736D0` | `dword_5736DC` | 0x5A + offset | position-linked sprite |
+| `0x573710` | `dword_57371C` | 0x23 (+ dynamic) | 8-frame animation cycle |
+| `0x573750` | `dword_57375C` | unknown | sprite_id set via loop |
+| `0x573790` | `dword_57379C` | 0x45 + (state & 7) | 8-frame animation cycle |
+| `0x573840`* | `dword_57384C` | 0x4D = 77 | special HUD sprite; drawn at screen (32, 166) by `sub_427E90` |
+
+Pairs (2,3), (6,7), (8,9) are the three possible game-state variants for sprites at `0x573590`/`0x573550`; selected by runtime flags on the WFPC bitmask.
+
+Four sprite structs (`0x573490`, `0x5734D0`, `0x573510`, `0x5735D0`) have sprite_ids assigned via pointer-loop code that IDA could not resolve to named symbols.  They are drawn together with the pair-B sprites (lines 56836–56854 of the disassembly), suggesting they form a group of 6 UI sprites that share the same on-screen rendering pass.
+
+### Sprite_id range summary
+
+| Range | Width | Usage |
+|---:|---:|---|
+| 2–3, 6–7, 8–9 | 2 slots each | Character-form paired sprites (3 variants) |
+| 0x0A–0x11 | 8 | 8-frame animation set |
+| 0x13–0x22 | 16 | 16-frame animation set |
+| 0x23–0x2A | 8 | 8-frame animation set |
+| 0x33–0x3A | 8 | 8-frame animation set (primary HUD cycling element) |
+| 0x3B+ | variable | State-dependent / positional sprites |
+| 0x41+ | variable | Positional sprite |
+| 0x45–0x4C | 8 | 8-frame animation set |
+| 0x4D | 1 | Fixed HUD sprite at screen (32, 166) |
+| 0x5A+ | variable | Positional sprite |
+
+The highest confirmed static sprite_id is 90 (0x5A), giving a maximum material pair at `base + 180 / base + 181`, well within the 98–193 remaining-material window observed in sampled WADs.
 
 ## WFPC feature flags chunk
 
