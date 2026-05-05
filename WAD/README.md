@@ -13,6 +13,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 - decode `TEXT` RGB555 RLE textures to PNG
 - export `TEXT` palette/material diagnostics
 - parse `MAP ` tile placement data, grid data, object records, and executable-confirmed MAP diagnostics
+- expose MAP Section4 route transforms, including XYZ rotation fields used by object scripts
 - parse `LGHT` directional, point, and negative/special point lights to CSV
 - decode `LGPC` localized dialogue/text tables to CSV
 - decode `FONT` glyph material/metric tables to CSV
@@ -20,7 +21,7 @@ Given a level WAD such as `t1l1m001.wad`, the extractor can currently:
 - decode `SRPC` streamed speech tables and, when `Music/ENGLISH.CVS` is available, export speech `.cvs` slices and WAV files
 - decode `AMPC` ambient-audio resource banks and 40-byte ambient emitter records
 - decode `TRAK` terrain/world geometry records, vertices, triangles, collision/contact entries, OBJ surfaces, and an HTML viewer
-- parse `STPC` with the executable-confirmed table/cursor layout and export all decoded geometry records as OBJ meshes
+- parse `STPC` with the executable-confirmed table/cursor layout, Section2 relocation model, and OBJ export for all decoded geometry records
 - decode `WFPC` feature flags that gate optional MAP, STPC, and SPRT payloads
 - generate a `world/` reconstruction using TRAK terrain, MAP object placement, and STPC mesh candidates
 - preserve raw chunks for anything still unknown or only partially decoded
@@ -224,8 +225,8 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `SRPC` | ~85% | Exports speech table; decodes `.CVS` slices to WAV when CVS is available. | `unknown_00`, `unknown_06`, and exact AAL resource type name. |
 | `AMPC` | ~65% | Parses the confirmed resource-bank wrapper and 40-byte ambient emitter table. | Exact payload internals for the `pBAV`/`pQES` resource blobs and remaining ambient flag bits. |
 | `TRAK` | ~75% | Exports geometry records, vertices, triangles, collision entries, OBJ, viewer. | Header fields `+0x00/+0x04/+0x08/+0x7E`, collision group names, remaining triangle flags. |
-| `STPC` | ~70% | Parses the confirmed top-level geometry cursor layout, including matrix-group/skinned records; exports OBJ/MTL, manifest, face diagnostics, and script-to-geometry references; documents the core VM stack, role-pointer, load/store, model-bind, child-spawn, movement, and route-transform opcodes. | Remaining high-opcode semantics, animation record fields, Block32 semantics, and full IDE-friendly script names. |
-| `MAP ` | ~65% | Parses tile placement, grid, object58 table, vertex colors, Section3/Section4 loader layouts, MAP diagnostics. | Final Section3 semantic names, some flags/type ids, complete object runtime behavior. |
+| `STPC` | ~72% | Parses the confirmed top-level geometry cursor layout, including matrix-group/skinned records and the Section2 variable-array relocation model; exports OBJ/MTL, manifest, face diagnostics, script-to-geometry refs, and `0xB2` pointer candidates; documents the core VM stack, role-pointer, load/store, model-bind, child-spawn, movement, DEFANIM references, and route-transform opcodes. | Remaining high-opcode semantics, animation payload fields, Block32 semantics, and full IDE-friendly object/script names. |
+| `MAP ` | ~68% | Parses tile placement, grid, object58 table, vertex colors, Section3/Section4 loader layouts, route position/rotation transforms, and MAP diagnostics. | Final Section3 semantic names, some flags/type ids, complete object runtime behavior. |
 | `LGHT` | ~90% | Exports directional, point, and negative/special point lights. | Final type-2/type-4 byte currently named `falloff_or_mode`; two copied runtime color fields. |
 | `LGPC` | ~75% | Parses the localized dialogue/text table, exports raw entry matrix and line/id CSV. | Exact semantic name of header `+0x08`, selected row/language global name, and non-2-row variants. |
 | `WFPC` | ~55% | Reads the executable-confirmed `dword_6DA330` feature flags, exports flag diagnostics, and uses confirmed MAP layout bits. | Exact names for several observed-only bits and some runtime-only consumers. |
@@ -246,7 +247,7 @@ Stores the main world/terrain geometry record table.  Each decoded geometry reco
 
 ### `STPC`
 
-Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data.  The exporter also scans the script tail for opcode `0xB2` references back to decoded geometry offsets.  The object-definition VM is partially decoded: the stack, role-pointer load/store families, model binding, child-spawn inheritance, movement opcodes, and MAP Section4 route transforms are documented in the reverse-engineering bible.  The old scanner remains available internally as a fallback.
+Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data, then the Section2 relocation model before the script/object tail.  The exporter scans exact `0xB2 -> geometry` references and broad `0xB2` pointer candidates, including negative DEFANIM references.  The object-definition VM is partially decoded: stack, role-pointer load/store families, model binding, child-spawn inheritance, movement opcodes, and MAP Section4 route transforms are documented in the bible.
 
 ### `WFPC`
 
@@ -310,9 +311,9 @@ eng_wad/raw_export.py     raw chunk preservation
 
 ## What to work on next
 
-1. Continue naming STPC object-definition/script VM high opcodes and `sub_550E60` / `sub_5509F0` dispatch ids for IDE-grade script editing.
-2. Finish semantic naming for MAP Section3 fields and STPC object-definition data.
-3. Validate MAP object placement against more levels and in-game positions.
-4. Name the remaining TRAK/STPC geometry header fields and collision group roles.
-5. Finish decoding AMPC `pBAV`/`pQES` payload internals, remaining `FONT` inline-control behavior, remaining `LGPC` header/row-selection details, observed-only `WFPC` bits, and high-level `SPRT` sprite/animation consumers.
-6. Build a single viewer that combines decoded textures, TRAK terrain, STPC objects, MAP placement, and LGHT lights.
+1. Deepen STPC object-definition/script VM decoding: high opcodes, `sub_550E60` / `sub_5509F0` dispatch ids, Section2 animation payloads, DEFANIM references, and editor-safe script names.
+2. Finish MAP Section3 semantics and object/runtime flags so object placement, triggers, routes, and spawn behavior can be edited confidently.
+3. Add WAD reserialization for the already-structured chunks: MAP, TEXT materials, TRAK/STPC geometry tables, LGHT, LGPC/FONT, and audio tables.
+4. Name the remaining TRAK/STPC geometry header fields, Block32 records, collision groups, and triangle/material flags.
+5. Finish AMPC `pBAV`/`pQES`, SPRT high-level consumers, observed-only WFPC bits, and remaining text/font control behavior.
+6. Build a single editor/viewer combining decoded textures, TRAK terrain, STPC objects/scripts, MAP placement/routes, LGHT lights, and audio emitters.

@@ -1104,14 +1104,14 @@ if ((object->flags & 2) == 0) {
 struct MapSection4Runtime48 {
     MapSection4Runtime48 *next;  // +0x00
     MapSection4Runtime48 *prev;  // +0x04
-    uint32_t small_a;            // +0x08, disk u16 expanded
-    uint32_t small_b;            // +0x0C
-    uint32_t small_c;            // +0x10
+    uint32_t rot_x_units;        // +0x08, disk u16 expanded; opcode 0xFE shifts << 12
+    uint32_t rot_y_units;        // +0x0C, yaw; opcode 0xFE shifts << 12
+    uint32_t rot_z_units;        // +0x10, opcode 0xFE shifts << 12
     uint32_t unused_14;          // +0x14
-    uint32_t field_18;           // +0x18
-    uint32_t field_1C;           // +0x1C
-    uint32_t field_20;           // +0x20
-    uint32_t unused_24;          // +0x24
+    uint32_t pos_x_fixed12;      // +0x18, copied directly to actor +0x30
+    uint32_t pos_y_fixed12;      // +0x1C, copied directly to actor +0x34
+    uint32_t pos_z_fixed12;      // +0x20, copied directly to actor +0x38
+    uint32_t transform_extra_24; // +0x24, copied directly to actor +0x3C
     uint32_t field_28;           // +0x28
     uint32_t field_2C;           // +0x2C
 }; // 48 bytes
@@ -1488,11 +1488,10 @@ uint16_t *group_vertex_counts;    // +0x88, relocated runtime pointer
 
 ### STPC script geometry references
 
-The script/object-definition tail contains opcode `0x00B2` instructions that reference geometry by STPC-relative offset:
+The script/object-definition tail contains opcode `0x00B2` instructions that reference geometry by STPC-relative offset.  In the tested streams the exact instruction word for geometry binds is `0x000000B2`, followed by a 32-bit operand:
 
 ```text
-u16 opcode = 0x00B2
-u16 zero_or_arg
+u32 opcode_word = 0x000000B2
 u32 stpc_relative_geometry_offset
 ```
 
@@ -1512,7 +1511,7 @@ When `script_offset` in a MAP object is resolved by `sub_553630`:
 if (script_offset >= 0)
     runtime_ptr = dword_6D9DBC + script_offset;
 
-// negative offset → index into global object pool dword_6DA324
+// negative offset -> index into external DEFANIM table dword_6DA324
 else {
     idx = ~script_offset;               // = -(script_offset + 1)
     if (idx < dword_6DA31C)
@@ -1755,7 +1754,7 @@ Disk offset   Size   Runtime offset   Notes
 
 The loader's linked-list stitcher then walks the runtime array.  If the previous runtime pointer is non-NULL, it writes it to current `+0x04`.  If current `+0x00` is nonzero, the loader overwrites current `+0x00` with `current + 0x30` and carries current as the previous pointer; otherwise the chain resets.
 
-In `t1l1m001`, most MAP objects have `section4_index = 0xFFFFFFFF` (sentinel → NULL).  Only a few objects (e.g., index 4) reference a valid Section4 entry.
+In the current `t1l1m001` export, 42 of 122 MAP objects reference a valid Section4 entry and 80 use `section4_index = 0xFFFFFFFF` (sentinel -> NULL).  Section4 therefore matters for a significant minority of placed objects, especially route/waypoint-driven actors.
 
 ---
 
