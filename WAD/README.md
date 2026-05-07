@@ -180,7 +180,7 @@ Useful first files to inspect:
 | `stpc/script_geometry_refs.csv` | STPC script opcode `0xB2` references to decoded geometry records. |
 | `stpc/script_b2_operand_candidates.csv` | Byte-scan candidates for STPC script opcode `0xB2` operands, including negative DEFANIM table references. |
 | `sprt/sprite_material_slots.csv` | SPRT-derived sprite slots mapped onto TEXT runtime material rows. |
-| `world/stpc_object_vm_diagnostics.csv` | Partial STPC object-definition VM fingerprints, including runtime flag/mode operands and `sub_550E60` / `sub_5509F0` dispatch-ID histograms, for comparing object archetypes across WADs. |
+| `world/stpc_object_vm_diagnostics.csv` | Partial STPC object-definition VM fingerprints, including runtime flag/mode operands and raw/named `sub_550E60` / `sub_5509F0` dispatch-ID histograms, for comparing object archetypes across WADs. |
 | `world/terrain_and_objects.obj` | Textured terrain plus placed STPC object instances in one OBJ. |
 | `world/combined.obj` | Current best-effort diagnostic combined world reconstruction. |
 | `lights/lights.csv` | Runtime-derived light positions, colors, radii, and types. |
@@ -248,7 +248,7 @@ Stores the main world/terrain geometry record table.  Each decoded geometry reco
 
 ### `STPC`
 
-Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data, then the Section2 relocation model before the script/object tail.  The exporter scans exact `0xB2 -> geometry` references and broad `0xB2` pointer candidates, including negative DEFANIM references.  The object-definition VM is partially decoded: stack, role-pointer load/store families, debug-named high opcodes, model binding, child-spawn inheritance, movement opcodes, MAP Section4 route transforms, key `Actor340 +0xEC/+0xE8` runtime flag writers, and the first `sub_550E60` / `sub_5509F0` property IDs are documented in the bible.  `world/stpc_object_vm_diagnostics.csv` now records normalized opcode fingerprints plus runtime flag operands and dispatch-ID histograms so reused object definitions can be compared across level WADs even when raw STPC offsets differ.
+Stores packed scene/static object data.  The tool now follows the executable-confirmed cursor parser: each `GeometryRecord8C` header is immediately followed by its matrix-group counts, vertices, triangles, and Block32 data, then the Section2 relocation model before the script/object tail.  The exporter scans exact `0xB2 -> geometry` references and broad `0xB2` pointer candidates, including negative DEFANIM references.  The object-definition VM is partially decoded: stack, role-pointer load/store families, debug-named high opcodes, model binding, child-spawn inheritance, movement opcodes, MAP Section4 route transforms, key `Actor340 +0xEC/+0xE8` runtime flag writers, and the first `sub_550E60` / `sub_5509F0` property IDs are documented in the bible.  `world/stpc_object_vm_diagnostics.csv` now records normalized opcode fingerprints plus runtime flag operands and raw/named dispatch-ID histograms so reused object definitions can be compared across level WADs even when raw STPC offsets differ.
 
 ### `WFPC`
 

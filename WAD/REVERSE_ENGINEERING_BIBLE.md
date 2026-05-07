@@ -1683,7 +1683,7 @@ Runtime flag writer opcodes are also now counted in this CSV.  Across the same 1
 
 The same diagnostic now records operand histograms for the flag writers.  This is important because several script commands are generic set/clear operations: `0x2F` has observed imm16 values `1` and `0` for enabling/disabling mutable `+0xEC 0x10000`; `0x34` has observed imm16 values `1` and `0` for mutable `+0xEC 0x200000`; `0x82` currently pops mode values `0`, `3`, and `4`; `0xA5` / `0xA6` most often OR/clear `+0xE8` masks such as `0x00020000`, `0x00008000`, `0x00104000`, and `0x00248000`.  Treat these as behavior diagnostics for now, not disk fields.
 
-The diagnostic also records `sub_550E60` / `sub_5509F0` dispatch-ID histograms per object definition.  Across bounded object-definition samples, the hottest `sub_550E60` call IDs are actor transform and state queries: `35`, `36`, `34`, `38`, `16`, `15`, `202`, `188`, `4`, `3`, `10`, and `233`.  The hottest `sub_5509F0` store IDs are writable actor fields: `35`, `34`, `36`, `0`, `38`, `138`, `187`, `7`, `37`, `6`, `8`, and `218`.  Use these histograms to prioritize editor-facing property names.
+The diagnostic also records raw and named `sub_550E60` / `sub_5509F0` dispatch-ID histograms per object definition.  Across bounded object-definition samples, the hottest `sub_550E60` call IDs are actor transform and state queries: `35` (`actor_pos_y`), `36` (`actor_pos_z`), `34` (`actor_pos_x`), `38` (`actor_rot_y`), `16` (`contact_state_ptr_or_word0`), `15` (`actor_e8_bit3_query`), `202` (`distance_current_to_target_pos`), `188` (`actor_link_copy_0x144`), `4` (`geom_payload_0x28`), `3` (`geom_payload_word_0x00`), `10` (`geom_payload_field_0x0c`), and `233` (`actor_attached_ptr_0x14`).  The hottest `sub_5509F0` store IDs are writable actor fields: `35`, `34`, `36`, `0`, `38`, `138`, `187`, `7`, `37`, `6`, `8`, and `218`.  Use these histograms to prioritize editor-facing property names.
 
 No negative `0xB2` operands are currently observed in these bounded MAP object-definition streams.  Negative `0xB2` remains confirmed by the ASM as the DEFANIM table path; broad byte-scan candidate CSVs can still contain negative values that are data or inactive stream candidates.
 
@@ -1890,15 +1890,18 @@ sub_5509F0(vm_actor, target_actor, id) -> returns a writable/readable address, o
 |---:|---|
 | `0`, `19`, `118` | push `0` |
 | `3`, `4`, `6`, `7`, `8`, `9`, `10` | read fields from `target->geometry_or_model(+0x120)` |
-| `15` | push `(target->+0xE8 >> 3) & 1` |
-| `16` | push `target->+0xC0` contact-state pointer |
+| `15` | push `(target->+0xE8 >> 3) & 1`, matching the low runtime flag bit set by opcode `0x5C` / `sub_54D280` |
+| `16` | push `target->+0xC0` contact-state block first dword/pointer-like value |
 | `17`, `18`, `20`, `21`, `210`..`217`, `243` | read contact-state fields if the contact block exists, otherwise push `0`/sentinel |
 | `41` | distance/angle-style query between current actor and target via `sub_404D60` |
 | `58`, `59`, `60`, `121`, `122`, `123` | push global vector/scalar values |
 | `106`, `108`, `110`, `111`, `137` | push fixed12 boolean/game-state checks |
 | `142` | push `WFPC & 0x00080000` |
 | `149`, `150`, `157`, `182`, `188` | query mutable actor/runtime flag or link state |
-| `185`, `202`, `226`, `233` | query actor geometry/payload/link fields |
+| `185` | push `target->geometry_or_model(+0x120)->+0x2C` if a geometry/model payload is bound, else `0` |
+| `186`, `187`, `188`, `201` | push actor `+0x13C/+0x140/+0x144/+0x148`; these are contact radius/link/distance fields used by the proximity/contact loops |
+| `202` | push distance/current-target position query via `sub_404C90(target+0x30, dword_6D9E1C+0x30)`, or fixed fallback `0x64000` when no current actor exists |
+| `226`, `233` | query actor attached pointer/payload fields (`target->+0x14->+0x08` as fixed12, and raw `target->+0x14`) |
 | `232`, `236`, `250`, `253`, `265` | push global game-state values |
 
 For an editor, IDs with confirmed `sub_5509F0` addresses are the safest writable property surface.  IDs only confirmed through `sub_550E60` should initially be exposed as read/query/action diagnostics until their side effects are named.

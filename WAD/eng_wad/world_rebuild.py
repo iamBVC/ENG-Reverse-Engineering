@@ -688,6 +688,96 @@ def summarize_stpc_object_definition_vm(
     dispatch_e60_ops = {0x0007, 0x001A, 0x001C, 0x001E, 0x0020, 0x0024, 0x0026, 0x0028}
     dispatch_5509_load_ops = {0x000B, 0x001B, 0x001D, 0x001F, 0x0021, 0x0025, 0x0027, 0x0029}
     dispatch_5509_store_ops = {0x0037, 0x0038, 0x0039, 0x003A, 0x003B, 0x003D, 0x003F, 0x0040}
+    dispatch_id_names = {
+        0: "zero_or_null",
+        3: "geom_payload_word_0x00",
+        4: "geom_payload_0x28",
+        6: "geom_payload_vec_x",
+        7: "geom_payload_vec_y",
+        8: "geom_payload_vec_z",
+        9: "geom_payload_field_0x08",
+        10: "geom_payload_field_0x0c",
+        15: "actor_e8_bit3_query",
+        16: "contact_state_ptr_or_word0",
+        17: "contact_state_word_0x04",
+        18: "contact_state_word_0x30",
+        20: "contact_state_angle_0x2c",
+        22: "actor_state_word_0xd2",
+        31: "actor_ec_bit1_query",
+        32: "actor_e8_bit16_query",
+        33: "actor_e8_bit17_query",
+        34: "actor_pos_x",
+        35: "actor_pos_y",
+        36: "actor_pos_z",
+        37: "actor_rot_x",
+        38: "actor_rot_y",
+        39: "actor_rot_z",
+        41: "distance_current_to_target",
+        58: "global_vec_x",
+        59: "global_vec_y",
+        60: "global_vec_z",
+        106: "system_bool_fixed12",
+        111: "game_state_bool_fixed12_b",
+        121: "global_6d9d20",
+        122: "global_6d9d24",
+        123: "global_6d9d28",
+        132: "actor_prev_pos_x",
+        133: "actor_prev_pos_y",
+        134: "actor_prev_pos_z",
+        138: "actor_scalar_0x10c",
+        139: "actor_vec40_x",
+        140: "actor_vec44_y",
+        141: "actor_vec48_z",
+        142: "wfpc_0x80000_query",
+        143: "global_6d9d30",
+        149: "actor_ec_bit0_query",
+        150: "actor_ec_0x8000000_query",
+        157: "actor_ec_0x18000_pair_query",
+        159: "global_6d9e68",
+        160: "global_6d9e74",
+        161: "global_6da300",
+        162: "global_6da2f8",
+        163: "global_6da2fc",
+        164: "actor_payload0",
+        165: "actor_payload1",
+        181: "global_581d74",
+        182: "role28_ec_0x800000_query",
+        185: "geom_payload_0x2c",
+        186: "actor_contact_radius_0x13c",
+        187: "actor_link_value_0x140",
+        188: "actor_link_copy_0x144",
+        189: "global_584e70",
+        190: "global_indexed_table_584f1c",
+        191: "global_584ffc",
+        192: "global_584ff4",
+        201: "actor_distance_sq_0x148",
+        202: "distance_current_to_target_pos",
+        203: "global_6da2cc",
+        204: "global_6da2d0",
+        210: "contact_state_0x18",
+        211: "contact_state_0x1c",
+        212: "contact_state_word_0x24",
+        213: "contact_state_0x20",
+        214: "contact_state_word_0x26",
+        215: "contact_state_word_0x3a",
+        217: "contact_state_word_0x38",
+        218: "global_6da290",
+        226: "actor_model_child_0x14_0x08",
+        227: "distance_global_vec_to_actor",
+        228: "global_57d830",
+        229: "global_57d83c",
+        230: "global_57d840",
+        231: "global_57d834",
+        232: "global_6da304",
+        233: "actor_attached_ptr_0x14",
+        236: "global_6da2dc",
+        242: "actor_visibility_radius_query",
+        243: "contact_state_0x28",
+        249: "actor_geom_payload_ptr",
+        250: "global_584e60",
+        253: "resource_state_equals_2",
+        265: "global_586430_fixed12",
+    }
 
     def signed_imm16(raw: int) -> int:
         imm = (raw >> 16) & 0xFFFF
@@ -695,6 +785,12 @@ def summarize_stpc_object_definition_vm(
 
     def fmt_counter(counter: Counter[object], *, limit: int = 12) -> str:
         return " ".join(f"{key}:{count}" for key, count in counter.most_common(limit))
+
+    def fmt_dispatch_counter(counter: Counter[int], *, limit: int = 12) -> str:
+        return " ".join(
+            f"{key}:{dispatch_id_names.get(key, 'unknown')}:{count}"
+            for key, count in counter.most_common(limit)
+        )
 
     rows: list[dict[str, object]] = []
     for start in unique_definition_offsets:
@@ -846,6 +942,9 @@ def summarize_stpc_object_definition_vm(
             "dispatch_550e60_call_ids": fmt_counter(dispatch_e60_ids, limit=24),
             "dispatch_5509f0_load_ids": fmt_counter(dispatch_5509_load_ids, limit=24),
             "dispatch_5509f0_store_ids": fmt_counter(dispatch_5509_store_ids, limit=24),
+            "dispatch_550e60_call_names": fmt_dispatch_counter(dispatch_e60_ids, limit=24),
+            "dispatch_5509f0_load_names": fmt_dispatch_counter(dispatch_5509_load_ids, limit=24),
+            "dispatch_5509f0_store_names": fmt_dispatch_counter(dispatch_5509_store_ids, limit=24),
         })
     return rows
 
@@ -1675,6 +1774,7 @@ def export_world(
         "runtime_ec_80_toggle_values","runtime_ec_100_toggle_values","runtime_ec_200_toggle_values",
         "runtime_ec_10000_toggle_values","runtime_ec_200000_toggle_values","runtime_ec_400000_toggle_values",
         "dispatch_550e60_call_ids","dispatch_5509f0_load_ids","dispatch_5509f0_store_ids",
+        "dispatch_550e60_call_names","dispatch_5509f0_load_names","dispatch_5509f0_store_names",
     ], vm_diag_rows)
 
     write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))
