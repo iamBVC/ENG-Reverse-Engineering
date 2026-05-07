@@ -995,27 +995,50 @@ _B4_OPCODE = b"\xB4\x00\x00\x00"   # VM opcode that precedes the object name
 # This filters out error messages (spaces/colons) while matching all known names.
 _NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9]{2,29}$")
 
+def _valid_stpc_name(raw: bytes) -> bool:
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        return False
+    if not _NAME_RE.match(text):
+        return False
+    # Reject common false positives from packed immediates and all-caps labels.
+    if len(raw) < 3 or not any(97 <= b <= 122 for b in raw):
+        return False
+    return len(raw) >= 4 or not any(48 <= b <= 57 for b in raw)
 
-def _name_via_b4(stpc_data: bytes, start: int, end: int) -> str:
-    """Look for the confirmed B4-opcode pattern within [start, end).
 
-    B4 00 00 00  [u32] [u32] [u32] [i32]  <name\\0>
+def _b4_name_markers(stpc_data: bytes) -> list[tuple[int, str]]:
+    """Return candidate debug/name markers from opcode B4 records.
+
+    B4's inline payload is variable-width, so the name is not always at a fixed
+    +20 byte position.  We scan the short payload window and keep the longest
+    plausible CamelCase string, which picks object names like RisingColumns over
+    helper labels like ColumnChild.
     """
+    markers: list[tuple[int, str]] = []
     n = len(stpc_data)
-    pos = stpc_data.find(_B4_OPCODE, start, end)
+    pos = stpc_data.find(_B4_OPCODE)
     while pos != -1:
-        str_off = pos + 4 + 16          # opcode(4) + four u32 operands(16)
-        if str_off >= n:
-            break
-        j = str_off
-        while j < n and stpc_data[j] != 0 and 32 <= stpc_data[j] <= 126:
-            j += 1
-        if j - str_off >= 2 and j < n:
-            name = stpc_data[str_off:j].decode("ascii", errors="replace")
-            if _NAME_RE.match(name):
-                return name
-        pos = stpc_data.find(_B4_OPCODE, pos + 1, end)
-    return ""
+        candidates: list[bytes] = []
+        window_end = min(pos + 128, n)
+        i = pos + 4
+        while i < window_end:
+            if ord("A") <= stpc_data[i] <= ord("Z"):
+                j = i
+                while j < window_end and stpc_data[j] != 0 and 32 <= stpc_data[j] <= 126:
+                    j += 1
+                raw = stpc_data[i:j]
+                if j < n and stpc_data[j] == 0 and _valid_stpc_name(raw):
+                    candidates.append(raw)
+                i = max(j + 1, i + 1)
+            else:
+                i += 1
+        if candidates:
+            name = max(candidates, key=len).decode("ascii", errors="replace")
+            markers.append((pos, name))
+        pos = stpc_data.find(_B4_OPCODE, pos + 1)
+    return markers
 
 
 def _name_via_scan(stpc_data: bytes, start: int, end: int) -> str:
@@ -1035,7 +1058,7 @@ def _name_via_scan(stpc_data: bytes, start: int, end: int) -> str:
                 j += 1
             if j < n and stpc_data[j] == 0:
                 name = stpc_data[i:j].decode("ascii", errors="replace")
-                if _NAME_RE.match(name):
+                if _valid_stpc_name(name.encode("ascii", errors="ignore")):
                     return name
             i = j + 1
         else:
@@ -1043,13 +1066,51 @@ def _name_via_scan(stpc_data: bytes, start: int, end: int) -> str:
     return ""
 
 
+def _marker_name_near(
+    markers: list[tuple[int, str]],
+    offset: int,
+    *,
+    before: int = 4096,
+    after: int = 0,
+) -> str:
+    best_before: tuple[int, str] | None = None
+    best_after: tuple[int, str] | None = None
+    for pos, name in markers:
+        if pos <= offset and offset - pos <= before:
+            best_before = (pos, name)
+        elif pos > offset:
+            if pos - offset <= after:
+                best_after = (pos, name)
+            break
+    if best_before:
+        return best_before[1]
+    if best_after:
+        return best_after[1]
+    return ""
+
+
+def _referenced_script_name(stpc_data: bytes, start: int, markers: list[tuple[int, str]]) -> str:
+    # B2 operands below the mesh table end are geometry refs. Large in-range
+    # operands are usually script/DEFANIM pointers; the first named target is a
+    # useful fallback for wrapper entrypoints.
+    for pos in range(start, min(len(stpc_data) - 8, start + 768)):
+        if stpc_data[pos:pos + 4] == b"\xB2\x00\x00\x00":
+            target = int.from_bytes(stpc_data[pos + 4:pos + 8], "little", signed=False)
+            if 0 <= target < len(stpc_data) and target >= 0x100000:
+                name = _marker_name_near(markers, target, before=768, after=256)
+                if name:
+                    return name
+    return ""
+
+
 def build_stpc_name_map(stpc_data: bytes,
                         script_offsets: list[int]) -> dict[int, str]:
     """Return {script_offset: name} for every offset that has a readable name.
 
-    Each definition's search range spans from its own offset up to the start of
-    the next definition (or +8 KB, whichever is smaller), so names deep inside
-    a definition body are still found even when the B4 opcode pattern is absent.
+    MAP script offsets often point inside a larger STPC object block.  The B4
+    debug/name marker can therefore appear before the entrypoint, while later
+    B4 markers can be nested labels.  Prefer the nearest previous marker, then
+    fall back to named script targets referenced by the entrypoint.
     """
     n = len(stpc_data)
     # Only consider offsets that fall within the STPC blob
@@ -1058,12 +1119,17 @@ def build_stpc_name_map(stpc_data: bytes,
         return {}
 
     result: dict[int, str] = {}
+    markers = _b4_name_markers(stpc_data)
     for i, so in enumerate(unique):
         next_so = unique[i + 1] if i + 1 < len(unique) else n
-        end = min(next_so, so + 8192)   # cap each search at 8 KB
+        name = _marker_name_near(markers, so, before=4096, after=0)
 
-        name = _name_via_b4(stpc_data, so, end)    # high-confidence pattern
         if not name:
+            name = _referenced_script_name(stpc_data, so, markers)
+        if not name:
+            name = _marker_name_near(markers, so, before=0, after=1024)
+        if not name:
+            end = min(next_so, so + 2048)
             name = _name_via_scan(stpc_data, so, end)  # broader fallback
         if name:
             result[so] = name
