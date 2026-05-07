@@ -277,7 +277,8 @@ class SceneData:
             placed: list[list[float]] = []
             for v in rec.table_a:
                 rx, rz = _rotate_xz(v.x, v.z, yaw) if yaw else (v.x, v.z)
-                px, py, pz = tx + rx, ty + v.y, tz + rz
+                raw_z = tz + rz
+                px, py, pz = tx + rx, ty + v.y, -raw_z  # flip_z=True matches world_rebuild default
                 placed.append([px, py, pz])
                 xs.append(px); ys.append(py); zs.append(pz)
 
