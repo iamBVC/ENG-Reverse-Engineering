@@ -1890,13 +1890,20 @@ sub_5509F0(vm_actor, target_actor, id) -> returns a writable/readable address, o
 |---:|---|
 | `0`, `19`, `118` | push `0` |
 | `3`, `4`, `6`, `7`, `8`, `9`, `10` | read fields from `target->geometry_or_model(+0x120)` |
+| `12`, `13`, `105`, `107` | distance/proximity queries involving the current actor, target actor position, and/or geometry payload vector at `target->+0x120+0x18`; exact distance metric depends on helper (`sub_404BB0`, `sub_404C50`, `sub_404C90`, `sub_404D60`) |
 | `15` | push `(target->+0xE8 >> 3) & 1`, matching the low runtime flag bit set by opcode `0x5C` / `sub_54D280` |
 | `16` | push `target->+0xC0` contact-state block first dword/pointer-like value |
 | `17`, `18`, `20`, `21`, `210`..`217`, `243` | read contact-state fields if the contact block exists, otherwise push `0`/sentinel |
 | `41` | distance/angle-style query between current actor and target via `sub_404D60` |
+| `42`, `44`, `67`, `77`, `79`, `88`, `90` | push globals in the `5FCFxx` range; several are camera/screen/world-state-style values, with `79` combining `word_5FCF00 + word_5FCF4E` into a fixed12/masked value |
+| `54`, `55`, `56` | push actor fields `+0xD8/+0xDC/+0xE0` |
+| `57` | push current/primary actor pointer `dword_6D9E1C` |
+| `98` | push fixed12 boolean indicating whether actor `+0x118` is nonzero |
 | `58`, `59`, `60`, `121`, `122`, `123` | push global vector/scalar values |
 | `106`, `108`, `110`, `111`, `137` | push fixed12 boolean/game-state checks |
 | `142` | push `WFPC & 0x00080000` |
+| `151`, `178`, `234` | push individual bits from global `dword_584710` (`0x20`, `0x10`, `0x02`) |
+| `153` | push `dword_6D9E10` |
 | `149`, `150`, `157`, `182`, `188` | query mutable actor/runtime flag or link state |
 | `185` | push `target->geometry_or_model(+0x120)->+0x2C` if a geometry/model payload is bound, else `0` |
 | `186`, `187`, `188`, `201` | push actor `+0x13C/+0x140/+0x144/+0x148`; these are contact radius/link/distance fields used by the proximity/contact loops |
