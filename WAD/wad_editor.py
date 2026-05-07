@@ -74,6 +74,72 @@ OBJ_RADIUS      = 6
 _TC = TERRAIN_COLOR   # short alias inside hot path
 _TE = TERRAIN_EDGE
 
+CONFIG_PATH = Path(__file__).with_name("wad_editor_config.json")
+
+DEFAULT_EDITOR_CONFIG: dict[str, Any] = {
+    "colors": {
+        "background": "#111317",
+        "terrain": "#465a6e",
+        "terrain_edge": "#283c50",
+        "terrain_selected": "#e6d05c",
+        "object_marker": "#f0b43c",
+        "object_selected": "#ff5050",
+        "object_mesh": "#b66cff",
+        "object_mesh_selected": "#ff7ad9",
+        "gizmo_x": "#ff4d4d",
+        "gizmo_y": "#55d66b",
+        "gizmo_z": "#4d8dff",
+    },
+    "viewport": {
+        "object_radius": 6,
+        "gizmo_axis_scale": 0.06,
+        "gizmo_min_length": 1.0,
+        "max_render_tris": 8000,
+    },
+}
+
+
+def _hex_to_rgb(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    text = str(value).strip()
+    if text.startswith("#") and len(text) == 7:
+        try:
+            return int(text[1:3], 16), int(text[3:5], 16), int(text[5:7], 16)
+        except ValueError:
+            pass
+    return fallback
+
+
+def _deep_update(dst: dict[str, Any], src: dict[str, Any]) -> dict[str, Any]:
+    for key, value in src.items():
+        if isinstance(value, dict) and isinstance(dst.get(key), dict):
+            _deep_update(dst[key], value)
+        else:
+            dst[key] = value
+    return dst
+
+
+def load_editor_config() -> dict[str, Any]:
+    import copy
+    cfg = copy.deepcopy(DEFAULT_EDITOR_CONFIG)
+    if CONFIG_PATH.exists():
+        try:
+            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _deep_update(cfg, data)
+        except Exception:
+            pass
+    else:
+        save_editor_config(cfg)
+    return cfg
+
+
+def save_editor_config(cfg: dict[str, Any]) -> None:
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def cfg_color(cfg: dict[str, Any], name: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    return _hex_to_rgb(cfg.get("colors", {}).get(name, ""), fallback)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WAD work-folder
@@ -250,7 +316,9 @@ class SceneData:
 
     def __init__(self) -> None:
         self.terrain_tris: list[tuple[list, float]] = []
+        self.terrain_meta: list[dict[str, int]] = []
         self.object_positions: list[list[float]]    = []
+        self.object_tris: list[tuple[list, int, float]] = []
         self.bounds: tuple = (0, 0, 0, 1, 1, 1)
         # numpy fast path (populated in _build_numpy())
         self.verts_np:  "np.ndarray | None" = None   # (3*M, 3) float32
@@ -259,7 +327,9 @@ class SceneData:
 
     def build(self, mapx: "MapFullExe", trak: "TrakFile", *, terrain_yaw_sign: int = 1) -> None:  # type: ignore[name-defined]
         self.terrain_tris.clear()
+        self.terrain_meta.clear()
         self.object_positions.clear()
+        self.object_tris.clear()
         xs: list[float] = []
         ys: list[float] = []
         zs: list[float] = []
@@ -300,6 +370,11 @@ class SceneData:
                 verts = [placed[tri.i0], placed[tri.i1], placed[tri.i2]]
                 cy = (verts[0][1] + verts[1][1] + verts[2][1]) / 3.0
                 self.terrain_tris.append((verts, cy))
+                self.terrain_meta.append({
+                    "tile_index": tile_i,
+                    "trak_index": rec_i,
+                    "tri_index": len(self.terrain_tris) - 1,
+                })
 
         for obj in mapx.objects:
             ox = obj.pos_x_fixed12 / 4096.0
@@ -333,6 +408,9 @@ class SceneData:
         if self.object_positions:
             self.objs_np = np.array(self.object_positions, dtype=np.float32)
 
+    def rebuild_terrain_numpy(self) -> None:
+        self._build_numpy()
+
     @property
     def center(self) -> tuple[float, float, float]:
         bx0, by0, bz0, bx1, by1, bz1 = self.bounds
@@ -342,6 +420,52 @@ class SceneData:
     def span(self) -> float:
         bx0, by0, bz0, bx1, by1, bz1 = self.bounds
         return max(bx1-bx0, by1-by0, bz1-bz0, 1.0)
+
+
+def parse_placed_object_obj(path: Path, *, existing_objects: set[int] | None = None) -> list[tuple[list, int, float]]:
+    """Read placed OBJ triangles grouped by names like object_000_primary_mesh_000."""
+    if not path.exists():
+        return []
+    verts: list[list[float]] = []
+    tris: list[tuple[list, int, float]] = []
+    current_obj = -1
+    seen = existing_objects if existing_objects is not None else set()
+    obj_re = re.compile(r"object_(\d+)_")
+    try:
+        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if line.startswith("o "):
+                m = obj_re.search(line)
+                current_obj = int(m.group(1)) if m else -1
+                if current_obj in seen:
+                    current_obj = -1
+            elif line.startswith("v "):
+                parts = line.split()
+                if len(parts) >= 4:
+                    try:
+                        verts.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                    except ValueError:
+                        pass
+            elif line.startswith("f ") and current_obj >= 0:
+                idxs: list[int] = []
+                for part in line.split()[1:]:
+                    try:
+                        idx = int(part.split("/")[0])
+                    except ValueError:
+                        continue
+                    if idx < 0:
+                        idx = len(verts) + idx + 1
+                    idxs.append(idx - 1)
+                if len(idxs) >= 3:
+                    for i in range(1, len(idxs) - 1):
+                        if all(0 <= j < len(verts) for j in (idxs[0], idxs[i], idxs[i + 1])):
+                            tri = [verts[idxs[0]], verts[idxs[i]], verts[idxs[i + 1]]]
+                            cy = (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0
+                            tris.append((tri, current_obj, cy))
+                            seen.add(current_obj)
+    except OSError:
+        return []
+    return tris
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -404,16 +528,76 @@ def _cam_basis(cam: Camera) -> tuple:
     return eye, fwd, right, up
 
 
+def _project_world_point(cam: Camera, p: list[float] | tuple[float, float, float],
+                         w: int, h: int) -> tuple[float, float, float] | None:
+    ex, ey, ez = cam.eye()
+    fx, fy, fz = cam.cx - ex, cam.cy - ey, cam.cz - ez
+    fl = math.sqrt(fx * fx + fy * fy + fz * fz)
+    if fl <= 1e-9:
+        return None
+    fx, fy, fz = fx / fl, fy / fl, fz / fl
+    rx, ry, rz = -fz, 0.0, fx
+    rl = math.sqrt(rx * rx + rz * rz)
+    if rl <= 1e-9:
+        rx, ry, rz = 1.0, 0.0, 0.0
+    else:
+        rx, rz = rx / rl, rz / rl
+    ux = ry * fz - rz * fy
+    uy = rz * fx - rx * fz
+    uz = rx * fy - ry * fx
+    dx, dy, dz = p[0] - ex, p[1] - ey, p[2] - ez
+    depth = dx * fx + dy * fy + dz * fz
+    if depth <= 0.1:
+        return None
+    f_px = min(w, h) * 0.5 / math.tan(math.radians(cam.fov * 0.5))
+    sx = w * 0.5 + (dx * rx + dy * ry + dz * rz) / depth * f_px
+    sy = h * 0.5 - (dx * ux + dy * uy + dz * uz) / depth * f_px
+    return sx, sy, depth
+
+
+def _draw_object_meshes(draw: Any, scene: SceneData, cam: Camera, w: int, h: int,
+                        selected_obj: int | None, cfg: dict[str, Any]) -> None:
+    if not scene.object_tris:
+        return
+    obj_col = cfg_color(cfg, "object_mesh", (182, 108, 255))
+    obj_sel = cfg_color(cfg, "object_mesh_selected", (255, 122, 217))
+    edge = cfg_color(cfg, "terrain_edge", TERRAIN_EDGE)
+    drawlist = []
+    for verts, obj_i, _cy in scene.object_tris:
+        projs = [_project_world_point(cam, p, w, h) for p in verts]
+        if any(p is None for p in projs):
+            continue
+        pts = [(p[0], p[1]) for p in projs if p is not None]
+        depth = sum(p[2] for p in projs if p is not None) / 3.0
+        drawlist.append((depth, obj_i, pts))
+    drawlist.sort(key=lambda x: -x[0])
+    for _depth, obj_i, pts in drawlist:
+        draw.polygon(pts, fill=obj_sel if obj_i == selected_obj else obj_col, outline=edge)
+
+
 def render_scene(
     scene: SceneData,
     cam: Camera,
     w: int, h: int,
     selected_obj: int | None = None,
+    selected_terrain: int | None = None,
+    selected_tile: int | None = None,
+    mode: str = "object",
+    cfg: dict[str, Any] | None = None,
 ) -> "Image.Image":   # type: ignore[name-defined]
     if not HAS_PIL:
         raise RuntimeError("Pillow not installed")
 
-    img  = Image.new("RGB", (w, h), BG_COLOR)
+    cfg = cfg or DEFAULT_EDITOR_CONFIG
+    bg = cfg_color(cfg, "background", BG_COLOR)
+    terrain_col = cfg_color(cfg, "terrain", TERRAIN_COLOR)
+    terrain_edge = cfg_color(cfg, "terrain_edge", TERRAIN_EDGE)
+    terrain_sel = cfg_color(cfg, "terrain_selected", (230, 208, 92))
+    obj_col = cfg_color(cfg, "object_marker", OBJ_COLOR)
+    obj_sel = cfg_color(cfg, "object_selected", OBJ_SEL_COLOR)
+    obj_radius = int(cfg.get("viewport", {}).get("object_radius", OBJ_RADIUS))
+
+    img  = Image.new("RGB", (w, h), bg)
     draw = ImageDraw.Draw(img)
 
     if scene.verts_np is None and not scene.object_positions:
@@ -467,8 +651,9 @@ def render_scene(
             # Sort nearest-first so the budget keeps the closest triangles,
             # then reverse to farthest-first for painter's algorithm drawing.
             near_order = vis_idx[np.argsort(fd[vis_idx])]    # nearest → farthest
-            if near_order.size > MAX_RENDER_TRIS:
-                near_order = near_order[:MAX_RENDER_TRIS]     # drop distant excess
+            max_tris = int(cfg.get("viewport", {}).get("max_render_tris", MAX_RENDER_TRIS))
+            if near_order.size > max_tris:
+                near_order = near_order[:max_tris]     # drop distant excess
             order = near_order[::-1]                          # draw far → near
 
             s_min   = float(S.min())
@@ -476,9 +661,9 @@ def render_scene(
             # Pre-compute per-face shade colours
             t       = (S - s_min) / s_range            # (M,)
             blend   = (0.4 + 0.6 * t).clip(0.0, 1.0)  # (M,)
-            cr      = (_TC[0] * blend).astype(np.uint8)
-            cg      = (_TC[1] * blend).astype(np.uint8)
-            cb      = (_TC[2] * blend).astype(np.uint8)
+            cr      = (terrain_col[0] * blend).astype(np.uint8)
+            cg      = (terrain_col[1] * blend).astype(np.uint8)
+            cb      = (terrain_col[2] * blend).astype(np.uint8)
 
             sx_f = sx.astype(np.float32)
             sy_f = sy.astype(np.float32)
@@ -489,15 +674,26 @@ def render_scene(
                 bx_ = sx_f[ic] - sx_f[ia];  by_ = sy_f[ic] - sy_f[ia]
                 if abs(float(ax * by_ - ay * bx_)) < 0.5:  # degenerate/sub-pixel
                     continue
-                fill = (int(cr[fi]), int(cg[fi]), int(cb[fi]))
+                selected = mode == "terrain" and (
+                    fi == selected_terrain
+                    or (
+                        selected_tile is not None
+                        and fi < len(scene.terrain_meta)
+                        and scene.terrain_meta[fi].get("tile_index") == selected_tile
+                    )
+                )
+                fill = terrain_sel if selected else (int(cr[fi]), int(cg[fi]), int(cb[fi]))
                 draw.polygon(
                     [(float(sx_f[ia]), float(sy_f[ia])),
                      (float(sx_f[ib]), float(sy_f[ib])),
                      (float(sx_f[ic]), float(sy_f[ic]))],
-                    fill=fill, outline=_TE)
+                    fill=fill, outline=terrain_edge)
 
         # ── Objects (also batched) ───────────────────────────────────────────
-        if scene.objs_np is not None and scene.objs_np.shape[0]:
+        mesh_object_ids = {obj_i for _verts, obj_i, _cy in scene.object_tris}
+        if mode == "object" and scene.object_tris:
+            _draw_object_meshes(draw, scene, cam, w, h, selected_obj, cfg)
+        if mode == "object" and scene.objs_np is not None and scene.objs_np.shape[0]:
             Ov    = scene.objs_np.astype(np.float64)
             od    = Ov - eye
             odep  = od @ fwd
@@ -509,9 +705,11 @@ def render_scene(
             valid = np.where(ovis)[0]
             valid = valid[np.argsort(-odep[valid])]
             for ki in valid:
+                if int(ki) in mesh_object_ids:
+                    continue
                 px_, py_ = float(osx[ki]), float(osy[ki])
-                color = OBJ_SEL_COLOR if ki == selected_obj else OBJ_COLOR
-                r = OBJ_RADIUS + (2 if ki == selected_obj else 0)
+                color = obj_sel if ki == selected_obj else obj_col
+                r = obj_radius + (2 if ki == selected_obj else 0)
                 draw.ellipse((px_ - r, py_ - r, px_ + r, py_ + r),
                              fill=color, outline=(255, 255, 255))
                 draw.text((px_ + r + 2, py_ - 6), str(int(ki)), fill=color)
@@ -577,20 +775,29 @@ def _render_scene_python(scene, cam, w, h, selected_obj, draw):
 
 class WorldCanvas(ttk.Frame):
 
-    def __init__(self, master: tk.Widget, on_select: Any = None) -> None:
+    def __init__(self, master: tk.Widget, on_select: Any = None,
+                 *, mode: str = "object", cfg: dict[str, Any] | None = None,
+                 on_terrain_select: Any = None) -> None:
         super().__init__(master)
         self._on_select    = on_select
+        self._on_terrain_select = on_terrain_select
         self._on_move      = None
+        self.mode          = mode
+        self.cfg           = cfg or DEFAULT_EDITOR_CONFIG
         self.scene         = SceneData()
         self.cam           = Camera()
         self.selected_obj: int | None = None
+        self.selected_terrain: int | None = None
+        self.selected_tile: int | None = None
         self._tk_img       = None
         self._drag_start: tuple[int, int] | None = None
         self._axis_handles: list[dict[str, Any]] = []
         self._axis_drag: dict[str, Any] | None = None
+        self._terrain_handles: list[tuple[int, list[tuple[float, float]]]] = []
         self._redraw_pending = False    # throttle flag
 
-        self._canvas = tk.Canvas(self, bg="#111317", highlightthickness=0, cursor="crosshair")
+        bg = self.cfg.get("colors", {}).get("background", "#111317")
+        self._canvas = tk.Canvas(self, bg=bg, highlightthickness=0, cursor="crosshair")
         self._canvas.pack(fill="both", expand=True)
 
         self._canvas.bind("<Configure>",      self._on_resize)
@@ -607,11 +814,13 @@ class WorldCanvas(ttk.Frame):
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    def load_scene(self, scene: SceneData) -> None:
+    def load_scene(self, scene: SceneData, *, redraw: bool = True) -> None:
         self.scene = scene
         self.cam.reset_to_scene(scene)
         self.selected_obj = None
-        self.redraw()
+        self.selected_terrain = None
+        if redraw:
+            self.redraw()
 
     def select_object(self, idx: int | None) -> None:
         self.selected_obj = idx
@@ -620,6 +829,19 @@ class WorldCanvas(ttk.Frame):
     def set_object_move_callback(self, callback: Any) -> None:
         self._on_move = callback
 
+    def select_terrain(self, idx: int | None) -> None:
+        self.selected_terrain = idx
+        self.redraw()
+
+    def select_tile(self, tile_idx: int | None) -> None:
+        self.selected_tile = tile_idx
+        self.redraw()
+
+    def set_config(self, cfg: dict[str, Any]) -> None:
+        self.cfg = cfg
+        self._canvas.configure(bg=cfg.get("colors", {}).get("background", "#111317"))
+        self.redraw()
+
     def redraw(self) -> None:
         w = self._canvas.winfo_width()
         h = self._canvas.winfo_height()
@@ -627,6 +849,7 @@ class WorldCanvas(ttk.Frame):
             return
         self._canvas.delete("all")
         self._axis_handles = []
+        self._terrain_handles = []
         if not HAS_PIL:
             self._canvas.create_text(w//2, h//2,
                 text="Install Pillow for 3D view", fill="#ff8080", font=("Consolas", 12))
@@ -634,15 +857,25 @@ class WorldCanvas(ttk.Frame):
             self._draw_move_gizmo(w, h)
             return
         try:
-            img = render_scene(self.scene, self.cam, w, h, self.selected_obj)
+            img = render_scene(
+                self.scene, self.cam, w, h, self.selected_obj,
+                selected_terrain=self.selected_terrain,
+                selected_tile=self.selected_tile,
+                mode=self.mode,
+                cfg=self.cfg,
+            )
             self._tk_img = ImageTk.PhotoImage(img)
             self._canvas.create_image(0, 0, image=self._tk_img, anchor="nw")
-            self._draw_move_gizmo(w, h)
+            self._cache_terrain_handles(w, h)
+            if self.mode == "object":
+                self._draw_move_gizmo(w, h)
         except Exception as exc:
             self._canvas.create_text(10, 10, text=f"Render error: {exc}",
                                      fill="red", anchor="nw")
             self._draw_fallback_2d(w, h)
-            self._draw_move_gizmo(w, h)
+            self._cache_terrain_handles(w, h)
+            if self.mode == "object":
+                self._draw_move_gizmo(w, h)
 
     # ── throttle helper ───────────────────────────────────────────────────────
 
@@ -675,29 +908,34 @@ class WorldCanvas(ttk.Frame):
 
     def _project_point(self, p: list[float] | tuple[float, float, float],
                        w: int, h: int) -> tuple[float, float, float] | None:
-        ex, ey, ez = self.cam.eye()
-        fx, fy, fz = self.cam.cx - ex, self.cam.cy - ey, self.cam.cz - ez
-        fl = math.sqrt(fx * fx + fy * fy + fz * fz)
-        if fl <= 1e-9:
-            return None
-        fx, fy, fz = fx / fl, fy / fl, fz / fl
-        rx, ry, rz = -fz, 0.0, fx
-        rl = math.sqrt(rx * rx + rz * rz)
-        if rl <= 1e-9:
-            rx, ry, rz = 1.0, 0.0, 0.0
-        else:
-            rx, rz = rx / rl, rz / rl
-        ux = ry * fz - rz * fy
-        uy = rz * fx - rx * fz
-        uz = rx * fy - ry * fx
-        dx, dy, dz = p[0] - ex, p[1] - ey, p[2] - ez
-        depth = dx * fx + dy * fy + dz * fz
-        if depth <= 0.1:
-            return None
-        f_px = min(w, h) * 0.5 / math.tan(math.radians(self.cam.fov * 0.5))
-        sx = w * 0.5 + (dx * rx + dy * ry + dz * rz) / depth * f_px
-        sy = h * 0.5 - (dx * ux + dy * uy + dz * uz) / depth * f_px
-        return sx, sy, depth
+        return _project_world_point(self.cam, p, w, h)
+
+    def _cache_terrain_handles(self, w: int, h: int) -> None:
+        if self.mode != "terrain":
+            return
+        for i, (verts, _cy) in enumerate(self.scene.terrain_tris):
+            projs = [self._project_point(p, w, h) for p in verts]
+            if any(p is None for p in projs):
+                continue
+            pts = [(p[0], p[1]) for p in projs if p is not None]
+            self._terrain_handles.append((i, pts))
+
+    @staticmethod
+    def _point_in_tri(px: float, py: float, pts: list[tuple[float, float]]) -> bool:
+        (x1, y1), (x2, y2), (x3, y3) = pts
+        den = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3)
+        if abs(den) <= 1e-9:
+            return False
+        a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / den
+        b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / den
+        c = 1.0 - a - b
+        return a >= 0 and b >= 0 and c >= 0
+
+    def _hit_terrain(self, x: int, y: int) -> int | None:
+        for idx, pts in reversed(self._terrain_handles):
+            if self._point_in_tri(x, y, pts):
+                return idx
+        return None
 
     def _draw_move_gizmo(self, w: int, h: int) -> None:
         if self.selected_obj is None or self.selected_obj >= len(self.scene.object_positions):
@@ -706,11 +944,15 @@ class WorldCanvas(ttk.Frame):
         center = self._project_point(pos, w, h)
         if not center:
             return
-        axis_len = max(self.scene.span * 0.06, 1.0)
+        vp_cfg = self.cfg.get("viewport", {})
+        axis_len = max(
+            self.scene.span * float(vp_cfg.get("gizmo_axis_scale", 0.06)),
+            float(vp_cfg.get("gizmo_min_length", 1.0)),
+        )
         axes = [
-            ("X", (1.0, 0.0, 0.0), "#ff4d4d"),
-            ("Y", (0.0, 1.0, 0.0), "#55d66b"),
-            ("Z", (0.0, 0.0, 1.0), "#4d8dff"),
+            ("X", (1.0, 0.0, 0.0), self.cfg.get("colors", {}).get("gizmo_x", "#ff4d4d")),
+            ("Y", (0.0, 1.0, 0.0), self.cfg.get("colors", {}).get("gizmo_y", "#55d66b")),
+            ("Z", (0.0, 0.0, 1.0), self.cfg.get("colors", {}).get("gizmo_z", "#4d8dff")),
         ]
         cx, cy, _ = center
         self._canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5,
@@ -774,6 +1016,14 @@ class WorldCanvas(ttk.Frame):
     def _on_resize(self, _e: tk.Event) -> None: self._schedule_redraw()
 
     def _on_lbdown(self, e: tk.Event) -> None:
+        if self.mode == "terrain":
+            tri_idx = self._hit_terrain(e.x, e.y)
+            if tri_idx is not None:
+                self.selected_terrain = tri_idx
+                if self._on_terrain_select:
+                    self._on_terrain_select(tri_idx)
+                self.redraw()
+                return
         hit = self._hit_axis(e.x, e.y)
         if hit and self.selected_obj is not None and self._on_move:
             self._axis_drag = {"handle": hit, "start": (e.x, e.y)}
@@ -832,6 +1082,82 @@ class WorldCanvas(ttk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 # Object edit dialog — with script-offset type picker
 # ─────────────────────────────────────────────────────────────────────────────
+
+class TerrainEditDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Widget, tri_idx: int, verts: list[list[float]],
+                 on_save: Any = None) -> None:
+        super().__init__(parent)
+        self.title(f"Edit Terrain Triangle #{tri_idx}")
+        self.resizable(False, False)
+        self.grab_set()
+        self._tri_idx = tri_idx
+        self._on_save = on_save
+        self._vars: list[list[tk.StringVar]] = []
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill="both", expand=True)
+        ttk.Label(frm, text="Vertex").grid(row=0, column=0, sticky="w")
+        for c, name in enumerate(("X", "Y", "Z"), start=1):
+            ttk.Label(frm, text=name).grid(row=0, column=c, padx=4)
+        for r, v in enumerate(verts, start=1):
+            ttk.Label(frm, text=str(r - 1)).grid(row=r, column=0, sticky="e", padx=(0, 8))
+            row_vars = []
+            for c in range(3):
+                var = tk.StringVar(value=f"{v[c]:.6f}")
+                row_vars.append(var)
+                ttk.Entry(frm, textvariable=var, width=14).grid(row=r, column=c + 1, padx=3, pady=3)
+            self._vars.append(row_vars)
+
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Apply", command=self._save).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="right")
+
+    def _save(self) -> None:
+        verts: list[list[float]] = []
+        try:
+            for row in self._vars:
+                verts.append([float(v.get()) for v in row])
+        except ValueError:
+            messagebox.showerror("Parse error", "All vertex values must be numbers.", parent=self)
+            return
+        if self._on_save:
+            self._on_save(self._tri_idx, verts)
+        self.destroy()
+
+
+class OffsetEditDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Widget, title: str, on_apply: Any = None) -> None:
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.grab_set()
+        self._on_apply = on_apply
+        self._vars = {axis: tk.StringVar(value="0.0") for axis in ("x", "y", "z")}
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill="both", expand=True)
+        for row, axis in enumerate(("x", "y", "z")):
+            ttk.Label(frm, text=f"Delta {axis.upper()}").grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
+            ttk.Entry(frm, textvariable=self._vars[axis], width=16).grid(row=row, column=1, sticky="ew")
+
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Apply", command=self._apply).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="right")
+
+    def _apply(self) -> None:
+        try:
+            dx = float(self._vars["x"].get())
+            dy = float(self._vars["y"].get())
+            dz = float(self._vars["z"].get())
+        except ValueError:
+            messagebox.showerror("Parse error", "Offsets must be numbers.", parent=self)
+            return
+        if self._on_apply:
+            self._on_apply(dx, dy, dz)
+        self.destroy()
+
 
 class ObjectEditDialog(tk.Toplevel):
 
@@ -1334,14 +1660,23 @@ class WadEditorApp(tk.Tk):
         self._scene      = SceneData()
         self._objects:   list  = []
         self._selected_obj: int | None = None
+        self._selected_terrain: int | None = None
         self._stpc_names: dict[int, str] = {}
         self._type_registry: list[tuple[int, str]] = []
+        self._editor_config = load_editor_config()
 
         self._build_ui()
 
     # ── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        menubar = tk.Menu(self)
+        options = tk.Menu(menubar, tearoff=False)
+        options.add_command(label="Editor Settings...", command=self._open_settings_dialog)
+        options.add_command(label="Reload Settings", command=self._reload_editor_settings)
+        menubar.add_cascade(label="Options", menu=options)
+        self.config(menu=menubar)
+
         tb = ttk.Frame(self, padding=(8, 6))
         tb.pack(fill="x")
         ttk.Button(tb, text="📂 Open WAD",  command=self._open_wad_dialog).pack(side="left")
@@ -1361,8 +1696,12 @@ class WadEditorApp(tk.Tk):
         self._build_overview_tab()
 
         self._tab_world = ttk.Frame(self._nb)
-        self._nb.add(self._tab_world, text="World")
+        self._nb.add(self._tab_world, text="Object Editor")
         self._build_world_tab()
+
+        self._tab_terrain = ttk.Frame(self._nb)
+        self._nb.add(self._tab_terrain, text="World Editor")
+        self._build_terrain_tab()
 
         self._tab_log = ttk.Frame(self._nb)
         self._nb.add(self._tab_log, text="Log")
@@ -1405,7 +1744,7 @@ class WadEditorApp(tk.Tk):
 
         vp_frame = ttk.LabelFrame(pane, text="3D View  (LMB orbit · MMB pan · RMB/wheel zoom)")
         pane.add(vp_frame, weight=3)
-        self._world_canvas = WorldCanvas(vp_frame)
+        self._world_canvas = WorldCanvas(vp_frame, mode="object", cfg=self._editor_config)
         self._world_canvas.set_object_move_callback(self._on_canvas_object_moved)
         self._world_canvas.pack(fill="both", expand=True)
 
@@ -1433,12 +1772,123 @@ class WadEditorApp(tk.Tk):
         ttk.Button(btns, text="Delete", command=self._delete_selected_obj).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Add New",command=self._add_new_obj_dialog).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Focus",  command=self._focus_selected_obj).pack(side="left", padx=(4,0))
+        ttk.Button(btns, text="Build/Load Meshes",
+                   command=self._start_object_mesh_export).pack(side="left", padx=(4,0))
 
         ttk.Label(right,
             text="Edit/Clone patches MAP .bin directly.\nSave WAD to write back.",
             foreground="#888", justify="left").pack(anchor="w", pady=(6, 0))
 
     # ── Open / Save ──────────────────────────────────────────────────────────
+
+    def _build_terrain_tab(self) -> None:
+        pane = ttk.PanedWindow(self._tab_terrain, orient="horizontal")
+        pane.pack(fill="both", expand=True, padx=8, pady=8)
+
+        vp_frame = ttk.LabelFrame(pane, text="Terrain View  (select terrain triangles; objects locked)")
+        pane.add(vp_frame, weight=3)
+        self._terrain_canvas = WorldCanvas(
+            vp_frame, mode="terrain", cfg=self._editor_config,
+            on_terrain_select=self._on_terrain_canvas_select,
+        )
+        self._terrain_canvas.pack(fill="both", expand=True)
+
+        right = ttk.Frame(pane); pane.add(right, weight=1)
+        ttk.Label(right, text="Terrain Meshes", font=("", 10, "bold")).pack(anchor="w")
+        mode_row = ttk.Frame(right)
+        mode_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(mode_row, text="Mode").pack(side="left")
+        self._terrain_mode_var = tk.StringVar(value="Chunks")
+        self._terrain_mode_combo = ttk.Combobox(
+            mode_row, textvariable=self._terrain_mode_var,
+            values=("Chunks", "Triangles"), state="readonly", width=12,
+        )
+        self._terrain_mode_combo.pack(side="left", padx=(6, 0))
+        self._terrain_mode_combo.bind("<<ComboboxSelected>>", self._on_terrain_mode_changed)
+        cols = ("idx", "tile", "trak", "cy")
+        self._terrain_tree = ttk.Treeview(right, columns=cols, show="headings", height=22)
+        hdrs = {"idx": "#", "tile": "MAP tile", "trak": "TRAK", "cy": "Center Y"}
+        widths = {"idx": 52, "tile": 72, "trak": 62, "cy": 86}
+        for c in cols:
+            self._terrain_tree.heading(c, text=hdrs[c])
+            self._terrain_tree.column(c, width=widths[c], anchor="e")
+        self._terrain_tree.bind("<<TreeviewSelect>>", self._on_terrain_tree_select)
+        vsb = ttk.Scrollbar(right, orient="vertical", command=self._terrain_tree.yview)
+        self._terrain_tree.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        self._terrain_tree.pack(fill="both", expand=True)
+
+        btns = ttk.Frame(right); btns.pack(fill="x", pady=(4, 0))
+        ttk.Button(btns, text="Edit Vertices", command=self._edit_selected_terrain).pack(side="left")
+        ttk.Button(btns, text="Move Chunk", command=self._move_selected_chunk).pack(side="left", padx=(4, 0))
+        ttk.Button(btns, text="Focus", command=self._focus_selected_terrain).pack(side="left", padx=(4, 0))
+        ttk.Label(right,
+            text="Terrain edits are viewport/in-memory only until TRAK reserialization is implemented.",
+            foreground="#888", justify="left", wraplength=280).pack(anchor="w", pady=(6, 0))
+
+    def _reload_editor_settings(self) -> None:
+        self._editor_config = load_editor_config()
+        for canvas_name in ("_world_canvas", "_terrain_canvas"):
+            canvas = getattr(self, canvas_name, None)
+            if canvas:
+                canvas.set_config(self._editor_config)
+        self._log_line(f"Reloaded editor settings from {CONFIG_PATH}")
+
+    def _open_settings_dialog(self) -> None:
+        dlg = tk.Toplevel(self)
+        dlg.title("Editor Settings")
+        dlg.resizable(False, True)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill="both", expand=True)
+        vars_by_path: dict[tuple[str, str], tk.StringVar] = {}
+
+        row = 0
+        ttk.Label(frm, text=f"Config: {CONFIG_PATH}", foreground="#666").grid(
+            row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        row += 1
+        ttk.Label(frm, text="Colors", font=("", 10, "bold")).grid(row=row, column=0, sticky="w")
+        row += 1
+        for key, value in self._editor_config.get("colors", {}).items():
+            ttk.Label(frm, text=key).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+            var = tk.StringVar(value=str(value))
+            vars_by_path[("colors", key)] = var
+            ttk.Entry(frm, textvariable=var, width=18).grid(row=row, column=1, sticky="ew")
+            row += 1
+
+        ttk.Label(frm, text="Viewport", font=("", 10, "bold")).grid(row=row, column=0, sticky="w", pady=(8, 0))
+        row += 1
+        for key, value in self._editor_config.get("viewport", {}).items():
+            ttk.Label(frm, text=key).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+            var = tk.StringVar(value=str(value))
+            vars_by_path[("viewport", key)] = var
+            ttk.Entry(frm, textvariable=var, width=18).grid(row=row, column=1, sticky="ew")
+            row += 1
+
+        def apply_settings() -> None:
+            for (section, key), var in vars_by_path.items():
+                raw = var.get().strip()
+                old = self._editor_config[section][key]
+                if isinstance(old, int):
+                    try:
+                        self._editor_config[section][key] = int(raw)
+                    except ValueError:
+                        messagebox.showerror("Settings", f"{key} must be an integer.", parent=dlg); return
+                elif isinstance(old, float):
+                    try:
+                        self._editor_config[section][key] = float(raw)
+                    except ValueError:
+                        messagebox.showerror("Settings", f"{key} must be a number.", parent=dlg); return
+                else:
+                    self._editor_config[section][key] = raw
+            save_editor_config(self._editor_config)
+            self._reload_editor_settings()
+            dlg.destroy()
+
+        btns = ttk.Frame(dlg, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Save", command=apply_settings).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="right")
 
     def _open_wad_dialog(self) -> None:
         path = filedialog.askopenfilename(
@@ -1600,27 +2050,282 @@ class WadEditorApp(tk.Tk):
     def _reload_scene(self) -> None:
         if self._mapx and self._trak:
             self._scene.build(self._mapx, self._trak)
-            self._world_canvas.load_scene(self._scene)
+            self._load_object_meshes_for_scene(redraw=False)
+            self._world_canvas.load_scene(self._scene, redraw=False)
+            self._terrain_canvas.load_scene(self._scene, redraw=False)
         self._populate_obj_tree()
+        self._populate_terrain_tree()
+        self._log_line(
+            f"Editor lists: {len(self._objects)} objects, "
+            f"{len(self._scene.terrain_tris)} terrain triangles"
+        )
+        self.after_idle(self._world_canvas.redraw)
+        self.after_idle(self._terrain_canvas.redraw)
+
+    def _load_object_meshes_for_scene(self, *, redraw: bool = True) -> None:
+        if not (self._mapx and self._trak):
+            return
+        obj_paths = self._find_world_assets([
+            "objects_primary.obj",
+            "objects_all_candidates.obj",
+        ])
+        if not obj_paths:
+            self._scene.object_tris = []
+            self._log_line("Object mesh viewport: objects_primary.obj not found, using markers")
+            if getattr(self, "_auto_mesh_export_for", None) != self._wad_path:
+                self._auto_mesh_export_for = self._wad_path
+                self._start_object_mesh_export()
+            if redraw:
+                self._world_canvas.redraw()
+            return
+        try:
+            seen_objects: set[int] = set()
+            tris: list[tuple[list, int, float]] = []
+            used: list[str] = []
+            for obj_path in obj_paths:
+                before = len(tris)
+                tris.extend(parse_placed_object_obj(obj_path, existing_objects=seen_objects))
+                added = len(tris) - before
+                if added:
+                    used.append(f"{obj_path.name}:{added}")
+            self._scene.object_tris = tris
+            cloned = self._fill_missing_object_meshes_by_type(seen_objects)
+            self._log_line(
+                f"Object mesh viewport: loaded {len(self._scene.object_tris)} triangles "
+                f"for {len(seen_objects)} objects from {', '.join(used) if used else 'no usable OBJ groups'}"
+            )
+            if cloned:
+                self._log_line(f"Object mesh viewport: cloned same-type mesh fallback for {cloned} objects")
+            missing = max(len(self._objects) - len(seen_objects), 0)
+            if missing:
+                self._log_line(f"Object mesh viewport: {missing} objects still have no decoded mesh; using markers for them")
+        except Exception as exc:
+            self._scene.object_tris = []
+            self._log_line(f"Object mesh viewport disabled: {exc}")
+        if redraw:
+            self._world_canvas.redraw()
+
+    def _fill_missing_object_meshes_by_type(self, seen_objects: set[int]) -> int:
+        if not self._scene.object_tris or not self._objects:
+            return 0
+        obj_by_index = {o.index: o for o in self._objects}
+        tris_by_obj: dict[int, list[tuple[list, int, float]]] = {}
+        for tri in self._scene.object_tris:
+            tris_by_obj.setdefault(tri[1], []).append(tri)
+
+        source_by_type: dict[int, int] = {}
+        for obj_i in sorted(seen_objects):
+            obj = obj_by_index.get(obj_i)
+            if obj is not None and obj.script_offset not in source_by_type:
+                source_by_type[obj.script_offset] = obj_i
+
+        cloned = 0
+        additions: list[tuple[list, int, float]] = []
+        for obj in self._objects:
+            if obj.index in seen_objects:
+                continue
+            src_i = source_by_type.get(obj.script_offset)
+            if src_i is None or src_i not in tris_by_obj:
+                continue
+            src = obj_by_index.get(src_i)
+            if src is None:
+                continue
+            dx = (obj.pos_x_fixed12 - src.pos_x_fixed12) / 4096.0
+            dy = (obj.pos_y_fixed12 - src.pos_y_fixed12) / 4096.0
+            dz = (obj.pos_z_fixed12 - src.pos_z_fixed12) / 4096.0
+            for verts, _old_i, cy in tris_by_obj[src_i]:
+                additions.append((
+                    [[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts],
+                    obj.index,
+                    cy + dy,
+                ))
+            seen_objects.add(obj.index)
+            cloned += 1
+        self._scene.object_tris.extend(additions)
+        return cloned
+
+    def _find_world_asset(self, name: str) -> Path | None:
+        assets = self._find_world_assets([name])
+        return assets[0] if assets else None
+
+    def _find_world_assets(self, names: list[str]) -> list[Path]:
+        if not self._wad_path:
+            return []
+        bases = [
+            self._wad_path.parent / "extracted" / self._wad_path.stem / "world",
+            self._wad_path.parent / self._wad_path.stem / "world",
+            Path(__file__).parent / "extracted" / self._wad_path.stem / "world",
+            Path.cwd() / "WAD" / "extracted" / self._wad_path.stem / "world",
+            Path.cwd() / "extracted" / self._wad_path.stem / "world",
+        ]
+        if self.work:
+            bases.append(self.work.work_dir / "world")
+        found: list[Path] = []
+        seen: set[Path] = set()
+        for base in bases:
+            for name in names:
+                p = base / name
+                if p.exists() and p not in seen:
+                    found.append(p)
+                    seen.add(p)
+        return found
+
+    def _start_object_mesh_export(self) -> None:
+        if not self._wad_path:
+            messagebox.showinfo("No WAD", "Open a WAD first."); return
+        if getattr(self, "_mesh_export_running", False):
+            self._log_line("Object mesh export already running.")
+            return
+        import queue
+        import os
+        import subprocess
+        import threading
+
+        self._mesh_export_running = True
+        self._mesh_export_queue = queue.Queue()
+        script_path = Path(__file__).with_name("wad_extractor.py").resolve()
+        out_dir = script_path.parent / "extracted"
+        cmd = [
+            sys.executable,
+            str(script_path),
+            str(self._wad_path),
+            "--out-dir", str(out_dir),
+            "--no-sounds",
+            "--no-srpc",
+            "--no-lights",
+            "--no-raw",
+            "--no-texture-fields",
+            "--quiet",
+        ]
+        self._log_line(f"Building object meshes with exporter -> {out_dir}")
+
+        def worker() -> None:
+            try:
+                env = os.environ.copy()
+                env["PYTHONIOENCODING"] = "utf-8"
+                env["PYTHONUTF8"] = "1"
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(script_path.parent),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=env,
+                    timeout=600,
+                )
+                self._mesh_export_queue.put((proc.returncode, proc.stdout, proc.stderr))
+            except Exception as exc:
+                self._mesh_export_queue.put((-1, "", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.after(250, self._poll_object_mesh_export)
+
+    def _poll_object_mesh_export(self) -> None:
+        q = getattr(self, "_mesh_export_queue", None)
+        if q is None:
+            self._mesh_export_running = False
+            return
+        try:
+            code, out, err = q.get_nowait()
+        except Exception:
+            self.after(250, self._poll_object_mesh_export)
+            return
+        self._mesh_export_running = False
+        if code != 0:
+            tail = (err or out or "unknown exporter error").strip().splitlines()[-5:]
+            self._log_line("Object mesh export failed:")
+            for line in tail:
+                self._log_line(f"  {line}")
+            return
+        self._log_line("Object mesh export finished.")
+        self._load_object_meshes_for_scene(redraw=True)
 
     def _populate_obj_tree(self) -> None:
         self._obj_tree.delete(*self._obj_tree.get_children())
-        for obj in self._objects:
-            name = self._stpc_names.get(obj.script_offset, "")
-            self._obj_tree.insert("", "end", iid=str(obj.index), values=(
-                obj.index,
-                f"0x{obj.script_offset:08X}",
-                name,
-                f"{obj.pos_x_fixed12/4096.0:.2f}",
-                f"{obj.pos_y_fixed12/4096.0:.2f}",
-                f"{obj.pos_z_fixed12/4096.0:.2f}",
-                obj.rot_y_units,
+        objects = self._objects or (list(self._mapx.objects) if self._mapx is not None else [])
+        inserted = 0
+        for row_i, obj in enumerate(objects):
+            try:
+                name = self._stpc_names.get(obj.script_offset, "")
+                self._obj_tree.insert("", "end", iid=f"obj_{row_i}", values=(
+                    obj.index,
+                    f"0x{obj.script_offset:08X}",
+                    name,
+                    f"{obj.pos_x_fixed12/4096.0:.2f}",
+                    f"{obj.pos_y_fixed12/4096.0:.2f}",
+                    f"{obj.pos_z_fixed12/4096.0:.2f}",
+                    obj.rot_y_units,
+                ))
+                inserted += 1
+            except Exception as exc:
+                self._log_line(f"Object list insert failed at row {row_i}: {exc}")
+                break
+        self._log_line(f"Object list rows inserted: {inserted}")
+
+    def _populate_terrain_tree(self) -> None:
+        self._terrain_tree.delete(*self._terrain_tree.get_children())
+        if getattr(self, "_terrain_mode_var", None) and self._terrain_mode_var.get() == "Chunks":
+            self._populate_chunk_tree()
+            return
+        self._terrain_populate_generation = getattr(self, "_terrain_populate_generation", 0) + 1
+        self._terrain_populate_index = 0
+        self._populate_terrain_tree_batch(self._terrain_populate_generation)
+
+    def _populate_chunk_tree(self) -> None:
+        chunks: dict[int, dict[str, Any]] = {}
+        for i, (_verts, cy) in enumerate(self._scene.terrain_tris):
+            meta = self._scene.terrain_meta[i] if i < len(self._scene.terrain_meta) else {}
+            tile_i = int(meta.get("tile_index", -1))
+            if tile_i < 0:
+                continue
+            info = chunks.setdefault(tile_i, {
+                "count": 0, "trak": meta.get("trak_index", ""), "cy_sum": 0.0,
+            })
+            info["count"] += 1
+            info["cy_sum"] += cy
+        for tile_i in sorted(chunks):
+            info = chunks[tile_i]
+            avg_y = info["cy_sum"] / max(info["count"], 1)
+            self._terrain_tree.insert("", "end", iid=f"tile_{tile_i}", values=(
+                tile_i,
+                tile_i,
+                info["trak"],
+                f"{avg_y:.3f}",
             ))
+        self._log_line(f"Chunk list rows inserted: {len(chunks)}")
+
+    def _populate_terrain_tree_batch(self, generation: int | None = None) -> None:
+        if generation is not None and generation != getattr(self, "_terrain_populate_generation", 0):
+            return
+        start = getattr(self, "_terrain_populate_index", 0)
+        end = min(start + 1000, len(self._scene.terrain_tris))
+        for i in range(start, end):
+            _verts, cy = self._scene.terrain_tris[i]
+            meta = self._scene.terrain_meta[i] if i < len(self._scene.terrain_meta) else {}
+            try:
+                self._terrain_tree.insert("", "end", iid=f"tri_{i}", values=(
+                    i,
+                    meta.get("tile_index", ""),
+                    meta.get("trak_index", ""),
+                    f"{cy:.3f}",
+                ))
+            except Exception as exc:
+                self._log_line(f"Terrain list insert failed at row {i}: {exc}")
+                return
+        self._terrain_populate_index = end
+        if end < len(self._scene.terrain_tris):
+            self.after(1, lambda gen=generation: self._populate_terrain_tree_batch(gen))
+        elif start != end:
+            self._log_line(f"Terrain list rows inserted: {end}")
 
     def _on_obj_tree_select(self, _e: tk.Event) -> None:
         sel = self._obj_tree.selection()
         if not sel: return
-        obj_idx_field = int(sel[0])   # == obj.index (used as iid)
+        vals = self._obj_tree.item(sel[0], "values")
+        if not vals:
+            return
+        obj_idx_field = int(vals[0])
         self._selected_obj = obj_idx_field
         # The canvas renderer indexes objects by *position* in scene.objs_np,
         # not by obj.index.  Resolve the position so highlights are correct
@@ -1631,9 +2336,135 @@ class WadEditorApp(tk.Tk):
 
     # ── Object actions ────────────────────────────────────────────────────────
 
+    def _on_terrain_canvas_select(self, tri_idx: int) -> None:
+        self._selected_terrain = tri_idx
+        tile_idx = None
+        if tri_idx < len(self._scene.terrain_meta):
+            tile_idx = self._scene.terrain_meta[tri_idx].get("tile_index")
+        self._selected_tile = tile_idx
+        self._terrain_canvas.select_tile(tile_idx)
+        if getattr(self, "_terrain_mode_var", None) and self._terrain_mode_var.get() == "Chunks" and tile_idx is not None:
+            iid = f"tile_{tile_idx}"
+            if self._terrain_tree.exists(iid):
+                self._terrain_tree.selection_set(iid)
+                self._terrain_tree.see(iid)
+            return
+        iid = f"tri_{tri_idx}"
+        if self._terrain_tree.exists(iid):
+            self._terrain_tree.selection_set(iid)
+            self._terrain_tree.see(iid)
+
+    def _on_terrain_tree_select(self, _e: tk.Event) -> None:
+        sel = self._terrain_tree.selection()
+        if not sel:
+            return
+        vals = self._terrain_tree.item(sel[0], "values")
+        if not vals:
+            return
+        idx = int(vals[0])
+        if getattr(self, "_terrain_mode_var", None) and self._terrain_mode_var.get() == "Chunks":
+            self._selected_tile = idx
+            self._selected_terrain = next(
+                (i for i, meta in enumerate(self._scene.terrain_meta)
+                 if meta.get("tile_index") == idx),
+                None,
+            )
+            self._terrain_canvas.select_tile(idx)
+            return
+        self._selected_terrain = idx
+        self._selected_tile = self._scene.terrain_meta[idx].get("tile_index") if idx < len(self._scene.terrain_meta) else None
+        self._terrain_canvas.select_tile(None)
+        self._terrain_canvas.select_terrain(idx)
+
+    def _on_terrain_mode_changed(self, _e: tk.Event | None = None) -> None:
+        self._selected_terrain = None
+        self._selected_tile = None
+        self._terrain_canvas.select_terrain(None)
+        self._terrain_canvas.select_tile(None)
+        self._populate_terrain_tree()
+
+    def _focus_selected_terrain(self) -> None:
+        tri_indices = self._selected_chunk_tri_indices()
+        if tri_indices:
+            verts_all = [v for i in tri_indices for v in self._scene.terrain_tris[i][0]]
+            cx = sum(v[0] for v in verts_all) / len(verts_all)
+            cy = sum(v[1] for v in verts_all) / len(verts_all)
+            cz = sum(v[2] for v in verts_all) / len(verts_all)
+        elif self._selected_terrain is not None and self._selected_terrain < len(self._scene.terrain_tris):
+            verts, _cy = self._scene.terrain_tris[self._selected_terrain]
+            cx = sum(v[0] for v in verts) / 3.0
+            cy = sum(v[1] for v in verts) / 3.0
+            cz = sum(v[2] for v in verts) / 3.0
+        else:
+            return
+        cam = self._terrain_canvas.cam
+        cam.cx, cam.cy, cam.cz = cx, cy, cz
+        cam.distance = max(self._scene.span * 0.03, 1.0)
+        self._terrain_canvas.redraw()
+
+    def _edit_selected_terrain(self) -> None:
+        if self._selected_terrain is None or self._selected_terrain >= len(self._scene.terrain_tris):
+            messagebox.showinfo("No selection", "Select a terrain triangle first."); return
+        TerrainEditDialog(self, self._selected_terrain, self._scene.terrain_tris[self._selected_terrain][0],
+                          on_save=self._on_terrain_saved)
+
+    def _selected_chunk_tri_indices(self) -> list[int]:
+        if self._selected_tile is None:
+            return []
+        return [
+            i for i, meta in enumerate(self._scene.terrain_meta)
+            if meta.get("tile_index") == self._selected_tile
+        ]
+
+    def _move_selected_chunk(self) -> None:
+        if self._selected_tile is None:
+            messagebox.showinfo("No chunk", "Select a terrain chunk first."); return
+        OffsetEditDialog(self, f"Move Terrain Chunk #{self._selected_tile}",
+                         on_apply=self._apply_selected_chunk_offset)
+
+    def _apply_selected_chunk_offset(self, dx: float, dy: float, dz: float) -> None:
+        tri_indices = self._selected_chunk_tri_indices()
+        if not tri_indices:
+            return
+        for i in tri_indices:
+            verts, cy = self._scene.terrain_tris[i]
+            self._scene.terrain_tris[i] = (
+                [[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts],
+                cy + dy,
+            )
+        self._scene.rebuild_terrain_numpy()
+        self._populate_terrain_tree()
+        self._terrain_canvas.select_tile(self._selected_tile)
+        self._terrain_canvas.redraw()
+        self._world_canvas.redraw()
+        self._log_line(f"Moved terrain chunk #{self._selected_tile} by ({dx:.3f}, {dy:.3f}, {dz:.3f}) in memory")
+
+    def _on_terrain_saved(self, tri_idx: int, verts: list[list[float]]) -> None:
+        if tri_idx < 0 or tri_idx >= len(self._scene.terrain_tris):
+            return
+        cy = sum(v[1] for v in verts) / 3.0
+        self._scene.terrain_tris[tri_idx] = (verts, cy)
+        self._scene.rebuild_terrain_numpy()
+        self._populate_terrain_tree()
+        self._selected_terrain = tri_idx
+        self._selected_tile = self._scene.terrain_meta[tri_idx].get("tile_index") if tri_idx < len(self._scene.terrain_meta) else None
+        iid = f"tri_{tri_idx}"
+        if self._terrain_tree.exists(iid):
+            self._terrain_tree.selection_set(iid)
+        self._terrain_canvas.select_terrain(tri_idx)
+        self._world_canvas.redraw()
+        self._log_line(f"Edited terrain triangle #{tri_idx} in memory")
+
     def _get_selected_obj(self) -> "MapObjectRecord | None":  # type: ignore[name-defined]
         if self._selected_obj is None: return None
         return next((o for o in self._objects if o.index == self._selected_obj), None)
+
+    def _object_row_iid_for_index(self, obj_index: int) -> str | None:
+        for iid in self._obj_tree.get_children():
+            vals = self._obj_tree.item(iid, "values")
+            if vals and int(vals[0]) == obj_index:
+                return iid
+        return None
 
     def _edit_selected_obj(self) -> None:
         obj = self._get_selected_obj()
@@ -1720,6 +2551,11 @@ class WadEditorApp(tk.Tk):
         if pos_idx < 0 or pos_idx >= len(self._objects):
             return
         obj = self._objects[pos_idx]
+        old = self._scene.object_positions[pos_idx] if pos_idx < len(self._scene.object_positions) else [
+            obj.pos_x_fixed12 / 4096.0,
+            obj.pos_y_fixed12 / 4096.0,
+            obj.pos_z_fixed12 / 4096.0,
+        ]
         obj.pos_x_fixed12 = int(round(pos[0] * 4096))
         obj.pos_y_fixed12 = int(round(pos[1] * 4096))
         obj.pos_z_fixed12 = int(round(pos[2] * 4096))
@@ -1732,8 +2568,19 @@ class WadEditorApp(tk.Tk):
             self._scene.object_positions[pos_idx] = snapped
             if self._scene.objs_np is not None:
                 self._scene.objs_np[pos_idx] = snapped
-        iid = str(obj.index)
-        if self._obj_tree.exists(iid):
+        dx, dy, dz = snapped[0] - old[0], snapped[1] - old[1], snapped[2] - old[2]
+        if dx or dy or dz:
+            mesh_ids = {obj.index, pos_idx}
+            moved = []
+            for verts, obj_i, cy in self._scene.object_tris:
+                if obj_i in mesh_ids:
+                    nverts = [[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts]
+                    moved.append((nverts, obj_i, cy + dy))
+                else:
+                    moved.append((verts, obj_i, cy))
+            self._scene.object_tris = moved
+        iid = self._object_row_iid_for_index(obj.index)
+        if iid and self._obj_tree.exists(iid):
             values = list(self._obj_tree.item(iid, "values"))
             values[3] = f"{snapped[0]:.2f}"
             values[4] = f"{snapped[1]:.2f}"
@@ -1750,21 +2597,32 @@ class WadEditorApp(tk.Tk):
         # Update in-memory position for viewport
         for i, o in enumerate(self._objects):
             if o.index == obj.index and i < len(self._scene.object_positions):
-                self._scene.object_positions[i] = [
+                old = self._scene.object_positions[i]
+                new_pos = [
                     obj.pos_x_fixed12 / 4096.0,
                     obj.pos_y_fixed12 / 4096.0,
                     obj.pos_z_fixed12 / 4096.0,
                 ]
+                self._scene.object_positions[i] = new_pos
                 if self._scene.objs_np is not None:
-                    self._scene.objs_np[i] = self._scene.object_positions[i]
+                    self._scene.objs_np[i] = new_pos
+                dx, dy, dz = new_pos[0] - old[0], new_pos[1] - old[1], new_pos[2] - old[2]
+                if dx or dy or dz:
+                    mesh_ids = {obj.index, i}
+                    self._scene.object_tris = [
+                        ([[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts], obj_i, cy + dy)
+                        if obj_i in mesh_ids else (verts, obj_i, cy)
+                        for verts, obj_i, cy in self._scene.object_tris
+                    ]
                 break
         self._populate_obj_tree()
         # Restore tree selection so the row stays highlighted after the refresh
         if self._selected_obj is not None:
             try:
-                iid = str(self._selected_obj)
-                self._obj_tree.selection_set(iid)
-                self._obj_tree.see(iid)
+                iid = self._object_row_iid_for_index(self._selected_obj)
+                if iid:
+                    self._obj_tree.selection_set(iid)
+                    self._obj_tree.see(iid)
             except Exception:
                 pass
         self._world_canvas.redraw()

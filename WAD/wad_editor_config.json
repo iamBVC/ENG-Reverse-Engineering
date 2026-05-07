@@ -1,0 +1,21 @@
+{
+  "colors": {
+    "background": "#111317",
+    "terrain": "#465a6e",
+    "terrain_edge": "#283c50",
+    "terrain_selected": "#e6d05c",
+    "object_marker": "#f0b43c",
+    "object_selected": "#ff5050",
+    "object_mesh": "#b66cff",
+    "object_mesh_selected": "#ff7ad9",
+    "gizmo_x": "#ff4d4d",
+    "gizmo_y": "#55d66b",
+    "gizmo_z": "#4d8dff"
+  },
+  "viewport": {
+    "object_radius": 6,
+    "gizmo_axis_scale": 0.06,
+    "gizmo_min_length": 1.0,
+    "max_render_tris": 8000
+  }
+}
