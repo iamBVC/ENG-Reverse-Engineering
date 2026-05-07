@@ -647,22 +647,51 @@ def summarize_stpc_object_definition_vm(
                     return min(end, def_off)
         return end
 
-    # High-opcode handlers with confirmed inline payload widths.
+    # VM handlers with confirmed inline payload widths.
     inline_skip = {
+        0x000C: 8,   # sub_54FC40: reads two following dwords to configure actor+0xF8 cell
         0x0045: 4,   # sub_5535F0: push next dword
         0x0094: 24,  # sub_5531D0 + sub_553170 spawn state block
         0x0095: 28,  # sub_5533F0 spawn state block + matrix-cell dword
+        0x00A5: 4,   # sub_54FCF0: OR following dword into actor+0xE8
+        0x00A6: 4,   # sub_54FD40: clear following mask from actor+0xE8
         0x00B1: 4,   # sub_553DE0 reads one following dword
         0x00B2: 4,   # sub_553630 pointer/DEFANIM operand
         0x00D4: 8,   # sub_553EF0 alternate script pointer pair
         0x00D7: 4,   # sub_5535F0 alias: push next dword
+        0x00DB: 4,   # sub_54DD00: toggle actor+0xEC 0x200 from following dword
         0x00E0: 24,  # sub_553230 + sub_553170 spawn state block
+        0x014D: 4,   # sub_54F780: toggle actor+0xEC 0x400000 from following dword
+        0x0175: 4,   # sub_54F750: toggle actor+0xEC 0x80 from following dword
     }
     model_bind_ops = {0x0054}
     spawn_ops = {0x0094, 0x0095, 0x00E0}
     yaw_ops = {0x0063, 0x0064}
     movement_ops = {0x005D, 0x005F, 0x0060, 0x0061, 0x0062, 0x00E3, 0x00E4, 0x0103, 0x0104, 0x0125, 0x0126}
     section4_ops = {0x00FE}
+    runtime_flag_ops = {
+        0x000C: "CONTACT_CELL",
+        0x002F: "EC_10000_TOGGLE",
+        0x0033: "EC_100_TOGGLE",
+        0x0034: "EC_200000_TOGGLE",
+        0x0082: "EC_MODE_SELECT",
+        0x008C: "ACTOR_STOP",
+        0x00A5: "E8_OR_MASK",
+        0x00A6: "E8_CLEAR_MASK",
+        0x00A7: "E8_CLEAR_MOTION_MASK",
+        0x00DB: "EC_200_TOGGLE",
+        0x014D: "EC_400000_TOGGLE",
+        0x0175: "EC_80_TOGGLE",
+    }
+    inline_dword_ops = {0x000C, 0x0045, 0x00A5, 0x00A6, 0x00B1, 0x00B2, 0x00D7, 0x00DB, 0x014D, 0x0175}
+    low_imm_flag_ops = {0x002F, 0x0033, 0x0034}
+
+    def signed_imm16(raw: int) -> int:
+        imm = (raw >> 16) & 0xFFFF
+        return imm - 0x10000 if imm >= 0x8000 else imm
+
+    def fmt_counter(counter: Counter[object], *, limit: int = 12) -> str:
+        return " ".join(f"{key}:{count}" for key, count in counter.most_common(limit))
 
     rows: list[dict[str, object]] = []
     for start in unique_definition_offsets:
@@ -673,6 +702,9 @@ def summarize_stpc_object_definition_vm(
         normalized: list[str] = []
         b2_mesh = b2_stpc_ptr = b2_defanim = b2_zero = b2_invalid = 0
         model_binds = child_spawns = yaw_count = movement_count = section4_count = 0
+        runtime_flag_counts: Counter[int] = Counter()
+        runtime_flag_operands: dict[int, Counter[object]] = {op: Counter() for op in runtime_flag_ops}
+        const_stack: list[int | None] = []
 
         while pc + 4 <= end and steps < max_steps:
             raw = struct.unpack_from("<I", stpc_bytes, pc)[0]
@@ -681,22 +713,43 @@ def summarize_stpc_object_definition_vm(
             steps += 1
             pc += 4
 
+            inline_dword: int | None = None
+            if op in inline_dword_ops and pc + 4 <= end:
+                inline_dword = struct.unpack_from("<I", stpc_bytes, pc)[0]
+
             token = f"{op:03X}"
             if op in model_bind_ops:
                 model_binds += 1
                 token = "MODEL_BIND"
+                const_stack.clear()
             elif op in spawn_ops:
                 child_spawns += 1
                 token = "SPAWN_CHILD"
+                const_stack.clear()
             elif op in yaw_ops:
                 yaw_count += 1
                 token = "YAW"
+                if const_stack:
+                    const_stack.pop()
             elif op in movement_ops:
                 movement_count += 1
                 token = "MOVE"
+                if const_stack:
+                    const_stack.pop()
             elif op in section4_ops:
                 section4_count += 1
                 token = "SECTION4"
+                const_stack.clear()
+            elif op in runtime_flag_ops:
+                runtime_flag_counts[op] += 1
+                token = runtime_flag_ops[op]
+                if op in low_imm_flag_ops:
+                    runtime_flag_operands[op][signed_imm16(raw)] += 1
+                elif op == 0x0082:
+                    value = const_stack.pop() if const_stack else None
+                    runtime_flag_operands[op]["unknown" if value is None else value] += 1
+                elif inline_dword is not None:
+                    runtime_flag_operands[op][f"0x{inline_dword:08X}"] += 1
 
             if op == 0x00B2 and pc + 4 <= end:
                 target = struct.unpack_from("<i", stpc_bytes, pc)[0]
@@ -715,6 +768,18 @@ def summarize_stpc_object_definition_vm(
                 else:
                     b2_invalid += 1
                     token = "B2_INVALID"
+                const_stack.append(target)
+            elif op == 0x0044:
+                const_stack.append(signed_imm16(raw))
+            elif op in (0x0045, 0x00D7) and inline_dword is not None:
+                const_stack.append(struct.unpack("<i", struct.pack("<I", inline_dword))[0])
+            elif op in {0x000C, 0x00A5, 0x00A6, 0x00A7, 0x00DB, 0x014D, 0x0175}:
+                pass
+            elif op not in runtime_flag_ops:
+                # Keep this deliberately conservative: if a handler is not in
+                # the tiny push/pop subset above, any inferred constants after
+                # it are no longer trustworthy enough for mode diagnostics.
+                const_stack.clear()
 
             normalized.append(token)
             pc += inline_skip.get(op, 0)
@@ -743,6 +808,28 @@ def summarize_stpc_object_definition_vm(
             "yaw_ops": yaw_count,
             "movement_ops": movement_count,
             "section4_apply_ops": section4_count,
+            "runtime_contact_cell_ops": runtime_flag_counts[0x000C],
+            "runtime_ec_mode_select_ops": runtime_flag_counts[0x0082],
+            "runtime_e8_or_mask_ops": runtime_flag_counts[0x00A5],
+            "runtime_e8_clear_mask_ops": runtime_flag_counts[0x00A6],
+            "runtime_e8_clear_motion_mask_ops": runtime_flag_counts[0x00A7],
+            "runtime_actor_stop_ops": runtime_flag_counts[0x008C],
+            "runtime_ec_80_toggle_ops": runtime_flag_counts[0x0175],
+            "runtime_ec_100_toggle_ops": runtime_flag_counts[0x0033],
+            "runtime_ec_200_toggle_ops": runtime_flag_counts[0x00DB],
+            "runtime_ec_10000_toggle_ops": runtime_flag_counts[0x002F],
+            "runtime_ec_200000_toggle_ops": runtime_flag_counts[0x0034],
+            "runtime_ec_400000_toggle_ops": runtime_flag_counts[0x014D],
+            "runtime_contact_cell_header_values": fmt_counter(runtime_flag_operands[0x000C]),
+            "runtime_ec_mode_select_values": fmt_counter(runtime_flag_operands[0x0082]),
+            "runtime_e8_or_mask_values": fmt_counter(runtime_flag_operands[0x00A5]),
+            "runtime_e8_clear_mask_values": fmt_counter(runtime_flag_operands[0x00A6]),
+            "runtime_ec_80_toggle_values": fmt_counter(runtime_flag_operands[0x0175]),
+            "runtime_ec_100_toggle_values": fmt_counter(runtime_flag_operands[0x0033]),
+            "runtime_ec_200_toggle_values": fmt_counter(runtime_flag_operands[0x00DB]),
+            "runtime_ec_10000_toggle_values": fmt_counter(runtime_flag_operands[0x002F]),
+            "runtime_ec_200000_toggle_values": fmt_counter(runtime_flag_operands[0x0034]),
+            "runtime_ec_400000_toggle_values": fmt_counter(runtime_flag_operands[0x014D]),
         })
     return rows
 
@@ -1563,6 +1650,14 @@ def export_world(
         "steps_scanned","normalized_signature_sha1_12","normalized_first_80_ops","top_op_counts",
         "b2_mesh_refs","b2_other_stpc_ptrs","b2_defanim_refs","b2_zero_refs","b2_invalid_refs",
         "model_bind_ops","child_spawn_ops","yaw_ops","movement_ops","section4_apply_ops",
+        "runtime_contact_cell_ops","runtime_ec_mode_select_ops","runtime_e8_or_mask_ops",
+        "runtime_e8_clear_mask_ops","runtime_e8_clear_motion_mask_ops","runtime_actor_stop_ops",
+        "runtime_ec_80_toggle_ops","runtime_ec_100_toggle_ops","runtime_ec_200_toggle_ops",
+        "runtime_ec_10000_toggle_ops","runtime_ec_200000_toggle_ops","runtime_ec_400000_toggle_ops",
+        "runtime_contact_cell_header_values","runtime_ec_mode_select_values",
+        "runtime_e8_or_mask_values","runtime_e8_clear_mask_values",
+        "runtime_ec_80_toggle_values","runtime_ec_100_toggle_values","runtime_ec_200_toggle_values",
+        "runtime_ec_10000_toggle_values","runtime_ec_200000_toggle_values","runtime_ec_400000_toggle_values",
     ], vm_diag_rows)
 
     write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))

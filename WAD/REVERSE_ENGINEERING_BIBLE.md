@@ -1034,7 +1034,7 @@ struct MapObjectDisk58 {
     uint32_t section2_index;       // +0x1A, sentinel => NULL else section2 + 4*index
     uint32_t stack_word_count;     // +0x1E, passed as sub_54BFC0 a4
     uint32_t stack_arg_count;      // +0x22, values popped from parent/root stack
-    uint32_t spawn_flags;          // +0x26, Actor340 +0xEC and +0x138
+    uint32_t spawn_flags;          // +0x26, copied to Actor340 +0x138; +0xEC starts at 4
     uint32_t extra_count;          // +0x2A
     uint32_t section4_index;       // +0x2E, sentinel => NULL else section4 + 48*index
     uint32_t spawn_aux_raw;        // +0x32, runtime +0x40; may become Section4 tail pointer
@@ -1121,13 +1121,45 @@ Additional runtime-only `+0x0EC` bits confirmed from consumers:
 | Mask | Current name | Evidence |
 |---:|---|---|
 | `0x00000020` | current geometry has collision/contact blocks | `sub_553C10` sets it when the bound geometry record has collision group0 or group1 entries, and clears it otherwise. |
-| `0x00000080` | script-toggleable render/state bit | `sub_54F750` toggles low-byte bit `0x80` from an inline operand. |
-| `0x00000100` | script-toggleable state bit | `sub_54DD30` toggles high-byte bit `0x01`. |
-| `0x00000200` | script-toggleable state bit | `sub_54DD00` toggles high-byte bit `0x02`. |
-| `0x00000400` / `0x00000008` / `0x00000004` | actor render/category mode bits | `sub_54FD60` clears a small mode mask then sets one of these bits based on a script stack value. |
-| `0x00400000` | script-toggleable/link reaction bit | `sub_54F780` toggles it; contact/link update code can propagate related `+0xE8` flags when this is set. |
+| `0x00000080` | script-toggleable render/state bit | Opcode `0x175` / `sub_54F750` toggles low-byte bit `0x80` from a following dword operand. |
+| `0x00000100` | script-toggleable state bit | Opcode `0x33` / `sub_54DD30` toggles high-byte bit `0x01` from the signed imm16 argument. |
+| `0x00000200` | script-toggleable state bit | Opcode `0xDB` / `sub_54DD00` toggles high-byte bit `0x02` from a following dword operand. |
+| `0x00000400` / `0x00000008` / `0x00000004` | actor render/category mode bits | Opcode `0x82` / `sub_54FD60` pops a stack value, clears mask `0x42C`, then selects one of these mode bits. |
+| `0x00400000` | script-toggleable/link reaction bit | Opcode `0x14D` / `sub_54F780` toggles it from a following dword operand; contact/link update code can propagate related `+0xE8` flags when this is set. |
 | `0x01000000`, `0x02000000`, `0x20000000` | frame-derived runtime bits | The main actor loop clears `0x03000000` each frame, then contact/link logic can set `0x01000000`/`0x02000000`; transform-change tracking sets/clears `0x20000000`. |
 | `0x40000000` | owner/template visibility dependency | Render visibility code checks this bit and can hide/skip the actor based on its owner/template actor state. |
+
+Confirmed script VM runtime flag writers:
+
+| Opcode | Handler | Effect |
+|---:|---|---|
+| `0x0C` | `sub_54FC40` | Configures a 16-byte `actor+0xF8` cell from two following dwords and related script-stream data. If the configured cell type is `0x80` or `0x100`, it sets mutable `Actor340 +0xEC |= 0x4000`. |
+| `0x2F` | `sub_54F720` | Sets/clears mutable `Actor340 +0xEC 0x00010000` from the signed imm16 argument. |
+| `0x33` | `sub_54DD30` | Sets/clears mutable `Actor340 +0xEC 0x00000100` from the signed imm16 argument. |
+| `0x34` | `sub_54DD60` | Sets/clears mutable `Actor340 +0xEC 0x00200000` from the signed imm16 argument. |
+| `0x82` | `sub_54FD60` | Pops a value and selects the actor mode bit (`0x00000004`, `0x00000008`, `0x00000400`, or `0x00000020`) after clearing mask `0x42C`. |
+| `0x8C` | `sub_54FCE0` | Sets `Actor340 +0xE8 |= 0x12`, stopping/pausing the VM loop. |
+| `0xA5` | `sub_54FCF0` | ORs the following dword into `Actor340 +0xE8`; if the resulting `+0xE8 & 0x34000` is nonzero, also sets mutable `+0xEC |= 0x4000`. |
+| `0xA6` | `sub_54FD40` | Clears the following dword mask from `Actor340 +0xE8`. |
+| `0xA7` | `sub_54FD30` | Clears `Actor340 +0xE8 & 0x0007E000`. |
+| `0xDB` | `sub_54DD00` | Sets/clears mutable `Actor340 +0xEC 0x00000200` from a following dword operand. |
+| `0x14D` | `sub_54F780` | Sets/clears mutable `Actor340 +0xEC 0x00400000` from a following dword operand. |
+| `0x175` | `sub_54F750` | Sets/clears mutable `Actor340 +0xEC 0x00000080` from a following dword operand. |
+
+Related runtime-only `Actor340 +0x0E8` flags seen through script writers and contact consumers:
+
+| Mask | Current name | Evidence / editor meaning |
+|---:|---|---|
+| `0x00000012` | VM stop/pause bits | `sub_54D180` stops while `+0xE8 & 0x12`; opcode `0x8C` / `sub_54FCE0` sets both bits. |
+| `0x00000800` | contact propagation modifier | In the main contact/link loop, actors with `+0xE8 & 0x48000` can propagate `+0xEC 0x02000000` and related `+0xE8 0x00800000` when this bit is also set. |
+| `0x00008000` | secondary contact pass gate | The frame loop calls `sub_403020` when the high byte has `0x80`; contact/link code also tests the pair `+0xE8 & 0x48000`. |
+| `0x00020000` | contact/link response copy bit | `sub_403EE0` / `sub_4051D0` test this bit while copying the current/related actor link value through `+0x144`; `0xA5` / `0xA6` frequently OR/clear it in sampled scripts. |
+| `0x00040000` | contact active / terrain collision gate | The frame loop calls `sub_403EE0` when this bit is set, and the later contact/link pass requires the `0x48000` pair. |
+| `0x00100000` | contact angle/orientation response bit | `sub_403EE0` / `sub_4051D0` test this bit during contact response and update `+0xD4/+0xD6` style angle fields. |
+| `0x00200000` | alternate secondary contact envelope | `sub_403020` changes its probe constants and contact-state radius source when this bit is set. |
+| `0x00400000`, `0x00800000` | frame-derived related-contact bits | The main contact/link loop ORs these into a related actor when a source actor has mutable `+0xEC bit 0x2`; `0x00800000` depends on source `+0xE8 0x800`. |
+| `0x08000000` | role/target marker | The `dword_6D9E28` role setter ORs this bit on the actor assigned to that role. |
+| `0x01000000` | script-toggleable flag0 bit | Opcode `0x01` / `sub_54FA50` sets or clears this bit from the signed imm16 argument. |
 
 ### Section4 runtime table
 
@@ -1635,17 +1667,21 @@ Several table entries point at tiny handlers that print a script operation name.
 
 `world/stpc_object_vm_diagnostics.csv` is a partial, normalized VM fingerprint export for each unique MAP-referenced STPC object definition.  It abstracts pointer-like operands as `B2_MESH`, `B2_STPCPTR`, `B2_DEFANIM`, etc., so reusable object archetypes can be compared across WADs even when raw STPC-relative offsets differ.
 
-The current diagnostic parser models the confirmed dispatch shape and only skips inline payload widths confirmed from handlers (`0x45`, `0x94`, `0x95`, `0xB1`, `0xB2`, `0xD4`, `0xD7`, `0xE0`).  It is therefore safer than a byte scan, but still not a full decompiler.
+The current diagnostic parser models the confirmed dispatch shape and only skips inline payload widths confirmed from handlers (`0x0C`, `0x45`, `0x94`, `0x95`, `0xA5`, `0xA6`, `0xB1`, `0xB2`, `0xD4`, `0xD7`, `0xDB`, `0xE0`, `0x14D`, `0x175`).  It is therefore safer than a byte scan, but still not a full decompiler.
 
 Observed across extracted MAP object-definition streams:
 
 | WAD | MAP objects | Unique STPC defs | `B2` mesh refs | Other `B2` STPC ptrs | Child spawns | Model binds | Yaw ops | Movement ops | Section4 ops |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `t0i0m000` | 6 | 5 | 8 | 3 | 1 | 4 | 1 | 2 | 1 |
-| `t1l1m001` | 122 | 34 | 34 | 136 | 46 | 36 | 25 | 70 | 12 |
-| `t1l1m002` | 120 | 42 | 57 | 124 | 50 | 58 | 28 | 74 | 14 |
-| `t1l1m003` | 61 | 30 | 32 | 121 | 46 | 33 | 21 | 56 | 13 |
-| `t1l1m004` | 41 | 22 | 31 | 113 | 33 | 31 | 7 | 34 | 8 |
+| `t1l1m001` | 122 | 34 | 35 | 152 | 47 | 37 | 26 | 76 | 12 |
+| `t1l1m002` | 120 | 42 | 58 | 148 | 55 | 59 | 29 | 83 | 14 |
+| `t1l1m003` | 61 | 30 | 32 | 141 | 48 | 33 | 21 | 57 | 14 |
+| `t1l1m004` | 41 | 22 | 33 | 130 | 36 | 33 | 8 | 39 | 8 |
+
+Runtime flag writer opcodes are also now counted in this CSV.  Across the same 133 unique MAP-referenced object definitions, the bounded scan observes `0x0C` 181 times, `0x2F` 206 times, `0x33` 6 times, `0x34` 13 times, `0x82` 14 times, `0x8C` 14 times, `0xA5` 127 times, and `0xA6` 56 times.  The handlers for `0xDB`, `0x14D`, and `0x175` are confirmed in the ASM but are not observed in the current bounded object-definition samples.
+
+The same diagnostic now records operand histograms for the flag writers.  This is important because several script commands are generic set/clear operations: `0x2F` has observed imm16 values `1` and `0` for enabling/disabling mutable `+0xEC 0x10000`; `0x34` has observed imm16 values `1` and `0` for mutable `+0xEC 0x200000`; `0x82` currently pops mode values `0`, `3`, and `4`; `0xA5` / `0xA6` most often OR/clear `+0xE8` masks such as `0x00020000`, `0x00008000`, `0x00104000`, and `0x00248000`.  Treat these as behavior diagnostics for now, not disk fields.
 
 No negative `0xB2` operands are currently observed in these bounded MAP object-definition streams.  Negative `0xB2` remains confirmed by the ASM as the DEFANIM table path; broad byte-scan candidate CSVs can still contain negative values that are data or inactive stream candidates.
 
@@ -1718,7 +1754,8 @@ opcode  handler         notes (from sub analysis)
 0x09    sub_553790      push address via [actor+0x00 + imm16*4] (script-area relative)
 0x0A    sub_553690      push address of global slot dword_6D9E8C[imm16]
 0x0B    sub_552AD0      call sub_5509F0(actor, actor, imm16); push returned pointer/value
-0x0C    sub_54FC40      (unknown)
+0x0C    sub_54FC40      configure actor+0xF8 cell from two following dwords;
+                          sets mutable +0xEC 0x4000 for cell type 0x80/0x100
 0x0D    sub_54DBE0      zero the memory cell at actor+0xF8+imm16*16
 0x0E    sub_54DC20      set high bit (0x80000000) of cell at actor+0xF8+imm16*16
 0x0F    sub_54DC00      clear high bit (AND 0x7FFFFFFF) of same cell
@@ -1753,12 +1790,12 @@ opcode  handler         notes (from sub analysis)
 0x2C    nullsub_2       no-op
 0x2D    nullsub_2       no-op
 0x2E    nullsub_2       no-op
-0x2F    sub_54F720      (unknown)
+0x2F    sub_54F720      set/clear mutable actor+0xEC 0x00010000 (imm16 nonzero => set)
 0x30    sub_54FA80      (unknown)
 0x31    sub_54E090      (unknown)
 0x32    sub_54DD90      (unknown)
-0x33    sub_54DD30      (unknown)
-0x34    sub_54DD60      (unknown)
+0x33    sub_54DD30      set/clear mutable actor+0xEC 0x00000100 (imm16 nonzero => set)
+0x34    sub_54DD60      set/clear mutable actor+0xEC 0x00200000 (imm16 nonzero => set)
 0x35    nullsub_2       no-op
 0x36    nullsub_2       no-op
 0x37    sub_553920      pop stack; store into sub_5509F0(actor, dword_6D9E1C, imm16) if dword_6D9E1C exists

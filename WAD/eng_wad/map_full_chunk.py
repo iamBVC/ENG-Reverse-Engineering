@@ -372,7 +372,7 @@ class MapObjectRecord:
     section2_index_raw: int    # +0x1A, sentinel => NULL, else section2 + 4*idx
     stack_word_count: int      # +0x1E, passed as sub_54BFC0 a4
     stack_arg_count: int       # +0x22, SpawnParams.initial_stack_count
-    spawn_flags: int           # +0x26, Actor340 +0xEC and +0x138
+    spawn_flags: int           # +0x26, copied to Actor340 +0x138; +0xEC starts at 4
     extra_count: int           # +0x2A, optional extra array count
     section4_index_raw: int    # +0x2E, sentinel => NULL, else section4 + 48*idx
     spawn_aux_raw: int         # +0x32, runtime +0x40; may become section4 tail ptr
