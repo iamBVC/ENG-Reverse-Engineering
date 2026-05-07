@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import struct
 import sys
 import tkinter as tk
@@ -963,15 +964,110 @@ def _quick_element_count(tag: str, data: bytes) -> str:
 # Script-offset type registry helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_type_registry(objects: list) -> list[tuple[int, str]]:
+def build_type_registry(
+    objects: list,
+    names: dict[int, str] | None = None,
+) -> list[tuple[int, str]]:
     """Return [(script_offset, label)] sorted by instance count desc.
 
-    Label format:  '0x0042310E  (×3 inst.)'
+    When *names* is supplied, labels include the human-readable name:
+        'KidOnLlama  0x0042310E  (×3)'
+    otherwise:
+        '0x0042310E  (×3 inst.)'
     """
     counts = Counter(o.script_offset for o in objects)
     result = []
     for off, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-        result.append((off, f"0x{off:08X}  (×{cnt} inst.)"))
+        name = (names or {}).get(off, "")
+        if name:
+            label = f"{name}  0x{off:08X}  (×{cnt})"
+        else:
+            label = f"0x{off:08X}  (×{cnt} inst.)"
+        result.append((off, label))
+    return result
+
+
+# ── STPC name extraction ──────────────────────────────────────────────────────
+
+_B4_OPCODE = b"\xB4\x00\x00\x00"   # VM opcode that precedes the object name
+
+# CamelCase identifier: uppercase start, then alphanumeric, 3–30 chars total.
+# This filters out error messages (spaces/colons) while matching all known names.
+_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9]{2,29}$")
+
+
+def _name_via_b4(stpc_data: bytes, start: int, end: int) -> str:
+    """Look for the confirmed B4-opcode pattern within [start, end).
+
+    B4 00 00 00  [u32] [u32] [u32] [i32]  <name\\0>
+    """
+    n = len(stpc_data)
+    pos = stpc_data.find(_B4_OPCODE, start, end)
+    while pos != -1:
+        str_off = pos + 4 + 16          # opcode(4) + four u32 operands(16)
+        if str_off >= n:
+            break
+        j = str_off
+        while j < n and stpc_data[j] != 0 and 32 <= stpc_data[j] <= 126:
+            j += 1
+        if j - str_off >= 2 and j < n:
+            name = stpc_data[str_off:j].decode("ascii", errors="replace")
+            if _NAME_RE.match(name):
+                return name
+        pos = stpc_data.find(_B4_OPCODE, pos + 1, end)
+    return ""
+
+
+def _name_via_scan(stpc_data: bytes, start: int, end: int) -> str:
+    """Fallback: find the first CamelCase identifier anywhere in [start, end).
+
+    Scans byte-by-byte for null-terminated strings that start with an uppercase
+    letter and contain only alphanumerics — this matches all ENG object names
+    while rejecting error messages (spaces, punctuation).
+    """
+    n = len(stpc_data)
+    i = start
+    while i < min(end, n):
+        b = stpc_data[i]
+        if ord("A") <= b <= ord("Z"):   # potential identifier start
+            j = i
+            while j < n and stpc_data[j] != 0 and 32 <= stpc_data[j] <= 126:
+                j += 1
+            if j < n and stpc_data[j] == 0:
+                name = stpc_data[i:j].decode("ascii", errors="replace")
+                if _NAME_RE.match(name):
+                    return name
+            i = j + 1
+        else:
+            i += 1
+    return ""
+
+
+def build_stpc_name_map(stpc_data: bytes,
+                        script_offsets: list[int]) -> dict[int, str]:
+    """Return {script_offset: name} for every offset that has a readable name.
+
+    Each definition's search range spans from its own offset up to the start of
+    the next definition (or +8 KB, whichever is smaller), so names deep inside
+    a definition body are still found even when the B4 opcode pattern is absent.
+    """
+    n = len(stpc_data)
+    # Only consider offsets that fall within the STPC blob
+    unique = sorted(so for so in set(script_offsets) if 0 <= so < n)
+    if not unique:
+        return {}
+
+    result: dict[int, str] = {}
+    for i, so in enumerate(unique):
+        next_so = unique[i + 1] if i + 1 < len(unique) else n
+        end = min(next_so, so + 8192)   # cap each search at 8 KB
+
+        name = _name_via_b4(stpc_data, so, end)    # high-confidence pattern
+        if not name:
+            name = _name_via_scan(stpc_data, so, end)  # broader fallback
+        if name:
+            result[so] = name
+
     return result
 
 
@@ -996,6 +1092,7 @@ class WadEditorApp(tk.Tk):
         self._scene      = SceneData()
         self._objects:   list  = []
         self._selected_obj: int | None = None
+        self._stpc_names: dict[int, str] = {}
         self._type_registry: list[tuple[int, str]] = []
 
         self._build_ui()
@@ -1072,13 +1169,15 @@ class WadEditorApp(tk.Tk):
         right = ttk.Frame(pane); pane.add(right, weight=1)
         ttk.Label(right, text="MAP Objects", font=("", 10, "bold")).pack(anchor="w")
 
-        obj_cols = ("idx", "type_hex", "x", "y", "z", "rot_y")
+        obj_cols = ("idx", "type_hex", "name", "x", "y", "z", "rot_y")
         self._obj_tree = ttk.Treeview(right, columns=obj_cols, show="headings", height=22)
-        hdrs = {"idx": "#", "type_hex": "Type (script)", "x": "X", "y": "Y", "z": "Z", "rot_y": "Rot Y"}
-        ws   = {"idx": 32, "type_hex": 100, "x": 72, "y": 72, "z": 72, "rot_y": 52}
+        hdrs = {"idx": "#", "type_hex": "Script offset", "name": "Name",
+                "x": "X", "y": "Y", "z": "Z", "rot_y": "Rot Y"}
+        ws   = {"idx": 32, "type_hex": 100, "name": 130, "x": 68, "y": 68, "z": 68, "rot_y": 48}
         for c in obj_cols:
             self._obj_tree.heading(c, text=hdrs[c])
-            self._obj_tree.column(c, width=ws[c], anchor="e" if c != "type_hex" else "w")
+            anchor = "w" if c in ("type_hex", "name") else "e"
+            self._obj_tree.column(c, width=ws[c], anchor=anchor)
         self._obj_tree.bind("<<TreeviewSelect>>", self._on_obj_tree_select)
         vsb2 = ttk.Scrollbar(right, orient="vertical", command=self._obj_tree.yview)
         self._obj_tree.configure(yscrollcommand=vsb2.set)
@@ -1231,7 +1330,21 @@ class WadEditorApp(tk.Tk):
             self._log_line("MAP parse failed."); return
 
         self._objects = list(self._mapx.objects)
-        self._type_registry = build_type_registry(self._objects)
+
+        # ── STPC name lookup ──────────────────────────────────────────────
+        self._stpc_names = {}
+        stpc_data = self.work.get_chunk_data("STPC")
+        if stpc_data:
+            try:
+                so_list = [o.script_offset for o in self._objects]
+                self._stpc_names = build_stpc_name_map(stpc_data, so_list)
+                named = len(self._stpc_names)
+                total = len(set(so_list))
+                self._log_line(f"STPC names: {named}/{total} object types identified")
+            except Exception as exc:
+                self._log_line(f"STPC name scan warning: {exc}")
+
+        self._type_registry = build_type_registry(self._objects, self._stpc_names)
         self._log_line(f"Found {len(self._type_registry)} unique object types")
         for off, lbl in self._type_registry:
             self._log_line(f"  {lbl}")
@@ -1249,9 +1362,11 @@ class WadEditorApp(tk.Tk):
     def _populate_obj_tree(self) -> None:
         self._obj_tree.delete(*self._obj_tree.get_children())
         for obj in self._objects:
+            name = self._stpc_names.get(obj.script_offset, "")
             self._obj_tree.insert("", "end", iid=str(obj.index), values=(
                 obj.index,
                 f"0x{obj.script_offset:08X}",
+                name,
                 f"{obj.pos_x_fixed12/4096.0:.2f}",
                 f"{obj.pos_y_fixed12/4096.0:.2f}",
                 f"{obj.pos_z_fixed12/4096.0:.2f}",
