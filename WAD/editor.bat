@@ -1,4 +1,3 @@
 @echo off
 cd /d "%~dp0"
-python wad_editor.py "%~1"
-pause
+python wad_editor.py
