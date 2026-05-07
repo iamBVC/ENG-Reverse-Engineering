@@ -384,6 +384,49 @@ class MapObjectRecord:
         return bool(self.flags & 0x0002)
 
     @property
+    def spawn_allocates_contact_state(self) -> bool:
+        return bool(self.spawn_flags & 0x000C8000)
+
+    @property
+    def spawn_allocates_large_contact_state(self) -> bool:
+        return bool(self.spawn_flags & 0x00040000)
+
+    @property
+    def spawn_contact_update_gate(self) -> bool:
+        return bool(self.spawn_flags & 0x00048000)
+
+    @property
+    def spawn_original_bit_0x4000(self) -> bool:
+        return bool(self.spawn_flags & 0x00004000)
+
+    @property
+    def spawn_original_pair_0x18000(self) -> bool:
+        return (self.spawn_flags & 0x00018000) == 0x00018000
+
+    @property
+    def spawn_flag_notes(self) -> str:
+        notes: list[str] = []
+        if self.spawn_flags & 0x00008000:
+            notes.append("contact_state_0x0B_or_runtime_hidden_bit")
+        if self.spawn_flags & 0x00040000:
+            notes.append("large_contact_state_0x10_and_nearby_contact_targeting")
+        elif self.spawn_flags & 0x00080000:
+            notes.append("contact_state_0x0B_loader_supported")
+        if self.spawn_flags & 0x00004000:
+            notes.append("original_bit_0x4000_runtime_same_mask_is_distance_priority")
+        if self.spawn_original_pair_0x18000:
+            notes.append("original_0x18000_pair_runtime_same_pair_skips_update")
+        elif self.spawn_flags & 0x00010000:
+            notes.append("original_bit_0x10000_runtime_same_mask_script_toggleable")
+        elif self.spawn_flags & 0x00020000:
+            notes.append("original_bit_0x20000_observed_common")
+        if self.spawn_flags & 0x00100000:
+            notes.append("original_bit_0x100000_observed_needs_consumer_name")
+        if self.spawn_flags & 0x00200000:
+            notes.append("original_bit_0x200000_runtime_same_mask_script_toggleable")
+        return ";".join(notes)
+
+    @property
     def pos_x(self) -> float:
         return self.pos_x_fixed12 / 4096.0
 
@@ -901,6 +944,8 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
         "script_offset","script_offset_hex",
         "local_count","section2_index_raw","section2_valid",
         "stack_word_count","stack_arg_count","spawn_flags","spawn_flags_hex","extra_count",
+        "spawn_flag_notes","spawn_allocates_contact_state","spawn_allocates_large_contact_state",
+        "spawn_contact_update_gate","spawn_original_bit_0x4000","spawn_original_pair_0x18000",
         "section4_index_raw","section4_valid","spawn_aux_raw","spawn_aux_raw_hex",
         "flags","flags_hex","skip_initial_spawn","extra_u16",
     ]
@@ -931,6 +976,12 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
             "spawn_flags": o.spawn_flags,
             "spawn_flags_hex": f"0x{o.spawn_flags:08X}",
             "extra_count": o.extra_count,
+            "spawn_flag_notes": o.spawn_flag_notes,
+            "spawn_allocates_contact_state": o.spawn_allocates_contact_state,
+            "spawn_allocates_large_contact_state": o.spawn_allocates_large_contact_state,
+            "spawn_contact_update_gate": o.spawn_contact_update_gate,
+            "spawn_original_bit_0x4000": o.spawn_original_bit_0x4000,
+            "spawn_original_pair_0x18000": o.spawn_original_pair_0x18000,
             "section4_index_raw": o.section4_index_raw,
             "section4_valid": 0 <= o.section4_index_raw < len(parsed.section4),
             "spawn_aux_raw": o.spawn_aux_raw,
@@ -956,6 +1007,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
         "rt_28_section2_ptr_expr", "rt_2C_stack_word_count", "rt_30_stack_arg_count",
         "rt_34_spawn_flags", "rt_38_extra_count", "rt_3C_section4_ptr_expr",
         "rt_40_spawn_aux_or_section4_tail", "rt_44_flags", "rt_46_extra_u16",
+        "spawn_flag_notes",
     ], (
         {
             "index": o.index,
@@ -979,6 +1031,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
             "rt_40_spawn_aux_or_section4_tail": f"0x{o.spawn_aux_raw:08X}",
             "rt_44_flags": f"0x{o.flags:04X}",
             "rt_46_extra_u16": o.extra_u16,
+            "spawn_flag_notes": o.spawn_flag_notes,
         } for o in parsed.objects
     ))
 
@@ -986,6 +1039,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
         "object_index", "spawns_initially", "actor_script_pc", "actor_rot_x", "actor_rot_y", "actor_rot_z",
         "actor_pos_x_fixed12", "actor_pos_y_fixed12", "actor_pos_z_fixed12", "actor_pos_x", "actor_pos_y", "actor_pos_z",
         "actor_spawn_flags", "actor_local_count", "actor_stack_word_count", "actor_stack_arg_count", "actor_extra_count", "actor_spawn_aux",
+        "actor_spawn_flag_notes",
     ], (
         {
             "object_index": o.index,
@@ -1006,6 +1060,7 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
             "actor_stack_arg_count": o.stack_arg_count,
             "actor_extra_count": o.extra_count,
             "actor_spawn_aux": f"0x{o.spawn_aux_raw:08X}",
+            "actor_spawn_flag_notes": o.spawn_flag_notes,
         } for o in parsed.objects
     ))
 

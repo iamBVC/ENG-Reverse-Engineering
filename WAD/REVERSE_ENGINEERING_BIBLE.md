@@ -1096,6 +1096,39 @@ if ((object->flags & 2) == 0) {
 }
 ```
 
+`sub_54BFC0` copies `SpawnParams.flags` to `Actor340 +0x138` and initializes
+`Actor340 +0x0EC` to `4`.  `+0x138` is the preserved original spawn flag copy;
+runtime `+0x0EC` is mutable and many script/update/render paths OR and clear
+additional bits every frame.  Treat the two fields differently in an editor:
+round-trip `spawn_flags` exactly, and expose named interpretations only as
+diagnostics until every consumer is confirmed.
+
+Confirmed original `spawn_flags` / related `Actor340 +0x0EC` observations:
+
+| Mask | Current name | Evidence / editor meaning |
+|---:|---|---|
+| `0x00004000` | original bit; runtime same mask is distance-priority/proximity mode | The original spawn bit is observed in MAP data but is not copied wholesale into `+0xEC` at spawn. The same mask in mutable `actor+0xEC` is tested by `sub_54C440`; when set and a current actor exists, it stores squared distance to current actor in `actor+0x148`. Otherwise it writes default distance `0x200000`. |
+| `0x00008000` | contact-state class / runtime hidden bit | `sub_54BFC0` allocates an 0x0B-byte contact block when this bit is in spawn flags. The same bit in mutable `+0xEC` is also used by render visibility code as a hidden/culled bit, so do not name the disk bit only "hidden". |
+| `0x00010000` | original bit; runtime same mask is script-toggleable | The original spawn bit is observed in MAP data but is not copied wholesale into `+0xEC` at spawn. `sub_54F720` toggles the same mask in mutable `+0xEC`; together with runtime `0x00008000`, it forms the `0x18000` pair used to skip many update/render loops when both are set. |
+| `0x00020000` | common original object-class bit | Very common in MAP object spawn flags. It is part of the sampled `0x28000` object class. No direct `+0x138` consumer is confirmed yet, so preserve exactly and copy from templates. |
+| `0x00040000` | large contact / actor-nearby targeting | `sub_54BFC0` allocates a larger 0x10-byte contact block and initializes extra fields. Frame/update code uses original `+0x138 & 0x48000` as a persistent collision/contact gate, while render/effect code tests mutable `+0xEC & 0x40000` for nearby-current-actor range checks. |
+| `0x00080000` | loader-supported contact class | `sub_54BFC0` allocates an 0x0B-byte contact block if this bit is present. It is not observed in the sampled MAP object `spawn_flags`, but it is part of the loader-supported `0x0C8000` contact allocation mask. |
+| `0x00100000` | observed original object-class bit | Observed in MAP object flags. Exact `+0x138` consumer/name is still pending. Preserve as a template bit. |
+| `0x00200000` | original bit; runtime same mask is script-toggleable | Rare in sampled MAP objects. `sub_54DD60` toggles the same mask in mutable `+0xEC`. Exact original spawn meaning still pending. |
+
+Additional runtime-only `+0x0EC` bits confirmed from consumers:
+
+| Mask | Current name | Evidence |
+|---:|---|---|
+| `0x00000020` | current geometry has collision/contact blocks | `sub_553C10` sets it when the bound geometry record has collision group0 or group1 entries, and clears it otherwise. |
+| `0x00000080` | script-toggleable render/state bit | `sub_54F750` toggles low-byte bit `0x80` from an inline operand. |
+| `0x00000100` | script-toggleable state bit | `sub_54DD30` toggles high-byte bit `0x01`. |
+| `0x00000200` | script-toggleable state bit | `sub_54DD00` toggles high-byte bit `0x02`. |
+| `0x00000400` / `0x00000008` / `0x00000004` | actor render/category mode bits | `sub_54FD60` clears a small mode mask then sets one of these bits based on a script stack value. |
+| `0x00400000` | script-toggleable/link reaction bit | `sub_54F780` toggles it; contact/link update code can propagate related `+0xE8` flags when this is set. |
+| `0x01000000`, `0x02000000`, `0x20000000` | frame-derived runtime bits | The main actor loop clears `0x03000000` each frame, then contact/link logic can set `0x01000000`/`0x02000000`; transform-change tracking sets/clears `0x20000000`. |
+| `0x40000000` | owner/template visibility dependency | Render visibility code checks this bit and can hide/skip the actor based on its owner/template actor state. |
+
 ### Section4 runtime table
 
 `sub_42AC50` reads 34-byte disk section4 entries and expands them to 48 bytes, then builds linked-list pointers. Object records can reference this table through `section4_index`.
@@ -1374,7 +1407,7 @@ Fallback d-pad values:
 ## Remaining high-value unknowns
 
 1. Exact semantics of `MapObjectDisk58` script data. `script_offset` points into `dword_6D9DBC`, but the bytecode/data structure there still needs further decoding.
-2. Exact meaning of `MapObjectDisk58.flags` bits besides `0x0002` skip-initial-spawn.
+2. Exact meaning of the remaining `MapObjectDisk58.spawn_flags` / mutable `Actor340 +0x0EC` bits after the confirmed contact-state, proximity, geometry-contact, and runtime-visibility consumers.  `MapObjectDisk58.flags & 0x0002` is still the only confirmed object-table `flags` bit; all sampled records currently have zero in that field.
 3. Exact meaning of STPC Section2 animation payloads and the non-transform fields in MAP Section4; Section4 position and XYZ rotation use through opcode `0xFE` is confirmed.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
