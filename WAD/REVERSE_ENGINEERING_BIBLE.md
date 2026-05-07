@@ -1413,6 +1413,24 @@ Fallback d-pad values:
 | LEFT | `dword_5FCF1C = 0x1FC0` |
 | RIGHT | `dword_5FCF1C = -0x2000` |
 
+Input globals exposed to STPC scripts:
+
+| Global | Confirmed meaning |
+|---|---|
+| `dword_5FCF20` | current action/control mask produced by keyboard/controller/demo input |
+| `dword_5FCF30` | newly-pressed/rising-edge bits for `dword_5FCF20` |
+| `dword_5FCF34` | released/falling-edge bits for `dword_5FCF20` |
+| `dword_5FCF44` | current raw/secondary action mask; also receives analog threshold bits |
+| `dword_5FCF08` | newly-pressed/rising-edge bits for `dword_5FCF44` |
+| `dword_5FCF10` | released/falling-edge bits for `dword_5FCF44` |
+| `dword_5FCEFC` | analog/d-pad movement magnitude |
+| `word_5FCF4E` | analog/d-pad movement heading |
+| `word_5FCF00` | base facing/input angle, copied from DEM frame field `+0x02` or runtime input state |
+| `dword_5FCF18` | input source/mode value; scripts receive it shifted left 12 |
+| `dword_5FCF58`, `dword_5FCF60` | auxiliary current/rising-edge input mask pair; only the edge derivation is confirmed so far |
+
+`sub_4256C0` builds the current masks and analog values.  `sub_425BB0` derives `5FCF08/5FCF10` from `5FCF44`, and `sub_425C00` derives `5FCF30/5FCF34` from `5FCF20` plus the `5FCF60` auxiliary edge mask.
+
 ## Current project outputs tied to these discoveries
 
 - `map_full/objects_58_disk.csv`: decoded disk MAP object records with EXE-backed field names.
@@ -1895,15 +1913,18 @@ sub_5509F0(vm_actor, target_actor, id) -> returns a writable/readable address, o
 | `16` | push `target->+0xC0` contact-state block first dword/pointer-like value |
 | `17`, `18`, `20`, `21`, `210`..`217`, `243` | read contact-state fields if the contact block exists, otherwise push `0`/sentinel |
 | `41` | distance/angle-style query between current actor and target via `sub_404D60` |
-| `42`, `44`, `67`, `77`, `79`, `88`, `90` | push globals in the `5FCFxx` range; several are camera/screen/world-state-style values, with `79` combining `word_5FCF00 + word_5FCF4E` into a fixed12/masked value |
+| `42`, `43`, `44` | push current/released/pressed action masks from `dword_5FCF20`, `dword_5FCF34`, and `dword_5FCF30` |
+| `67` | push input source/mode `dword_5FCF18 << 12` |
+| `75`, `76`, `77`, `78`, `79` | push input X/Y axes, movement magnitude, heading, and `word_5FCF00 + word_5FCF4E` as a masked fixed12 heading |
+| `88`, `90` | push auxiliary current/rising-edge input masks `dword_5FCF58` and `dword_5FCF60` |
 | `54`, `55`, `56` | push actor fields `+0xD8/+0xDC/+0xE0` |
 | `57` | push current/primary actor pointer `dword_6D9E1C` |
 | `98` | push fixed12 boolean indicating whether actor `+0x118` is nonzero |
 | `58`, `59`, `60`, `121`, `122`, `123` | push global vector/scalar values |
 | `106`, `108`, `110`, `111`, `137` | push fixed12 boolean/game-state checks |
 | `142` | push `WFPC & 0x00080000` |
-| `151`, `178`, `234` | push individual bits from global `dword_584710` (`0x20`, `0x10`, `0x02`) |
-| `153` | push `dword_6D9E10` |
+| `151`, `178`, `234` | push directional sequence-toggle bits from global `dword_584710` (`0x20`, `0x10`, `0x02`); `sub_41A160` toggles bits `0..5` when the `dword_571FBC` table matches rising-edge direction inputs (`0x80`, `0x20`, `0x10`, `0x40`) |
+| `153` | push `dword_6D9E10`, a fixed12 actor-update tick/time counter reset in the main loop and incremented by `0x1000` at the start of `sub_54C4A0` |
 | `149`, `150`, `157`, `182`, `188` | query mutable actor/runtime flag or link state |
 | `185` | push `target->geometry_or_model(+0x120)->+0x2C` if a geometry/model payload is bound, else `0` |
 | `186`, `187`, `188`, `201` | push actor `+0x13C/+0x140/+0x144/+0x148`; these are contact radius/link/distance fields used by the proximity/contact loops |
