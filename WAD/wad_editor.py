@@ -398,13 +398,19 @@ def render_scene(
         f_px = min(w, h) * 0.5 / math.tan(math.radians(cam.fov * 0.5))
         hW, hH = w * 0.5, h * 0.5
 
+        NEAR = 0.5   # world-unit near plane; tuned for ENG fixed-point scale
+
         V  = scene.verts_np.astype(np.float64)   # (3*M, 3)
         S  = scene.shades_np                      # (M,)
         M  = S.shape[0]
 
         d       = V - eye                         # (3*M, 3)
         dep     = d @ fwd                         # (3*M,)  signed depth
-        safe_d  = np.where(dep > 0.01, dep, np.inf)
+
+        # Clamp per-vertex depth to NEAR for projection.
+        # Behind-camera vertices get a real finite projected position instead of
+        # landing at screen-centre (which breaks frustum culling).
+        safe_d  = dep.clip(NEAR, None)            # (3*M,)
         sx      = hW + (d @ right) / safe_d * f_px  # (3*M,)
         sy      = hH - (d @ up)    / safe_d * f_px  # (3*M,)
 
@@ -413,10 +419,15 @@ def render_scene(
         i1 = i0 + 1
         i2 = i0 + 2
 
-        fd   = (dep[i0] + dep[i1] + dep[i2]) / 3.0   # (M,) face depth
-        vis  = (dep[i0] > 0.01) & (dep[i1] > 0.01) & (dep[i2] > 0.01)
+        fd  = (dep[i0] + dep[i1] + dep[i2]) / 3.0  # (M,) face-centre depth
+        # Cull by face centre, not per-vertex.
+        # This keeps large tris whose centre is in front even when one vertex
+        # dips behind the near plane, eliminating the "vanishes too close" issue.
+        vis = fd > NEAR
 
-        # Frustum cull
+        # Frustum cull in screen space.
+        # With correct (clamped) projections, behind-camera verts now produce
+        # large off-screen coordinates, so the bounding-box test works properly.
         max_sx_f = np.maximum(np.maximum(sx[i0], sx[i1]), sx[i2])
         min_sx_f = np.minimum(np.minimum(sx[i0], sx[i1]), sx[i2])
         max_sy_f = np.maximum(np.maximum(sy[i0], sy[i1]), sy[i2])
@@ -425,9 +436,12 @@ def render_scene(
 
         vis_idx = np.where(vis)[0]
         if vis_idx.size:
-            order = vis_idx[np.argsort(-fd[vis_idx])]
-            if order.size > MAX_RENDER_TRIS:
-                order = order[:MAX_RENDER_TRIS]
+            # Sort nearest-first so the budget keeps the closest triangles,
+            # then reverse to farthest-first for painter's algorithm drawing.
+            near_order = vis_idx[np.argsort(fd[vis_idx])]    # nearest → farthest
+            if near_order.size > MAX_RENDER_TRIS:
+                near_order = near_order[:MAX_RENDER_TRIS]     # drop distant excess
+            order = near_order[::-1]                          # draw far → near
 
             s_min   = float(S.min())
             s_range = max(float(S.max()) - s_min, 1.0)
@@ -445,7 +459,7 @@ def render_scene(
                 ia, ib, ic = i0[fi], i1[fi], i2[fi]
                 ax  = sx_f[ib] - sx_f[ia];  ay = sy_f[ib] - sy_f[ia]
                 bx_ = sx_f[ic] - sx_f[ia];  by_ = sy_f[ic] - sy_f[ia]
-                if abs(float(ax * by_ - ay * bx_)) < 0.5:    # sub-pixel, skip
+                if abs(float(ax * by_ - ay * bx_)) < 0.5:  # degenerate/sub-pixel
                     continue
                 fill = (int(cr[fi]), int(cg[fi]), int(cb[fi]))
                 draw.polygon(
@@ -459,8 +473,8 @@ def render_scene(
             Ov    = scene.objs_np.astype(np.float64)
             od    = Ov - eye
             odep  = od @ fwd
-            ovis  = odep > 0.01
-            osd   = np.where(ovis, odep, np.inf)
+            ovis  = odep > NEAR
+            osd   = odep.clip(NEAR, None)
             osx   = hW + (od @ right) / osd * f_px
             osy   = hH - (od @ up)    / osd * f_px
             # Sort far-to-near so selected marker is drawn on top if near
