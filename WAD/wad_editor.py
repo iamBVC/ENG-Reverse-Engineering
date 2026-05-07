@@ -197,6 +197,33 @@ def add_object_to_map_chunk(
     return prefix + new_count_b + unk_b_b + existing + new_obj_raw + tail
 
 
+def delete_object_from_map_chunk(
+    map_data: bytes,
+    mapx: "MapFullExe",       # type: ignore[name-defined]
+    obj: "MapObjectRecord",   # type: ignore[name-defined]
+) -> bytes:
+    """Remove one 58-byte object record from the MAP chunk and update the count."""
+    if not mapx.objects or not any(o.file_offset == obj.file_offset for o in mapx.objects):
+        return map_data
+    if len(mapx.objects) <= 1:
+        raise ValueError("Cannot delete the only MAP object; object table location would be ambiguous.")
+    count_off = mapx.objects[0].file_offset - 8
+    first_off = mapx.objects[0].file_offset
+    last_end  = mapx.objects[-1].file_offset + OBJ_RECORD_SIZE
+    prefix    = map_data[:count_off]
+    tail      = map_data[last_end:]
+    existing  = bytearray(map_data[first_off:last_end])
+    rel       = obj.file_offset - first_off
+    del existing[rel: rel + OBJ_RECORD_SIZE]
+    return (
+        prefix
+        + struct.pack("<I", len(mapx.objects) - 1)
+        + struct.pack("<I", mapx.object_count_unknown_b)
+        + bytes(existing)
+        + tail
+    )
+
+
 def make_object_copy(template: "MapObjectRecord", new_index: int) -> "MapObjectRecord":  # type: ignore[name-defined]
     """Return a shallow copy of *template* with a placeholder index/offset."""
     import copy
@@ -553,11 +580,14 @@ class WorldCanvas(ttk.Frame):
     def __init__(self, master: tk.Widget, on_select: Any = None) -> None:
         super().__init__(master)
         self._on_select    = on_select
+        self._on_move      = None
         self.scene         = SceneData()
         self.cam           = Camera()
         self.selected_obj: int | None = None
         self._tk_img       = None
         self._drag_start: tuple[int, int] | None = None
+        self._axis_handles: list[dict[str, Any]] = []
+        self._axis_drag: dict[str, Any] | None = None
         self._redraw_pending = False    # throttle flag
 
         self._canvas = tk.Canvas(self, bg="#111317", highlightthickness=0, cursor="crosshair")
@@ -587,25 +617,32 @@ class WorldCanvas(ttk.Frame):
         self.selected_obj = idx
         self.redraw()
 
+    def set_object_move_callback(self, callback: Any) -> None:
+        self._on_move = callback
+
     def redraw(self) -> None:
         w = self._canvas.winfo_width()
         h = self._canvas.winfo_height()
         if w < 4 or h < 4:
             return
         self._canvas.delete("all")
+        self._axis_handles = []
         if not HAS_PIL:
             self._canvas.create_text(w//2, h//2,
                 text="Install Pillow for 3D view", fill="#ff8080", font=("Consolas", 12))
             self._draw_fallback_2d(w, h)
+            self._draw_move_gizmo(w, h)
             return
         try:
             img = render_scene(self.scene, self.cam, w, h, self.selected_obj)
             self._tk_img = ImageTk.PhotoImage(img)
             self._canvas.create_image(0, 0, image=self._tk_img, anchor="nw")
+            self._draw_move_gizmo(w, h)
         except Exception as exc:
             self._canvas.create_text(10, 10, text=f"Render error: {exc}",
                                      fill="red", anchor="nw")
             self._draw_fallback_2d(w, h)
+            self._draw_move_gizmo(w, h)
 
     # ── throttle helper ───────────────────────────────────────────────────────
 
@@ -636,12 +673,121 @@ class WorldCanvas(ttk.Frame):
 
     # ── mouse handlers (update camera, schedule single redraw) ───────────────
 
+    def _project_point(self, p: list[float] | tuple[float, float, float],
+                       w: int, h: int) -> tuple[float, float, float] | None:
+        ex, ey, ez = self.cam.eye()
+        fx, fy, fz = self.cam.cx - ex, self.cam.cy - ey, self.cam.cz - ez
+        fl = math.sqrt(fx * fx + fy * fy + fz * fz)
+        if fl <= 1e-9:
+            return None
+        fx, fy, fz = fx / fl, fy / fl, fz / fl
+        rx, ry, rz = -fz, 0.0, fx
+        rl = math.sqrt(rx * rx + rz * rz)
+        if rl <= 1e-9:
+            rx, ry, rz = 1.0, 0.0, 0.0
+        else:
+            rx, rz = rx / rl, rz / rl
+        ux = ry * fz - rz * fy
+        uy = rz * fx - rx * fz
+        uz = rx * fy - ry * fx
+        dx, dy, dz = p[0] - ex, p[1] - ey, p[2] - ez
+        depth = dx * fx + dy * fy + dz * fz
+        if depth <= 0.1:
+            return None
+        f_px = min(w, h) * 0.5 / math.tan(math.radians(self.cam.fov * 0.5))
+        sx = w * 0.5 + (dx * rx + dy * ry + dz * rz) / depth * f_px
+        sy = h * 0.5 - (dx * ux + dy * uy + dz * uz) / depth * f_px
+        return sx, sy, depth
+
+    def _draw_move_gizmo(self, w: int, h: int) -> None:
+        if self.selected_obj is None or self.selected_obj >= len(self.scene.object_positions):
+            return
+        pos = self.scene.object_positions[self.selected_obj]
+        center = self._project_point(pos, w, h)
+        if not center:
+            return
+        axis_len = max(self.scene.span * 0.06, 1.0)
+        axes = [
+            ("X", (1.0, 0.0, 0.0), "#ff4d4d"),
+            ("Y", (0.0, 1.0, 0.0), "#55d66b"),
+            ("Z", (0.0, 0.0, 1.0), "#4d8dff"),
+        ]
+        cx, cy, _ = center
+        self._canvas.create_oval(cx - 5, cy - 5, cx + 5, cy + 5,
+                                 fill="#ffffff", outline="#111317")
+        for axis, vec, color in axes:
+            end = [pos[0] + vec[0] * axis_len,
+                   pos[1] + vec[1] * axis_len,
+                   pos[2] + vec[2] * axis_len]
+            proj = self._project_point(end, w, h)
+            if not proj:
+                continue
+            ex, ey, _ = proj
+            self._canvas.create_line(cx, cy, ex, ey, fill="#101010", width=6, arrow=tk.LAST)
+            self._canvas.create_line(cx, cy, ex, ey, fill=color, width=3, arrow=tk.LAST)
+            self._canvas.create_text(ex, ey, text=axis, fill=color, font=("Consolas", 10, "bold"))
+            self._axis_handles.append({
+                "axis": axis, "vec": vec, "start": (cx, cy), "end": (ex, ey),
+                "origin": tuple(pos), "axis_len": axis_len,
+            })
+
+    @staticmethod
+    def _dist_to_segment(px: float, py: float,
+                         ax: float, ay: float, bx: float, by: float) -> float:
+        vx, vy = bx - ax, by - ay
+        denom = vx * vx + vy * vy
+        if denom <= 1e-9:
+            return math.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, ((px - ax) * vx + (py - ay) * vy) / denom))
+        qx, qy = ax + t * vx, ay + t * vy
+        return math.hypot(px - qx, py - qy)
+
+    def _hit_axis(self, x: int, y: int) -> dict[str, Any] | None:
+        best = None
+        best_dist = 12.0
+        for handle in self._axis_handles:
+            ax, ay = handle["start"]
+            bx, by = handle["end"]
+            dist = self._dist_to_segment(x, y, ax, ay, bx, by)
+            if dist < best_dist:
+                best = handle
+                best_dist = dist
+        return best
+
+    @staticmethod
+    def _axis_drag_position(handle: dict[str, Any], x: int, y: int,
+                            start_x: int, start_y: int) -> list[float]:
+        sx, sy = handle["start"]
+        ex, ey = handle["end"]
+        vx, vy = ex - sx, ey - sy
+        denom = max(vx * vx + vy * vy, 1e-9)
+        pixels = ((x - start_x) * vx + (y - start_y) * vy) / denom
+        delta = pixels * handle["axis_len"]
+        origin = handle["origin"]
+        vec = handle["vec"]
+        return [
+            origin[0] + vec[0] * delta,
+            origin[1] + vec[1] * delta,
+            origin[2] + vec[2] * delta,
+        ]
+
     def _on_resize(self, _e: tk.Event) -> None: self._schedule_redraw()
 
     def _on_lbdown(self, e: tk.Event) -> None:
+        hit = self._hit_axis(e.x, e.y)
+        if hit and self.selected_obj is not None and self._on_move:
+            self._axis_drag = {"handle": hit, "start": (e.x, e.y)}
+            self._drag_start = None
+            return
         self._drag_start = (e.x, e.y)
 
     def _on_lbdrag(self, e: tk.Event) -> None:
+        if self._axis_drag and self.selected_obj is not None and self._on_move:
+            sx, sy = self._axis_drag["start"]
+            pos = self._axis_drag_position(self._axis_drag["handle"], e.x, e.y, sx, sy)
+            self._on_move(self.selected_obj, pos, False)
+            self._schedule_redraw()
+            return
         if not self._drag_start: return
         dx = e.x - self._drag_start[0]; dy = e.y - self._drag_start[1]
         self._drag_start = (e.x, e.y)
@@ -649,6 +795,12 @@ class WorldCanvas(ttk.Frame):
         self._schedule_redraw()
 
     def _on_lbup(self, e: tk.Event) -> None:
+        if self._axis_drag and self.selected_obj is not None and self._on_move:
+            sx, sy = self._axis_drag["start"]
+            pos = self._axis_drag_position(self._axis_drag["handle"], e.x, e.y, sx, sy)
+            self._on_move(self.selected_obj, pos, True)
+            self._axis_drag = None
+            return
         self._drag_start = None
 
     def _on_mbdown(self, e: tk.Event) -> None:
@@ -706,7 +858,8 @@ class ObjectEditDialog(tk.Toplevel):
 
     def __init__(self, parent: tk.Widget, obj: "MapObjectRecord",  # type: ignore[name-defined]
                  on_save: Any = None,
-                 known_types: list[tuple[int, str]] | None = None) -> None:
+                 known_types: list[tuple[int, str]] | None = None,
+                 ground_y_provider: Any = None) -> None:
         super().__init__(parent)
         self.title(f"Edit Object #{obj.index}")
         self.resizable(True, False)
@@ -714,6 +867,7 @@ class ObjectEditDialog(tk.Toplevel):
         self._obj         = obj
         self._on_save     = on_save
         self._known_types = known_types or []
+        self._ground_y_provider = ground_y_provider
         self._vars: dict[str, tk.StringVar] = {}
         self._type_combo: ttk.Combobox | None = None
         self._build(obj)
@@ -769,6 +923,9 @@ class ObjectEditDialog(tk.Toplevel):
         frm.columnconfigure(1, weight=1)
         btns = ttk.Frame(self, padding=(10, 0, 10, 10))
         btns.pack(fill="x")
+        if self._ground_y_provider:
+            ttk.Button(btns, text="Snap Y to Ground",
+                       command=self._snap_y_to_ground).pack(side="left")
         ttk.Button(btns, text="Save & Close", command=self._save).pack(side="right", padx=4)
         ttk.Button(btns, text="Cancel",       command=self.destroy).pack(side="right")
 
@@ -795,6 +952,20 @@ class ObjectEditDialog(tk.Toplevel):
             return int(text, 0)
         except ValueError:
             return None
+
+    def _snap_y_to_ground(self) -> None:
+        if not self._ground_y_provider:
+            return
+        x_raw = self._parse_val("pos_x_fixed12", "f12", self._vars["pos_x_fixed12"].get())
+        z_raw = self._parse_val("pos_z_fixed12", "f12", self._vars["pos_z_fixed12"].get())
+        if x_raw is None or z_raw is None:
+            messagebox.showerror("Snap failed", "Cannot parse X/Z position.", parent=self)
+            return
+        y = self._ground_y_provider(x_raw / 4096.0, z_raw / 4096.0)
+        if y is None:
+            messagebox.showinfo("Snap failed", "No terrain triangle found under this object.", parent=self)
+            return
+        self._vars["pos_y_fixed12"].set(f"{y:.6f}")
 
     def _save(self) -> None:
         updates: dict[str, int] = {}
@@ -838,8 +1009,13 @@ class AddObjectDialog(tk.Toplevel):
         frm.pack(fill="both", expand=True)
 
         type_labels = [lbl for _, lbl in self._known_types]
-        default_lbl = (type_labels[0] if type_labels else
-                       (f"0x{self._template.script_offset:08X}" if self._template else "0x00000000"))
+        if self._template:
+            default_lbl = next(
+                (lbl for off, lbl in self._known_types if off == self._template.script_offset),
+                f"0x{self._template.script_offset:08X}",
+            )
+        else:
+            default_lbl = type_labels[0] if type_labels else "0x00000000"
 
         self._type_var = tk.StringVar(value=default_lbl)
         self._x_var    = tk.StringVar(value="0.0")
@@ -1230,6 +1406,7 @@ class WadEditorApp(tk.Tk):
         vp_frame = ttk.LabelFrame(pane, text="3D View  (LMB orbit · MMB pan · RMB/wheel zoom)")
         pane.add(vp_frame, weight=3)
         self._world_canvas = WorldCanvas(vp_frame)
+        self._world_canvas.set_object_move_callback(self._on_canvas_object_moved)
         self._world_canvas.pack(fill="both", expand=True)
 
         right = ttk.Frame(pane); pane.add(right, weight=1)
@@ -1253,6 +1430,7 @@ class WadEditorApp(tk.Tk):
         btns = ttk.Frame(right); btns.pack(fill="x", pady=(4, 0))
         ttk.Button(btns, text="Edit",   command=self._edit_selected_obj).pack(side="left")
         ttk.Button(btns, text="Clone",  command=self._clone_selected_obj).pack(side="left", padx=(4,0))
+        ttk.Button(btns, text="Delete", command=self._delete_selected_obj).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Add New",command=self._add_new_obj_dialog).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Focus",  command=self._focus_selected_obj).pack(side="left", padx=(4,0))
 
@@ -1461,7 +1639,8 @@ class WadEditorApp(tk.Tk):
         obj = self._get_selected_obj()
         if obj is None: return
         ObjectEditDialog(self, obj, on_save=self._on_obj_saved,
-                         known_types=self._type_registry)
+                         known_types=self._type_registry,
+                         ground_y_provider=self._ground_y_at)
 
     def _clone_selected_obj(self) -> None:
         obj = self._get_selected_obj()
@@ -1495,6 +1674,76 @@ class WadEditorApp(tk.Tk):
         self._world_canvas.redraw()
 
     # ── Obj save / add callbacks ──────────────────────────────────────────────
+
+    def _delete_selected_obj(self) -> None:
+        obj = self._get_selected_obj()
+        if obj is None:
+            messagebox.showinfo("No selection", "Select an object first."); return
+        name = self._stpc_names.get(obj.script_offset, f"0x{obj.script_offset:08X}")
+        if not messagebox.askyesno("Delete object",
+                                   f"Delete object #{obj.index} ({name})?",
+                                   parent=self):
+            return
+        if not self.work or self._mapx is None:
+            return
+        map_data = self.work.get_chunk_data("MAP ")
+        if map_data is None:
+            return
+        try:
+            new_map = delete_object_from_map_chunk(map_data, self._mapx, obj)
+            self.work.save_chunk_data("MAP ", new_map)
+            self._log_line(f"Deleted object #{obj.index} ({name})")
+            self._selected_obj = None
+            self._load_game_data()
+            self._reload_scene()
+        except Exception as exc:
+            messagebox.showerror("Delete failed", str(exc), parent=self)
+
+    def _ground_y_at(self, x: float, z: float) -> float | None:
+        best: float | None = None
+        eps = 1e-5
+        for verts, _cy in self._scene.terrain_tris:
+            (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = verts
+            denom = (z2 - z3) * (x1 - x3) + (x3 - x2) * (z1 - z3)
+            if abs(denom) <= 1e-9:
+                continue
+            a = ((z2 - z3) * (x - x3) + (x3 - x2) * (z - z3)) / denom
+            b = ((z3 - z1) * (x - x3) + (x1 - x3) * (z - z3)) / denom
+            c = 1.0 - a - b
+            if a >= -eps and b >= -eps and c >= -eps:
+                y = a * y1 + b * y2 + c * y3
+                if best is None or y > best:
+                    best = y
+        return best
+
+    def _on_canvas_object_moved(self, pos_idx: int, pos: list[float], commit: bool = False) -> None:
+        if pos_idx < 0 or pos_idx >= len(self._objects):
+            return
+        obj = self._objects[pos_idx]
+        obj.pos_x_fixed12 = int(round(pos[0] * 4096))
+        obj.pos_y_fixed12 = int(round(pos[1] * 4096))
+        obj.pos_z_fixed12 = int(round(pos[2] * 4096))
+        snapped = [
+            obj.pos_x_fixed12 / 4096.0,
+            obj.pos_y_fixed12 / 4096.0,
+            obj.pos_z_fixed12 / 4096.0,
+        ]
+        if pos_idx < len(self._scene.object_positions):
+            self._scene.object_positions[pos_idx] = snapped
+            if self._scene.objs_np is not None:
+                self._scene.objs_np[pos_idx] = snapped
+        iid = str(obj.index)
+        if self._obj_tree.exists(iid):
+            values = list(self._obj_tree.item(iid, "values"))
+            values[3] = f"{snapped[0]:.2f}"
+            values[4] = f"{snapped[1]:.2f}"
+            values[5] = f"{snapped[2]:.2f}"
+            self._obj_tree.item(iid, values=values)
+            self._obj_tree.selection_set(iid)
+        self._selected_obj = obj.index
+        if commit:
+            self._write_obj_to_map_bin(obj)
+            self._log_line(f"Moved object #{obj.index}  pos=({snapped[0]:.3f}, {snapped[1]:.3f}, {snapped[2]:.3f})")
 
     def _on_obj_saved(self, obj: Any) -> None:
         self._write_obj_to_map_bin(obj)
