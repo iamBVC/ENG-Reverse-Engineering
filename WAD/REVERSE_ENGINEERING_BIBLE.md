@@ -1683,6 +1683,8 @@ Runtime flag writer opcodes are also now counted in this CSV.  Across the same 1
 
 The same diagnostic now records operand histograms for the flag writers.  This is important because several script commands are generic set/clear operations: `0x2F` has observed imm16 values `1` and `0` for enabling/disabling mutable `+0xEC 0x10000`; `0x34` has observed imm16 values `1` and `0` for mutable `+0xEC 0x200000`; `0x82` currently pops mode values `0`, `3`, and `4`; `0xA5` / `0xA6` most often OR/clear `+0xE8` masks such as `0x00020000`, `0x00008000`, `0x00104000`, and `0x00248000`.  Treat these as behavior diagnostics for now, not disk fields.
 
+The diagnostic also records `sub_550E60` / `sub_5509F0` dispatch-ID histograms per object definition.  Across bounded object-definition samples, the hottest `sub_550E60` call IDs are actor transform and state queries: `35`, `36`, `34`, `38`, `16`, `15`, `202`, `188`, `4`, `3`, `10`, and `233`.  The hottest `sub_5509F0` store IDs are writable actor fields: `35`, `34`, `36`, `0`, `38`, `138`, `187`, `7`, `37`, `6`, `8`, and `218`.  Use these histograms to prioritize editor-facing property names.
+
 No negative `0xB2` operands are currently observed in these bounded MAP object-definition streams.  Negative `0xB2` remains confirmed by the ASM as the DEFANIM table path; broad byte-scan candidate CSVs can still contain negative values that are data or inactive stream candidates.
 
 Normalized signatures are already useful: among these extracted levels there are 18 signatures reused by at least two WADs, including 4 signatures shared across all four `t1l1m001`..`t1l1m004` WADs.  For an IDE/editor, object type identification should therefore prefer normalized VM signatures plus MAP context instead of raw `stpc_def_offset` values.
@@ -1843,6 +1845,63 @@ Role pointers used by the store/load/function-call families:
 | `dword_6D9E8C[256]` | 0x43, cleared by `sub_5536D0` | 0x06, 0x0A, 0x43 | script global variable/object table |
 
 These opcodes are important for full IDE-grade script editing, but they do not directly bind geometry.  The world exporter still only needs the already-confirmed placement subset: stack constants/pointers, `0xB2` STPC-relative pointer load, `0x54` model bind, child-spawn inheritance, movement opcodes, and MAP Section4 route application.
+
+### STPC property/function dispatch IDs
+
+The low-opcode VM family uses signed imm16 IDs to access actor properties and global state through two central dispatchers:
+
+```text
+sub_550E60(vm_actor, target_actor, id) -> performs a query/action and usually pushes a value
+sub_5509F0(vm_actor, target_actor, id) -> returns a writable/readable address, or NULL/default for unsupported IDs
+```
+
+`sub_5509F0` is the writable-property surface.  The following IDs are confirmed from its switch:
+
+| ID | Returned address | Current meaning |
+|---:|---|---|
+| `4` | `target->geometry_or_model(+0x120) + 0x28` | geometry/model payload field |
+| `6`, `7`, `8` | `target->geometry_or_model(+0x120) + 0x18/+0x1C/+0x20` | geometry/model payload vector fields |
+| `16` | `target->contact_state(+0xC0)` | contact-state block pointer |
+| `22` | `target + 0xD2` | actor byte/word state near contact result bytes |
+| `34`, `35`, `36` | `target + 0x30/+0x34/+0x38` | actor position X/Y/Z fixed12 |
+| `37`, `38`, `39` | `target + 0x20/+0x24/+0x28` | actor rotation X/Y/Z fixed angle units |
+| `58`, `59`, `60` | `dword_6D9D80/+4/+8` | global vector/scalar triplet |
+| `132`, `133`, `134` | `target + 0x50/+0x54/+0x58` | previous/secondary actor position X/Y/Z |
+| `138` | `target + 0x10C` | actor scalar field, initialized to `0x1000` |
+| `139`, `140`, `141` | `target + 0x40/+0x44/+0x48` | actor transform/vector triplet |
+| `143` | `dword_6D9D30` | global script/world value |
+| `159`..`163` | several globals (`dword_6D9E68`, `dword_6D9E74`, `dword_6DA300`, `dword_6DA2F8`, `dword_6DA2FC`) | global game-state fields |
+| `164`, `165` | `target->+0xF0` payload element 0/1 | optional actor payload array, guarded by count at payload `+0x24` |
+| `185` | `target->geometry_or_model(+0x120) + 0x2C` | geometry/model payload field |
+| `186`, `187` | `target + 0x13C/+0x140` | actor radius/link fields used by contact targeting |
+| `190` | derived address in `dword_584F1C[...]` | indexed global table value |
+| `191`, `192` | `dword_584FFC`, `dword_584FF4` | global state values |
+| `203`, `204` | `dword_6DA2CC`, `dword_6DA2D0` with cache-refresh side effect | global settings/state fields |
+| `210`, `217` | `target->contact_state(+0xC0) + 0x18/+0x38` | contact-state fields |
+| `218` | `dword_6DA290` | global state value |
+| `228`..`231` | `dword_57D830`, `dword_57D83C`, `dword_57D840`, `dword_57D834` | global camera/player/contact-style values |
+| `232`, `236` | `dword_6DA304`, `dword_6DA2DC` | global state values |
+| `249` | `target + 0x120` | geometry/model payload pointer itself |
+| `250` | `dword_584E60` | global state value |
+
+`sub_550E60` is the query/action surface.  For IDs that overlap writable fields, it pushes the field value instead of returning an address: `34/35/36` push actor position X/Y/Z, `37/38/39` push masked actor rotation X/Y/Z, `132/133/134` push previous/secondary position, and `138` pushes actor `+0x10C`.  Additional confirmed query IDs include:
+
+| ID | Current meaning |
+|---:|---|
+| `0`, `19`, `118` | push `0` |
+| `3`, `4`, `6`, `7`, `8`, `9`, `10` | read fields from `target->geometry_or_model(+0x120)` |
+| `15` | push `(target->+0xE8 >> 3) & 1` |
+| `16` | push `target->+0xC0` contact-state pointer |
+| `17`, `18`, `20`, `21`, `210`..`217`, `243` | read contact-state fields if the contact block exists, otherwise push `0`/sentinel |
+| `41` | distance/angle-style query between current actor and target via `sub_404D60` |
+| `58`, `59`, `60`, `121`, `122`, `123` | push global vector/scalar values |
+| `106`, `108`, `110`, `111`, `137` | push fixed12 boolean/game-state checks |
+| `142` | push `WFPC & 0x00080000` |
+| `149`, `150`, `157`, `182`, `188` | query mutable actor/runtime flag or link state |
+| `185`, `202`, `226`, `233` | query actor geometry/payload/link fields |
+| `232`, `236`, `250`, `253`, `265` | push global game-state values |
+
+For an editor, IDs with confirmed `sub_5509F0` addresses are the safest writable property surface.  IDs only confirmed through `sub_550E60` should initially be exposed as read/query/action diagnostics until their side effects are named.
 
 ### Actor spawn variants
 

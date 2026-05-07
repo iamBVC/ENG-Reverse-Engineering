@@ -685,6 +685,9 @@ def summarize_stpc_object_definition_vm(
     }
     inline_dword_ops = {0x000C, 0x0045, 0x00A5, 0x00A6, 0x00B1, 0x00B2, 0x00D7, 0x00DB, 0x014D, 0x0175}
     low_imm_flag_ops = {0x002F, 0x0033, 0x0034}
+    dispatch_e60_ops = {0x0007, 0x001A, 0x001C, 0x001E, 0x0020, 0x0024, 0x0026, 0x0028}
+    dispatch_5509_load_ops = {0x000B, 0x001B, 0x001D, 0x001F, 0x0021, 0x0025, 0x0027, 0x0029}
+    dispatch_5509_store_ops = {0x0037, 0x0038, 0x0039, 0x003A, 0x003B, 0x003D, 0x003F, 0x0040}
 
     def signed_imm16(raw: int) -> int:
         imm = (raw >> 16) & 0xFFFF
@@ -704,6 +707,9 @@ def summarize_stpc_object_definition_vm(
         model_binds = child_spawns = yaw_count = movement_count = section4_count = 0
         runtime_flag_counts: Counter[int] = Counter()
         runtime_flag_operands: dict[int, Counter[object]] = {op: Counter() for op in runtime_flag_ops}
+        dispatch_e60_ids: Counter[int] = Counter()
+        dispatch_5509_load_ids: Counter[int] = Counter()
+        dispatch_5509_store_ids: Counter[int] = Counter()
         const_stack: list[int | None] = []
 
         while pc + 4 <= end and steps < max_steps:
@@ -716,6 +722,13 @@ def summarize_stpc_object_definition_vm(
             inline_dword: int | None = None
             if op in inline_dword_ops and pc + 4 <= end:
                 inline_dword = struct.unpack_from("<I", stpc_bytes, pc)[0]
+            imm16 = signed_imm16(raw)
+            if 0 <= imm16 <= 0x109 and op in dispatch_e60_ops:
+                dispatch_e60_ids[imm16] += 1
+            elif 0 <= imm16 <= 0x109 and op in dispatch_5509_load_ops:
+                dispatch_5509_load_ids[imm16] += 1
+            elif 0 <= imm16 <= 0x109 and op in dispatch_5509_store_ops:
+                dispatch_5509_store_ids[imm16] += 1
 
             token = f"{op:03X}"
             if op in model_bind_ops:
@@ -744,7 +757,7 @@ def summarize_stpc_object_definition_vm(
                 runtime_flag_counts[op] += 1
                 token = runtime_flag_ops[op]
                 if op in low_imm_flag_ops:
-                    runtime_flag_operands[op][signed_imm16(raw)] += 1
+                    runtime_flag_operands[op][imm16] += 1
                 elif op == 0x0082:
                     value = const_stack.pop() if const_stack else None
                     runtime_flag_operands[op]["unknown" if value is None else value] += 1
@@ -770,7 +783,7 @@ def summarize_stpc_object_definition_vm(
                     token = "B2_INVALID"
                 const_stack.append(target)
             elif op == 0x0044:
-                const_stack.append(signed_imm16(raw))
+                const_stack.append(imm16)
             elif op in (0x0045, 0x00D7) and inline_dword is not None:
                 const_stack.append(struct.unpack("<i", struct.pack("<I", inline_dword))[0])
             elif op in {0x000C, 0x00A5, 0x00A6, 0x00A7, 0x00DB, 0x014D, 0x0175}:
@@ -830,6 +843,9 @@ def summarize_stpc_object_definition_vm(
             "runtime_ec_10000_toggle_values": fmt_counter(runtime_flag_operands[0x002F]),
             "runtime_ec_200000_toggle_values": fmt_counter(runtime_flag_operands[0x0034]),
             "runtime_ec_400000_toggle_values": fmt_counter(runtime_flag_operands[0x014D]),
+            "dispatch_550e60_call_ids": fmt_counter(dispatch_e60_ids, limit=24),
+            "dispatch_5509f0_load_ids": fmt_counter(dispatch_5509_load_ids, limit=24),
+            "dispatch_5509f0_store_ids": fmt_counter(dispatch_5509_store_ids, limit=24),
         })
     return rows
 
@@ -1658,6 +1674,7 @@ def export_world(
         "runtime_e8_or_mask_values","runtime_e8_clear_mask_values",
         "runtime_ec_80_toggle_values","runtime_ec_100_toggle_values","runtime_ec_200_toggle_values",
         "runtime_ec_10000_toggle_values","runtime_ec_200000_toggle_values","runtime_ec_400000_toggle_values",
+        "dispatch_550e60_call_ids","dispatch_5509f0_load_ids","dispatch_5509f0_store_ids",
     ], vm_diag_rows)
 
     write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))
