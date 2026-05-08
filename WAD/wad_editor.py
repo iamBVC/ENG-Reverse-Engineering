@@ -108,6 +108,7 @@ class SceneData:
         self.terrain_tris: list[tuple[list, float]] = []
         self.terrain_meta: list[dict[str, int]] = []
         self.object_positions: list[list[float]]    = []
+        self.object_indices: list[int] = []
         self.object_tris: list[tuple[list, int, float]] = []
         self.bounds: tuple = (0, 0, 0, 1, 1, 1)
         # numpy fast path (populated in _build_numpy())
@@ -119,6 +120,7 @@ class SceneData:
         self.terrain_tris.clear()
         self.terrain_meta.clear()
         self.object_positions.clear()
+        self.object_indices.clear()
         self.object_tris.clear()
         xs: list[float] = []
         ys: list[float] = []
@@ -171,6 +173,7 @@ class SceneData:
             oy = obj.pos_y_fixed12 / 4096.0
             oz = obj.pos_z_fixed12 / 4096.0
             self.object_positions.append([ox, oy, oz])
+            self.object_indices.append(obj.index)
             xs.append(ox); ys.append(oy); zs.append(oz)
 
         self.bounds = (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)) if xs else (0,0,0,1,1,1)
@@ -306,6 +309,7 @@ def _draw_object_meshes(draw: Any, scene: SceneData, cam: Camera, w: int, h: int
     obj_col = cfg_color(cfg, "object_mesh", (182, 108, 255))
     obj_sel = cfg_color(cfg, "object_mesh_selected", (255, 122, 217))
     edge = cfg_color(cfg, "terrain_edge", TERRAIN_EDGE)
+    obj_to_pos = {obj_i: i for i, obj_i in enumerate(getattr(scene, "object_indices", []))}
     drawlist = []
     for verts, obj_i, _cy in scene.object_tris:
         projs = [_project_world_point(cam, p, w, h) for p in verts]
@@ -316,7 +320,8 @@ def _draw_object_meshes(draw: Any, scene: SceneData, cam: Camera, w: int, h: int
         drawlist.append((depth, obj_i, pts))
     drawlist.sort(key=lambda x: -x[0])
     for _depth, obj_i, pts in drawlist:
-        draw.polygon(pts, fill=obj_sel if obj_i == selected_obj else obj_col, outline=edge)
+        pos_i = obj_to_pos.get(obj_i, obj_i)
+        draw.polygon(pts, fill=obj_sel if pos_i == selected_obj else obj_col, outline=edge)
 
 
 def render_scene(
@@ -434,7 +439,8 @@ def render_scene(
                     fill=fill, outline=terrain_edge)
 
         # ── Objects (also batched) ───────────────────────────────────────────
-        mesh_object_ids = {obj_i for _verts, obj_i, _cy in scene.object_tris}
+        obj_to_pos = {obj_i: i for i, obj_i in enumerate(getattr(scene, "object_indices", []))}
+        mesh_object_ids = {obj_to_pos.get(obj_i, obj_i) for _verts, obj_i, _cy in scene.object_tris}
         if mode == "object" and scene.object_tris:
             _draw_object_meshes(draw, scene, cam, w, h, selected_obj, cfg)
         if mode == "object" and scene.objs_np is not None and scene.objs_np.shape[0]:
@@ -538,6 +544,7 @@ class WorldCanvas(ttk.Frame):
         self._axis_handles: list[dict[str, Any]] = []
         self._axis_drag: dict[str, Any] | None = None
         self._terrain_handles: list[tuple[int, list[tuple[float, float]]]] = []
+        self._object_handles: list[dict[str, Any]] = []
         self._redraw_pending = False    # throttle flag
 
         bg = self.cfg.get("colors", {}).get("background", "#111317")
@@ -594,10 +601,12 @@ class WorldCanvas(ttk.Frame):
         self._canvas.delete("all")
         self._axis_handles = []
         self._terrain_handles = []
+        self._object_handles = []
         if not HAS_PIL:
             self._canvas.create_text(w//2, h//2,
                 text="Install Pillow for 3D view", fill="#ff8080", font=("Consolas", 12))
             self._draw_fallback_2d(w, h)
+            self._cache_object_handles(w, h)
             self._draw_move_gizmo(w, h)
             return
         try:
@@ -611,6 +620,7 @@ class WorldCanvas(ttk.Frame):
             self._tk_img = ImageTk.PhotoImage(img)
             self._canvas.create_image(0, 0, image=self._tk_img, anchor="nw")
             self._cache_terrain_handles(w, h)
+            self._cache_object_handles(w, h)
             if self.mode == "object":
                 self._draw_move_gizmo(w, h)
         except Exception as exc:
@@ -618,6 +628,7 @@ class WorldCanvas(ttk.Frame):
                                      fill="red", anchor="nw")
             self._draw_fallback_2d(w, h)
             self._cache_terrain_handles(w, h)
+            self._cache_object_handles(w, h)
             if self.mode == "object":
                 self._draw_move_gizmo(w, h)
 
@@ -664,6 +675,38 @@ class WorldCanvas(ttk.Frame):
             pts = [(p[0], p[1]) for p in projs if p is not None]
             self._terrain_handles.append((i, pts))
 
+    def _cache_object_handles(self, w: int, h: int) -> None:
+        if self.mode != "object":
+            return
+        obj_to_pos = {obj_i: i for i, obj_i in enumerate(getattr(self.scene, "object_indices", []))}
+        mesh_object_ids = {obj_to_pos.get(obj_i, obj_i) for _verts, obj_i, _cy in self.scene.object_tris}
+        for verts, obj_i, _cy in self.scene.object_tris:
+            projs = [self._project_point(p, w, h) for p in verts]
+            if any(p is None for p in projs):
+                continue
+            pts = [(p[0], p[1]) for p in projs if p is not None]
+            depth = sum(p[2] for p in projs if p is not None) / 3.0
+            self._object_handles.append({
+                "kind": "mesh",
+                "obj": obj_to_pos.get(obj_i, obj_i),
+                "pts": pts,
+                "depth": depth,
+            })
+        radius = int(self.cfg.get("viewport", {}).get("object_radius", OBJ_RADIUS)) + 5
+        for i, pos in enumerate(self.scene.object_positions):
+            if i in mesh_object_ids:
+                continue
+            proj = self._project_point(pos, w, h)
+            if not proj:
+                continue
+            self._object_handles.append({
+                "kind": "marker",
+                "obj": i,
+                "center": (proj[0], proj[1]),
+                "depth": proj[2],
+                "radius": radius,
+            })
+
     @staticmethod
     def _point_in_tri(px: float, py: float, pts: list[tuple[float, float]]) -> bool:
         (x1, y1), (x2, y2), (x3, y3) = pts
@@ -679,6 +722,24 @@ class WorldCanvas(ttk.Frame):
         for idx, pts in reversed(self._terrain_handles):
             if self._point_in_tri(x, y, pts):
                 return idx
+        return None
+
+    def _hit_object(self, x: int, y: int) -> int | None:
+        mesh_hits = [
+            h for h in self._object_handles
+            if h["kind"] == "mesh" and self._point_in_tri(x, y, h["pts"])
+        ]
+        if mesh_hits:
+            return int(min(mesh_hits, key=lambda h: h["depth"])["obj"])
+        marker_hits = []
+        for h in self._object_handles:
+            if h["kind"] != "marker":
+                continue
+            cx, cy = h["center"]
+            if math.hypot(x - cx, y - cy) <= h["radius"]:
+                marker_hits.append(h)
+        if marker_hits:
+            return int(min(marker_hits, key=lambda h: h["depth"])["obj"])
         return None
 
     def _draw_move_gizmo(self, w: int, h: int) -> None:
@@ -773,6 +834,14 @@ class WorldCanvas(ttk.Frame):
             self._axis_drag = {"handle": hit, "start": (e.x, e.y)}
             self._drag_start = None
             return
+        if self.mode == "object":
+            obj_idx = self._hit_object(e.x, e.y)
+            if obj_idx is not None:
+                self.select_object(obj_idx)
+                if self._on_select:
+                    self._on_select(obj_idx)
+                self._drag_start = None
+                return
         self._drag_start = (e.x, e.y)
 
     def _on_lbdrag(self, e: tk.Event) -> None:
@@ -826,6 +895,185 @@ class WorldCanvas(ttk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 # Object edit dialog — with script-offset type picker
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_int_text(text: str) -> int:
+    text = text.strip()
+    return int(text, 16) if text.lower().startswith("0x") else int(text, 10)
+
+
+def _fmt_u32(v: int) -> str:
+    return f"0x{v & 0xFFFFFFFF:08X}"
+
+
+def _fmt_u16(v: int) -> str:
+    return f"0x{v & 0xFFFF:04X}"
+
+
+class ObjectEditDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Widget, obj: Any, *, on_save: Any = None,
+                 known_types: list[tuple[int, str]] | None = None,
+                 ground_y_provider: Any = None) -> None:
+        super().__init__(parent)
+        self.title(f"Edit Object #{obj.index}")
+        self.resizable(False, False)
+        self.grab_set()
+        self._obj = obj
+        self._on_save = on_save
+        self._ground_y_provider = ground_y_provider
+        self._type_by_label = {label: off for off, label in (known_types or [])}
+        self._vars: dict[str, tk.StringVar] = {}
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill="both", expand=True)
+        type_values = [label for _off, label in (known_types or [])]
+        type_label = next((label for off, label in (known_types or []) if off == obj.script_offset), f"0x{obj.script_offset:08X}")
+        self._type_var = tk.StringVar(value=type_label)
+        ttk.Label(frm, text="Type").grid(row=0, column=0, sticky="e", padx=(0, 8), pady=3)
+        ttk.Combobox(frm, textvariable=self._type_var, values=type_values, width=42).grid(row=0, column=1, columnspan=3, sticky="we", pady=3)
+
+        rows = [
+            ("x", "X", f"{obj.pos_x_fixed12 / 4096.0:.6f}"),
+            ("y", "Y", f"{obj.pos_y_fixed12 / 4096.0:.6f}"),
+            ("z", "Z", f"{obj.pos_z_fixed12 / 4096.0:.6f}"),
+            ("rot_x_units", "Rot X", str(obj.rot_x_units)),
+            ("rot_y_units", "Rot Y", str(obj.rot_y_units)),
+            ("rot_z_units", "Rot Z", str(obj.rot_z_units)),
+            ("local_count", "Local count", str(obj.local_count)),
+            ("section2_index_raw", "Section2", _fmt_u32(obj.section2_index_raw)),
+            ("stack_word_count", "Stack words", str(obj.stack_word_count)),
+            ("stack_arg_count", "Stack args", str(obj.stack_arg_count)),
+            ("spawn_flags", "Spawn flags", _fmt_u32(obj.spawn_flags)),
+            ("extra_count", "Extra count", str(obj.extra_count)),
+            ("section4_index_raw", "Section4", _fmt_u32(obj.section4_index_raw)),
+            ("spawn_aux_raw", "Spawn aux", _fmt_u32(obj.spawn_aux_raw)),
+            ("flags", "Flags", _fmt_u16(obj.flags)),
+            ("extra_u16", "Extra u16", _fmt_u16(obj.extra_u16)),
+        ]
+        for i, (key, label, value) in enumerate(rows, start=1):
+            var = tk.StringVar(value=value)
+            self._vars[key] = var
+            col = 0 if i <= 8 else 2
+            row = i if i <= 8 else i - 8
+            ttk.Label(frm, text=label).grid(row=row, column=col, sticky="e", padx=(0, 8), pady=3)
+            ttk.Entry(frm, textvariable=var, width=16).grid(row=row, column=col + 1, sticky="w", pady=3)
+        ttk.Button(frm, text="Snap Y to Ground", command=self._snap_y).grid(row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Apply", command=self._save).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="right")
+
+    def _parse_type(self) -> int:
+        text = self._type_var.get().strip()
+        if text in self._type_by_label:
+            return self._type_by_label[text]
+        m = re.search(r"0x([0-9A-Fa-f]+)", text)
+        return int(m.group(1), 16) if m else _parse_int_text(text)
+
+    def _snap_y(self) -> None:
+        if not self._ground_y_provider:
+            return
+        try:
+            y = self._ground_y_provider(float(self._vars["x"].get()), float(self._vars["z"].get()))
+        except ValueError:
+            return
+        if y is not None:
+            self._vars["y"].set(f"{y:.6f}")
+
+    def _save(self) -> None:
+        try:
+            self._obj.script_offset = self._parse_type()
+            self._obj.pos_x_fixed12 = int(round(float(self._vars["x"].get()) * 4096))
+            self._obj.pos_y_fixed12 = int(round(float(self._vars["y"].get()) * 4096))
+            self._obj.pos_z_fixed12 = int(round(float(self._vars["z"].get()) * 4096))
+            for key in ("rot_x_units", "rot_y_units", "rot_z_units", "flags", "extra_u16"):
+                setattr(self._obj, key, _parse_int_text(self._vars[key].get()) & 0xFFFF)
+            for key in ("local_count", "section2_index_raw", "stack_word_count", "stack_arg_count",
+                        "spawn_flags", "extra_count", "section4_index_raw", "spawn_aux_raw"):
+                setattr(self._obj, key, _parse_int_text(self._vars[key].get()) & 0xFFFFFFFF)
+        except Exception as exc:
+            messagebox.showerror("Parse error", str(exc), parent=self)
+            return
+        if self._on_save:
+            self._on_save(self._obj)
+        self.destroy()
+
+
+class AddObjectDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Widget, known_types: list[tuple[int, str]],
+                 *, template: Any = None, on_add: Any = None) -> None:
+        super().__init__(parent)
+        self.title("Add Object")
+        self.resizable(False, False)
+        self.grab_set()
+        self._template = template
+        self._on_add = on_add
+        self._type_by_label = {label: off for off, label in known_types}
+        values = [label for _off, label in known_types]
+        default = values[0] if values else ""
+        if template is not None:
+            default = next((label for off, label in known_types if off == template.script_offset), f"0x{template.script_offset:08X}")
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill="both", expand=True)
+        self._type_var = tk.StringVar(value=default)
+        self._clone_var = tk.BooleanVar(value=template is not None)
+        self._x_var = tk.StringVar(value=f"{(template.pos_x_fixed12 / 4096.0) if template is not None else 0.0:.6f}")
+        self._y_var = tk.StringVar(value=f"{(template.pos_y_fixed12 / 4096.0) if template is not None else 0.0:.6f}")
+        self._z_var = tk.StringVar(value=f"{(template.pos_z_fixed12 / 4096.0) if template is not None else 0.0:.6f}")
+
+        ttk.Label(frm, text="Type").grid(row=0, column=0, sticky="e", padx=(0, 8), pady=3)
+        ttk.Combobox(frm, textvariable=self._type_var, values=values, width=44).grid(row=0, column=1, columnspan=2, sticky="we", pady=3)
+        ttk.Checkbutton(frm, text="Clone selected fields", variable=self._clone_var).grid(row=1, column=1, sticky="w", pady=3)
+        for row, (label, var) in enumerate((("X", self._x_var), ("Y", self._y_var), ("Z", self._z_var)), start=2):
+            ttk.Label(frm, text=label).grid(row=row, column=0, sticky="e", padx=(0, 8), pady=3)
+            ttk.Entry(frm, textvariable=var, width=16).grid(row=row, column=1, sticky="w", pady=3)
+
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Add", command=self._add).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="right")
+
+    def _parse_type(self) -> int:
+        text = self._type_var.get().strip()
+        if text in self._type_by_label:
+            return self._type_by_label[text]
+        m = re.search(r"0x([0-9A-Fa-f]+)", text)
+        return int(m.group(1), 16) if m else _parse_int_text(text)
+
+    def _add(self) -> None:
+        try:
+            script_off = self._parse_type()
+            px = int(round(float(self._x_var.get()) * 4096))
+            py = int(round(float(self._y_var.get()) * 4096))
+            pz = int(round(float(self._z_var.get()) * 4096))
+        except Exception as exc:
+            messagebox.showerror("Parse error", str(exc), parent=self)
+            return
+
+        if self._clone_var.get() and self._template is not None:
+            new_obj = make_object_copy(self._template, new_index=-1)
+            new_obj.script_offset = script_off
+            new_obj.pos_x_fixed12 = px
+            new_obj.pos_y_fixed12 = py
+            new_obj.pos_z_fixed12 = pz
+        else:
+            from eng_wad.map_full_chunk import MapObjectRecord
+            new_obj = MapObjectRecord(
+                index=-1, file_offset=0, raw=b"\x00" * OBJ_RECORD_SIZE,
+                rot_x_units=0, rot_y_units=0, rot_z_units=0,
+                pos_x_fixed12=px, pos_y_fixed12=py, pos_z_fixed12=pz,
+                script_offset=script_off,
+                local_count=0, section2_index_raw=0xFFFFFFFF,
+                stack_word_count=0, stack_arg_count=0,
+                spawn_flags=0x00020000,
+                extra_count=0, section4_index_raw=0xFFFFFFFF,
+                spawn_aux_raw=0, flags=0, extra_u16=0,
+            )
+        if self._on_add:
+            self._on_add(new_obj)
+        self.destroy()
+
 
 class TerrainEditDialog(tk.Toplevel):
     def __init__(self, parent: tk.Widget, tri_idx: int, verts: list[list[float]],
@@ -940,6 +1188,7 @@ class WadEditorApp(tk.Tk):
         self._log.configure(yscrollcommand=_sb.set)
         _sb.pack(side="right", fill="y")
         self._log.pack(fill="both", expand=True, padx=4, pady=4)
+        self.bind("<Escape>", self._on_escape)
 
     def _build_overview_tab(self) -> None:
         pane = ttk.PanedWindow(self._tab_overview, orient="horizontal")
@@ -974,7 +1223,12 @@ class WadEditorApp(tk.Tk):
 
         vp_frame = ttk.LabelFrame(pane, text="3D View  (LMB orbit · MMB pan · RMB/wheel zoom)")
         pane.add(vp_frame, weight=3)
-        self._world_canvas = WorldCanvas(vp_frame, mode="object", cfg=self._editor_config)
+        self._world_canvas = WorldCanvas(
+            vp_frame,
+            on_select=self._on_canvas_object_select,
+            mode="object",
+            cfg=self._editor_config,
+        )
         self._world_canvas.set_object_move_callback(self._on_canvas_object_moved)
         self._world_canvas.pack(fill="both", expand=True)
 
@@ -1484,6 +1738,35 @@ class WadEditorApp(tk.Tk):
         pos_idx = next((i for i, o in enumerate(self._objects)
                         if o.index == obj_idx_field), None)
         self._world_canvas.select_object(pos_idx)
+
+    def _on_canvas_object_select(self, pos_idx: int | None) -> None:
+        if pos_idx is None:
+            self._clear_object_selection()
+            return
+        canvas_idx = pos_idx
+        if 0 <= pos_idx < len(self._objects):
+            obj_index = self._objects[pos_idx].index
+        else:
+            obj_index = pos_idx
+            canvas_idx = next((i for i, o in enumerate(self._objects)
+                               if o.index == obj_index), pos_idx)
+        self._selected_obj = obj_index
+        self._world_canvas.select_object(canvas_idx)
+        iid = self._object_row_iid_for_index(obj_index)
+        if iid and self._obj_tree.exists(iid):
+            self._obj_tree.selection_set(iid)
+            self._obj_tree.see(iid)
+
+    def _clear_object_selection(self) -> None:
+        self._selected_obj = None
+        if hasattr(self, "_world_canvas"):
+            self._world_canvas.select_object(None)
+        if hasattr(self, "_obj_tree"):
+            self._obj_tree.selection_remove(self._obj_tree.selection())
+
+    def _on_escape(self, _e: tk.Event | None = None) -> str:
+        self._clear_object_selection()
+        return "break"
 
     # ── Object actions ────────────────────────────────────────────────────────
 
