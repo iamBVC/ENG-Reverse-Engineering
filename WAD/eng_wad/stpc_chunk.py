@@ -1536,6 +1536,94 @@ def export_stpc_meshes_from_bytes(
     )
 
 
+def parse_stpc_meshes_from_bytes(
+    buf: bytes,
+    *,
+    alignment: int = 4,
+    min_score: float = 0.85,
+    min_vertices: int = 3,
+    max_vertices: int = 20000,
+    max_triangles: int = 50000,
+    force_scan: bool = False,
+) -> STPCExportResult:
+    """Parse STPC meshes without writing OBJ/CSV/MTL files.
+
+    This is the RAM-only companion to export_stpc_meshes_from_bytes, used by
+    tools that need decoded meshes for a viewport but should not create an
+    extracted folder.
+    """
+    top_count = u32(buf, 0) if len(buf) >= 4 else 0
+    parse_mode = "table"
+    geometry_end_offset: int | None = None
+    section2_count: int | None = None
+    section2_offset: int | None = None
+    section2_records: list[STPCSection2Record] = []
+    script_tail_offset: int | None = None
+    parser_warning: str | None = None
+
+    if force_scan:
+        parse_mode = "scan-fallback"
+        parser_warning = "forced legacy scan mode"
+        meshes = scan_meshes(
+            buf,
+            alignment=alignment,
+            min_score=min_score,
+            min_vertices=min_vertices,
+            max_vertices=max_vertices,
+            max_triangles=max_triangles,
+        )
+    else:
+        meshes, geometry_end_offset, section2_count, script_tail_offset, section2_records, parser_warning = parse_stpc_geometry_table(
+            buf,
+            min_score=0.0,
+            min_vertices=min_vertices,
+            max_vertices=max_vertices,
+            max_triangles=max_triangles,
+        )
+        if parser_warning is not None or not meshes:
+            parse_mode = "scan-fallback"
+            meshes = scan_meshes(
+                buf,
+                alignment=alignment,
+                min_score=min_score,
+                min_vertices=min_vertices,
+                max_vertices=max_vertices,
+                max_triangles=max_triangles,
+            )
+            geometry_end_offset = meshes[-1].end_offset if meshes else None
+            section2_count = None
+            section2_offset = None
+            section2_records = []
+            script_tail_offset = geometry_end_offset
+        else:
+            section2_offset = None if geometry_end_offset is None else geometry_end_offset + 4
+
+    script_refs = find_script_geometry_references(buf, meshes, start_offset=script_tail_offset)
+    script_b2_operands = find_script_b2_operands(buf, meshes, start_offset=script_tail_offset)
+    return STPCExportResult(
+        top_count=top_count,
+        input_size=len(buf),
+        output_dir=Path(""),
+        meshes=meshes,
+        manifest_path=Path(""),
+        combined_obj_path=None,
+        mesh_obj_paths=[],
+        faces_debug_path=None,
+        parse_mode=parse_mode,
+        geometry_end_offset=geometry_end_offset,
+        section2_count=section2_count,
+        section2_offset=section2_offset,
+        section2_records=section2_records,
+        section2_records_path=None,
+        script_tail_offset=script_tail_offset,
+        script_reference_path=None,
+        script_references=script_refs,
+        script_b2_operands_path=None,
+        script_b2_operands=script_b2_operands,
+        parser_warning=parser_warning,
+    )
+
+
 def export_stpc_meshes_from_file(
     stpc_bin: Path,
     out_dir: Path,

@@ -1375,6 +1375,89 @@ def write_instanced_stpc_objs(
 
 
 
+def build_primary_stpc_object_triangles(
+    *,
+    mapx: MapFullExe,
+    stpc_bytes: bytes,
+    meshes: list[MeshCandidate],
+    scan_bytes: int = 2048,
+    scale: float = 1.0,
+    flip_z: bool = True,
+    object_z_sign: int = -1,
+    local_z_sign: int = -1,
+    apply_object_yaw: bool = True,
+    object_yaw_sign: int = 1,
+    object_z_mirror_center: float | None = None,
+    object_x_offset: float = 0.0,
+    object_y_offset: float = 0.0,
+    object_z_offset: float = 0.0,
+) -> tuple[list[tuple[list, int, float]], set[int], list[StpcMeshReferenceHit]]:
+    """Build primary placed STPC object triangles in RAM.
+
+    This mirrors the objects_primary.obj transform path, but returns viewport
+    triangles instead of writing OBJ files.
+    """
+    instances = build_world_object_instances(mapx)
+    hits = scan_stpc_definition_for_mesh_offsets(
+        stpc_bytes=stpc_bytes,
+        instances=instances,
+        meshes=meshes,
+        scan_bytes=scan_bytes,
+        dedupe_per_object_mesh=True,
+    )
+    first_by_object: dict[int, StpcMeshReferenceHit] = {}
+    for hit in sorted(hits, key=lambda h: (h.object_index, h.duplicate_index_for_object)):
+        first_by_object.setdefault(hit.object_index, hit)
+
+    by_object = {o.object_index: o for o in instances}
+    by_mesh = {m.index: m for m in meshes}
+    out: list[tuple[list, int, float]] = []
+    seen: set[int] = set()
+
+    def transformed_vertices(mesh: MeshCandidate, inst: WorldObjectInstance, hit: StpcMeshReferenceHit) -> list[list[float]]:
+        yaw_units = hit.script_yaw_units if hit.script_yaw_units is not None else inst.rot_y_units
+        yaw = _angle4096_to_radians(yaw_units, sign=object_yaw_sign) if apply_object_yaw else 0.0
+        base_x = inst.world_x + hit.script_x_offset
+        base_y = inst.world_y + hit.script_y_offset
+        base_z = object_z_sign * (inst.world_z + hit.script_z_offset)
+        verts: list[list[float]] = []
+        for v in mesh.vertices:
+            lx = v.x
+            lz = local_z_sign * v.z
+            rx, rz = _rotate_xz(lx, lz, yaw) if yaw else (lx, lz)
+            x = base_x + rx
+            y = base_y + v.y
+            z = base_z + rz
+            if object_z_mirror_center is not None:
+                z = 2.0 * object_z_mirror_center - z
+            x += object_x_offset
+            y += object_y_offset
+            z += object_z_offset
+            if flip_z:
+                z = -z
+            verts.append([x * scale, y * scale, z * scale])
+        return verts
+
+    for object_index, hit in sorted(first_by_object.items()):
+        inst = by_object.get(object_index)
+        mesh = by_mesh.get(hit.mesh_index)
+        if inst is None or mesh is None:
+            continue
+        placed = transformed_vertices(mesh, inst, hit)
+        for tri in mesh.triangles:
+            if not (tri.i0 < mesh.vertex_count and tri.i1 < mesh.vertex_count and tri.i2 < mesh.vertex_count):
+                continue
+            if len({tri.i0, tri.i1, tri.i2}) != 3:
+                continue
+            verts = [placed[tri.i0], placed[tri.i1], placed[tri.i2]]
+            cy = (verts[0][1] + verts[1][1] + verts[2][1]) / 3.0
+            out.append((verts, object_index, cy))
+        seen.add(object_index)
+
+    return out, seen, hits
+
+
+
 
 def _obj_bounds_z(path: Path) -> tuple[float | None, float | None]:
     """Return min/max unscaled OBJ Z coordinate from vertex lines in an OBJ file."""

@@ -2,7 +2,7 @@
 """wad_editor.py — Full WAD editor with chunk splitting, 3D world view, and object editing.
 
 Architecture:
-  WorkFolder        — extracts every chunk to {wad_stem}_wadedit/*.bin + manifest.json
+  MemoryWad         - keeps editable chunks in RAM until Save WAD
   Camera            — orbital (target + distance + yaw + pitch) with orbit/pan/zoom
   SceneData         — terrain + object geometry; pre-builds numpy arrays for fast rendering
   WorldCanvas       — PIL-backed 3D canvas; throttles redraws to one per event-loop tick
@@ -56,10 +56,11 @@ from eng_wad.map_patch import (
     pack_map_object,
     patch_map_chunk_object,
 )
-from eng_wad.obj_mesh import parse_placed_object_obj
+from eng_wad.memory_wad import MemoryWad
 from eng_wad.stpc_names import build_stpc_name_map
+from eng_wad.stpc_chunk import parse_stpc_meshes_from_bytes
 from eng_wad.wad import read_wad
-from eng_wad.work_folder import WorkFolder
+from eng_wad.world_rebuild import build_primary_stpc_object_triangles
 
 try:
     from eng_wad.map_full_chunk import MapFullExe, MapObjectRecord, parse_map_full_exe
@@ -878,7 +879,7 @@ class WadEditorApp(tk.Tk):
         self.geometry("1400x860")
         self.minsize(1050, 680)
 
-        self.work: WorkFolder | None = None
+        self.work: MemoryWad | None = None
         self._wad_path:  Path | None = None
         self._wad_data:  bytes = b""
         self._mapx:      Any   = None
@@ -890,6 +891,8 @@ class WadEditorApp(tk.Tk):
         self._selected_terrain: int | None = None
         self._stpc_names: dict[int, str] = {}
         self._type_registry: list[tuple[int, str]] = []
+        self._stpc_mesh_result: Any = None
+        self._stpc_mesh_source: bytes | None = None
         self._editor_config = load_editor_config()
 
         self._build_ui()
@@ -950,9 +953,9 @@ class WadEditorApp(tk.Tk):
 
         right = ttk.Frame(pane); pane.add(right, weight=3)
         ttk.Label(right, text="Chunks", font=("", 10, "bold")).pack(anchor="w")
-        cols = ("tag", "size", "elements", "work_file")
+        cols = ("tag", "size", "elements", "storage")
         self._chunk_tree = ttk.Treeview(right, columns=cols, show="headings")
-        widths = {"tag": 70, "size": 100, "elements": 120, "work_file": 260}
+        widths = {"tag": 70, "size": 100, "elements": 120, "storage": 260}
         for c in cols:
             self._chunk_tree.heading(c, text=c)
             self._chunk_tree.column(c, width=widths[c], anchor="w")
@@ -961,8 +964,8 @@ class WadEditorApp(tk.Tk):
         vsb.pack(side="right", fill="y")
         self._chunk_tree.pack(fill="both", expand=True)
         btns = ttk.Frame(right); btns.pack(fill="x", pady=(4, 0))
-        ttk.Button(btns, text="Open chunk folder", command=self._open_chunk_folder).pack(side="left")
-        ttk.Button(btns, text="Reload chunk file", command=self._reload_selected_chunk).pack(
+        ttk.Button(btns, text="Storage Info", command=self._open_chunk_folder).pack(side="left")
+        ttk.Button(btns, text="Reload Original WAD", command=self._reload_selected_chunk).pack(
             side="left", padx=(6, 0))
 
     def _build_world_tab(self) -> None:
@@ -999,11 +1002,11 @@ class WadEditorApp(tk.Tk):
         ttk.Button(btns, text="Delete", command=self._delete_selected_obj).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Add New",command=self._add_new_obj_dialog).pack(side="left", padx=(4,0))
         ttk.Button(btns, text="Focus",  command=self._focus_selected_obj).pack(side="left", padx=(4,0))
-        ttk.Button(btns, text="Build/Load Meshes",
+        ttk.Button(btns, text="Rebuild Meshes",
                    command=self._start_object_mesh_export).pack(side="left", padx=(4,0))
 
         ttk.Label(right,
-            text="Edit/Clone patches MAP .bin directly.\nSave WAD to write back.",
+            text="Edits patch the MAP chunk in RAM.\nSave WAD to write back.",
             foreground="#888", justify="left").pack(anchor="w", pady=(6, 0))
 
     # ── Open / Save ──────────────────────────────────────────────────────────
@@ -1133,12 +1136,13 @@ class WadEditorApp(tk.Tk):
 
         self._wad_path = path
         self._wad_data = data
-        work = WorkFolder(path)
+        work = MemoryWad(path)
         work.extract(data, chunks)
         self.work = work
-        self._log_line(f"Extracted {len(chunks)} chunks → {work.work_dir}")
-        self._status.set(f"{path.name}  ({len(data):,} B · {len(chunks)} chunks)  "
-                         f"— {work.work_dir.name}")
+        self._stpc_mesh_result = None
+        self._stpc_mesh_source = None
+        self._log_line(f"Loaded {len(chunks)} chunks into RAM (no temp files created)")
+        self._status.set(f"{path.name}  ({len(data):,} B - {len(chunks)} chunks) - RAM mode")
         self.title(f"ENG WAD Editor — {path.name}")
         self._refresh_overview()
         self._load_game_data()
@@ -1178,40 +1182,52 @@ class WadEditorApp(tk.Tk):
             f"Source     : {self._wad_path}",
             f"File size  : {len(self._wad_data):,} bytes",
             f"Chunks     : {len(self.work.entries)}",
-            f"Work folder: {self.work.work_dir}",
+            "Storage    : RAM only (no chunk files/extracted folder)",
             "", "Tips:",
-            "  • Double-click a chunk row to open the .bin",
-            "  • Edit externally → Reload chunk file → Save WAD",
+            "  - Double-click a chunk row to preview its bytes",
+            "  - Edits stay in memory until Save WAD / Save As",
         ]))
         self._info_text.config(state="disabled")
         self._chunk_tree.delete(*self._chunk_tree.get_children())
         for info_dict in self.work.chunk_info():
             tag  = info_dict["tag"]
             size = info_dict["current_size"]
-            p    = self.work.work_dir / info_dict["bin_file"]
-            data = p.read_bytes() if p.exists() else b""
+            data = self.work.get_chunk_data_by_index(info_dict["index"]) or b""
             self._chunk_tree.insert("", "end", iid=str(info_dict["index"]),
                 values=(tag, f"{size:,} B", _quick_element_count(tag, data), info_dict["bin_file"]))
         self._chunk_tree.bind("<Double-1>", self._on_chunk_dclick)
 
     def _open_chunk_folder(self) -> None:
-        if self.work:
-            import os; os.startfile(str(self.work.work_dir))  # type: ignore[attr-defined]
+        messagebox.showinfo(
+            "RAM storage",
+            "The editor keeps WAD chunks in memory and does not create a chunk folder.",
+            parent=self,
+        )
 
     def _reload_selected_chunk(self) -> None:
-        sel = self._chunk_tree.selection()
-        if not sel or not self.work: return
-        entry = self.work.entries[int(sel[0])]
-        self._log_line(f"Reloaded chunk {entry['tag']}")
-        self._refresh_overview()
-        if entry["tag"] in ("MAP ", "TRAK"):
-            self._load_game_data(); self._reload_scene()
+        if not self._wad_path:
+            return
+        if not messagebox.askyesno(
+            "Reload original WAD",
+            "Reloading discards in-memory edits and reads the original WAD again.",
+            parent=self,
+        ):
+            return
+        self._open_wad(self._wad_path)
 
     def _on_chunk_dclick(self, _e: tk.Event) -> None:
         sel = self._chunk_tree.selection()
         if not sel or not self.work: return
         entry = self.work.entries[int(sel[0])]
-        import os; os.startfile(str(self.work.work_dir / entry["bin_file"]))  # type: ignore[attr-defined]
+        data = self.work.get_chunk_data_by_index(entry["index"]) or b""
+        preview = " ".join(f"{b:02X}" for b in data[:2048])
+        dlg = tk.Toplevel(self)
+        dlg.title(f"{entry['tag']} chunk preview")
+        dlg.geometry("760x420")
+        txt = tk.Text(dlg, wrap="word", font=("Consolas", 9))
+        txt.pack(fill="both", expand=True, padx=8, pady=8)
+        txt.insert("end", f"{entry['tag']}  {len(data):,} bytes in RAM\n\n{preview}")
+        txt.config(state="disabled")
 
     # ── Game data ────────────────────────────────────────────────────────────
 
@@ -1290,36 +1306,33 @@ class WadEditorApp(tk.Tk):
         self.after_idle(self._terrain_canvas.redraw)
 
     def _load_object_meshes_for_scene(self, *, redraw: bool = True) -> None:
-        if not (self._mapx and self._trak):
+        if not (self._mapx and self._trak and self.work):
             return
-        obj_paths = self._find_world_assets([
-            "objects_primary.obj",
-            "objects_all_candidates.obj",
-        ])
-        if not obj_paths:
+        stpc_data = self.work.get_chunk_data("STPC")
+        if not stpc_data:
             self._scene.object_tris = []
-            self._log_line("Object mesh viewport: objects_primary.obj not found, using markers")
-            if getattr(self, "_auto_mesh_export_for", None) != self._wad_path:
-                self._auto_mesh_export_for = self._wad_path
-                self._start_object_mesh_export()
+            self._log_line("Object mesh viewport: no STPC chunk; using markers")
             if redraw:
                 self._world_canvas.redraw()
             return
         try:
-            seen_objects: set[int] = set()
-            tris: list[tuple[list, int, float]] = []
-            used: list[str] = []
-            for obj_path in obj_paths:
-                before = len(tris)
-                tris.extend(parse_placed_object_obj(obj_path, existing_objects=seen_objects))
-                added = len(tris) - before
-                if added:
-                    used.append(f"{obj_path.name}:{added}")
+            if self._stpc_mesh_source != stpc_data or self._stpc_mesh_result is None:
+                self._stpc_mesh_result = parse_stpc_meshes_from_bytes(stpc_data)
+                self._stpc_mesh_source = stpc_data
+                self._log_line(
+                    f"STPC meshes: decoded {len(self._stpc_mesh_result.meshes)} meshes "
+                    f"in RAM ({self._stpc_mesh_result.parse_mode})"
+                )
+            tris, seen_objects, hits = build_primary_stpc_object_triangles(
+                mapx=self._mapx,
+                stpc_bytes=stpc_data,
+                meshes=self._stpc_mesh_result.meshes,
+            )
             self._scene.object_tris = tris
             cloned = self._fill_missing_object_meshes_by_type(seen_objects)
             self._log_line(
-                f"Object mesh viewport: loaded {len(self._scene.object_tris)} triangles "
-                f"for {len(seen_objects)} objects from {', '.join(used) if used else 'no usable OBJ groups'}"
+                f"Object mesh viewport: built {len(self._scene.object_tris)} triangles "
+                f"for {len(seen_objects)} objects from {len(hits)} STPC mesh-reference hits in RAM"
             )
             if cloned:
                 self._log_line(f"Object mesh viewport: cloned same-type mesh fallback for {cloned} objects")
@@ -1371,101 +1384,12 @@ class WadEditorApp(tk.Tk):
         self._scene.object_tris.extend(additions)
         return cloned
 
-    def _find_world_asset(self, name: str) -> Path | None:
-        assets = self._find_world_assets([name])
-        return assets[0] if assets else None
-
-    def _find_world_assets(self, names: list[str]) -> list[Path]:
-        if not self._wad_path:
-            return []
-        bases = [
-            self._wad_path.parent / "extracted" / self._wad_path.stem / "world",
-            self._wad_path.parent / self._wad_path.stem / "world",
-            Path(__file__).parent / "extracted" / self._wad_path.stem / "world",
-            Path.cwd() / "WAD" / "extracted" / self._wad_path.stem / "world",
-            Path.cwd() / "extracted" / self._wad_path.stem / "world",
-        ]
-        if self.work:
-            bases.append(self.work.work_dir / "world")
-        found: list[Path] = []
-        seen: set[Path] = set()
-        for base in bases:
-            for name in names:
-                p = base / name
-                if p.exists() and p not in seen:
-                    found.append(p)
-                    seen.add(p)
-        return found
-
     def _start_object_mesh_export(self) -> None:
-        if not self._wad_path:
+        """Rebuild object viewport meshes directly from in-memory STPC/MAP data."""
+        if not self.work:
             messagebox.showinfo("No WAD", "Open a WAD first."); return
-        if getattr(self, "_mesh_export_running", False):
-            self._log_line("Object mesh export already running.")
-            return
-        import queue
-        import os
-        import subprocess
-        import threading
-
-        self._mesh_export_running = True
-        self._mesh_export_queue = queue.Queue()
-        script_path = Path(__file__).with_name("wad_extractor.py").resolve()
-        out_dir = script_path.parent / "extracted"
-        cmd = [
-            sys.executable,
-            str(script_path),
-            str(self._wad_path),
-            "--out-dir", str(out_dir),
-            "--no-sounds",
-            "--no-srpc",
-            "--no-lights",
-            "--no-raw",
-            "--no-texture-fields",
-            "--quiet",
-        ]
-        self._log_line(f"Building object meshes with exporter -> {out_dir}")
-
-        def worker() -> None:
-            try:
-                env = os.environ.copy()
-                env["PYTHONIOENCODING"] = "utf-8"
-                env["PYTHONUTF8"] = "1"
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(script_path.parent),
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    env=env,
-                    timeout=600,
-                )
-                self._mesh_export_queue.put((proc.returncode, proc.stdout, proc.stderr))
-            except Exception as exc:
-                self._mesh_export_queue.put((-1, "", str(exc)))
-
-        threading.Thread(target=worker, daemon=True).start()
-        self.after(250, self._poll_object_mesh_export)
-
-    def _poll_object_mesh_export(self) -> None:
-        q = getattr(self, "_mesh_export_queue", None)
-        if q is None:
-            self._mesh_export_running = False
-            return
-        try:
-            code, out, err = q.get_nowait()
-        except Exception:
-            self.after(250, self._poll_object_mesh_export)
-            return
-        self._mesh_export_running = False
-        if code != 0:
-            tail = (err or out or "unknown exporter error").strip().splitlines()[-5:]
-            self._log_line("Object mesh export failed:")
-            for line in tail:
-                self._log_line(f"  {line}")
-            return
-        self._log_line("Object mesh export finished.")
+        self._stpc_mesh_result = None
+        self._stpc_mesh_source = None
         self._load_object_meshes_for_scene(redraw=True)
 
     def _populate_obj_tree(self) -> None:
