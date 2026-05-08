@@ -532,6 +532,7 @@ class WorldCanvas(ttk.Frame):
         self._on_select    = on_select
         self._on_terrain_select = on_terrain_select
         self._on_move      = None
+        self._on_terrain_move = None
         self.mode          = mode
         self.cfg           = cfg or DEFAULT_EDITOR_CONFIG
         self.scene         = SceneData()
@@ -570,6 +571,7 @@ class WorldCanvas(ttk.Frame):
         self.cam.reset_to_scene(scene)
         self.selected_obj = None
         self.selected_terrain = None
+        self.selected_tile = None
         if redraw:
             self.redraw()
 
@@ -579,6 +581,9 @@ class WorldCanvas(ttk.Frame):
 
     def set_object_move_callback(self, callback: Any) -> None:
         self._on_move = callback
+
+    def set_terrain_move_callback(self, callback: Any) -> None:
+        self._on_terrain_move = callback
 
     def select_terrain(self, idx: int | None) -> None:
         self.selected_terrain = idx
@@ -621,7 +626,7 @@ class WorldCanvas(ttk.Frame):
             self._canvas.create_image(0, 0, image=self._tk_img, anchor="nw")
             self._cache_terrain_handles(w, h)
             self._cache_object_handles(w, h)
-            if self.mode == "object":
+            if self.mode in ("object", "terrain"):
                 self._draw_move_gizmo(w, h)
         except Exception as exc:
             self._canvas.create_text(10, 10, text=f"Render error: {exc}",
@@ -629,7 +634,7 @@ class WorldCanvas(ttk.Frame):
             self._draw_fallback_2d(w, h)
             self._cache_terrain_handles(w, h)
             self._cache_object_handles(w, h)
-            if self.mode == "object":
+            if self.mode in ("object", "terrain"):
                 self._draw_move_gizmo(w, h)
 
     # ── throttle helper ───────────────────────────────────────────────────────
@@ -742,10 +747,44 @@ class WorldCanvas(ttk.Frame):
             return int(min(marker_hits, key=lambda h: h["depth"])["obj"])
         return None
 
+    def _selected_terrain_move_target(self) -> tuple[tuple[str, int], list[float]] | None:
+        if self.selected_tile is not None:
+            tri_indices = [
+                i for i, meta in enumerate(self.scene.terrain_meta)
+                if meta.get("tile_index") == self.selected_tile
+            ]
+            if not tri_indices:
+                return None
+            verts = [v for i in tri_indices for v in self.scene.terrain_tris[i][0]]
+            center = [
+                sum(v[0] for v in verts) / len(verts),
+                sum(v[1] for v in verts) / len(verts),
+                sum(v[2] for v in verts) / len(verts),
+            ]
+            return ("tile", self.selected_tile), center
+        if self.selected_terrain is not None and self.selected_terrain < len(self.scene.terrain_tris):
+            verts = self.scene.terrain_tris[self.selected_terrain][0]
+            center = [
+                sum(v[0] for v in verts) / 3.0,
+                sum(v[1] for v in verts) / 3.0,
+                sum(v[2] for v in verts) / 3.0,
+            ]
+            return ("tri", self.selected_terrain), center
+        return None
+
     def _draw_move_gizmo(self, w: int, h: int) -> None:
-        if self.selected_obj is None or self.selected_obj >= len(self.scene.object_positions):
+        if self.mode == "object":
+            if self.selected_obj is None or self.selected_obj >= len(self.scene.object_positions):
+                return
+            target: Any = self.selected_obj
+            pos = self.scene.object_positions[self.selected_obj]
+        elif self.mode == "terrain":
+            terrain_target = self._selected_terrain_move_target()
+            if terrain_target is None:
+                return
+            target, pos = terrain_target
+        else:
             return
-        pos = self.scene.object_positions[self.selected_obj]
         center = self._project_point(pos, w, h)
         if not center:
             return
@@ -775,7 +814,7 @@ class WorldCanvas(ttk.Frame):
             self._canvas.create_text(ex, ey, text=axis, fill=color, font=("Consolas", 10, "bold"))
             self._axis_handles.append({
                 "axis": axis, "vec": vec, "start": (cx, cy), "end": (ex, ey),
-                "origin": tuple(pos), "axis_len": axis_len,
+                "origin": tuple(pos), "axis_len": axis_len, "target": target,
             })
 
     @staticmethod
@@ -821,6 +860,14 @@ class WorldCanvas(ttk.Frame):
     def _on_resize(self, _e: tk.Event) -> None: self._schedule_redraw()
 
     def _on_lbdown(self, e: tk.Event) -> None:
+        hit = self._hit_axis(e.x, e.y)
+        if hit and (
+            (self.mode == "object" and self.selected_obj is not None and self._on_move)
+            or (self.mode == "terrain" and self._on_terrain_move)
+        ):
+            self._axis_drag = {"handle": hit, "start": (e.x, e.y)}
+            self._drag_start = None
+            return
         if self.mode == "terrain":
             tri_idx = self._hit_terrain(e.x, e.y)
             if tri_idx is not None:
@@ -829,11 +876,6 @@ class WorldCanvas(ttk.Frame):
                     self._on_terrain_select(tri_idx)
                 self.redraw()
                 return
-        hit = self._hit_axis(e.x, e.y)
-        if hit and self.selected_obj is not None and self._on_move:
-            self._axis_drag = {"handle": hit, "start": (e.x, e.y)}
-            self._drag_start = None
-            return
         if self.mode == "object":
             obj_idx = self._hit_object(e.x, e.y)
             if obj_idx is not None:
@@ -844,12 +886,25 @@ class WorldCanvas(ttk.Frame):
                 return
         self._drag_start = (e.x, e.y)
 
-    def _on_lbdrag(self, e: tk.Event) -> None:
-        if self._axis_drag and self.selected_obj is not None and self._on_move:
-            sx, sy = self._axis_drag["start"]
-            pos = self._axis_drag_position(self._axis_drag["handle"], e.x, e.y, sx, sy)
-            self._on_move(self.selected_obj, pos, False)
+    def _dispatch_axis_drag(self, x: int, y: int, *, commit: bool) -> bool:
+        if not self._axis_drag:
+            return False
+        sx, sy = self._axis_drag["start"]
+        handle = self._axis_drag["handle"]
+        pos = self._axis_drag_position(handle, x, y, sx, sy)
+        target = handle.get("target")
+        if isinstance(target, tuple) and self._on_terrain_move:
+            self._on_terrain_move(target, pos, commit)
+        elif self.selected_obj is not None and self._on_move:
+            self._on_move(self.selected_obj, pos, commit)
+        else:
+            return False
+        if not commit:
             self._schedule_redraw()
+        return True
+
+    def _on_lbdrag(self, e: tk.Event) -> None:
+        if self._dispatch_axis_drag(e.x, e.y, commit=False):
             return
         if not self._drag_start: return
         dx = e.x - self._drag_start[0]; dy = e.y - self._drag_start[1]
@@ -858,10 +913,7 @@ class WorldCanvas(ttk.Frame):
         self._schedule_redraw()
 
     def _on_lbup(self, e: tk.Event) -> None:
-        if self._axis_drag and self.selected_obj is not None and self._on_move:
-            sx, sy = self._axis_drag["start"]
-            pos = self._axis_drag_position(self._axis_drag["handle"], e.x, e.y, sx, sy)
-            self._on_move(self.selected_obj, pos, True)
+        if self._dispatch_axis_drag(e.x, e.y, commit=True):
             self._axis_drag = None
             return
         self._drag_start = None
@@ -1075,6 +1127,41 @@ class AddObjectDialog(tk.Toplevel):
         self.destroy()
 
 
+class OffsetEditDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Widget, title: str, *, on_apply: Any = None) -> None:
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.grab_set()
+        self._on_apply = on_apply
+        self._vars = {
+            "dx": tk.StringVar(value="0.0"),
+            "dy": tk.StringVar(value="0.0"),
+            "dz": tk.StringVar(value="0.0"),
+        }
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill="both", expand=True)
+        for row, key in enumerate(("dx", "dy", "dz")):
+            ttk.Label(frm, text=key.upper()).grid(row=row, column=0, sticky="e", padx=(0, 8), pady=3)
+            ttk.Entry(frm, textvariable=self._vars[key], width=16).grid(row=row, column=1, sticky="w", pady=3)
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Apply", command=self._apply).pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="right")
+
+    def _apply(self) -> None:
+        try:
+            dx = float(self._vars["dx"].get())
+            dy = float(self._vars["dy"].get())
+            dz = float(self._vars["dz"].get())
+        except ValueError:
+            messagebox.showerror("Parse error", "Offsets must be numbers.", parent=self)
+            return
+        if self._on_apply:
+            self._on_apply(dx, dy, dz)
+        self.destroy()
+
+
 class TerrainEditDialog(tk.Toplevel):
     def __init__(self, parent: tk.Widget, tri_idx: int, verts: list[list[float]],
                  on_save: Any = None) -> None:
@@ -1275,6 +1362,7 @@ class WadEditorApp(tk.Tk):
             vp_frame, mode="terrain", cfg=self._editor_config,
             on_terrain_select=self._on_terrain_canvas_select,
         )
+        self._terrain_canvas.set_terrain_move_callback(self._on_canvas_terrain_moved)
         self._terrain_canvas.pack(fill="both", expand=True)
 
         right = ttk.Frame(pane); pane.add(right, weight=1)
@@ -1775,14 +1863,18 @@ class WadEditorApp(tk.Tk):
         tile_idx = None
         if tri_idx < len(self._scene.terrain_meta):
             tile_idx = self._scene.terrain_meta[tri_idx].get("tile_index")
-        self._selected_tile = tile_idx
-        self._terrain_canvas.select_tile(tile_idx)
         if getattr(self, "_terrain_mode_var", None) and self._terrain_mode_var.get() == "Chunks" and tile_idx is not None:
+            self._selected_tile = tile_idx
+            self._terrain_canvas.select_terrain(None)
+            self._terrain_canvas.select_tile(tile_idx)
             iid = f"tile_{tile_idx}"
             if self._terrain_tree.exists(iid):
                 self._terrain_tree.selection_set(iid)
                 self._terrain_tree.see(iid)
             return
+        self._selected_tile = None
+        self._terrain_canvas.select_tile(None)
+        self._terrain_canvas.select_terrain(tri_idx)
         iid = f"tri_{tri_idx}"
         if self._terrain_tree.exists(iid):
             self._terrain_tree.selection_set(iid)
@@ -1803,6 +1895,7 @@ class WadEditorApp(tk.Tk):
                  if meta.get("tile_index") == idx),
                 None,
             )
+            self._terrain_canvas.select_terrain(None)
             self._terrain_canvas.select_tile(idx)
             return
         self._selected_terrain = idx
@@ -1850,6 +1943,39 @@ class WadEditorApp(tk.Tk):
             if meta.get("tile_index") == self._selected_tile
         ]
 
+    def _terrain_target_tri_indices(self, target: tuple[str, int]) -> list[int]:
+        kind, idx = target
+        if kind == "tile":
+            return [
+                i for i, meta in enumerate(self._scene.terrain_meta)
+                if meta.get("tile_index") == idx
+            ]
+        if kind == "tri" and 0 <= idx < len(self._scene.terrain_tris):
+            return [idx]
+        return []
+
+    def _terrain_target_center(self, target: tuple[str, int]) -> list[float] | None:
+        tri_indices = self._terrain_target_tri_indices(target)
+        if not tri_indices:
+            return None
+        verts = [v for i in tri_indices for v in self._scene.terrain_tris[i][0]]
+        if not verts:
+            return None
+        return [
+            sum(v[0] for v in verts) / len(verts),
+            sum(v[1] for v in verts) / len(verts),
+            sum(v[2] for v in verts) / len(verts),
+        ]
+
+    def _offset_terrain_tris(self, tri_indices: list[int], dx: float, dy: float, dz: float) -> None:
+        for i in tri_indices:
+            verts, cy = self._scene.terrain_tris[i]
+            self._scene.terrain_tris[i] = (
+                [[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts],
+                cy + dy,
+            )
+        self._scene.rebuild_terrain_numpy()
+
     def _move_selected_chunk(self) -> None:
         if self._selected_tile is None:
             messagebox.showinfo("No chunk", "Select a terrain chunk first."); return
@@ -1860,18 +1986,52 @@ class WadEditorApp(tk.Tk):
         tri_indices = self._selected_chunk_tri_indices()
         if not tri_indices:
             return
-        for i in tri_indices:
-            verts, cy = self._scene.terrain_tris[i]
-            self._scene.terrain_tris[i] = (
-                [[v[0] + dx, v[1] + dy, v[2] + dz] for v in verts],
-                cy + dy,
-            )
-        self._scene.rebuild_terrain_numpy()
+        self._offset_terrain_tris(tri_indices, dx, dy, dz)
         self._populate_terrain_tree()
         self._terrain_canvas.select_tile(self._selected_tile)
         self._terrain_canvas.redraw()
         self._world_canvas.redraw()
         self._log_line(f"Moved terrain chunk #{self._selected_tile} by ({dx:.3f}, {dy:.3f}, {dz:.3f}) in memory")
+
+    def _on_canvas_terrain_moved(self, target: tuple[str, int], pos: list[float], commit: bool = False) -> None:
+        center = self._terrain_target_center(target)
+        if center is None:
+            return
+        dx, dy, dz = pos[0] - center[0], pos[1] - center[1], pos[2] - center[2]
+        tri_indices = self._terrain_target_tri_indices(target)
+        if not tri_indices:
+            return
+        moved = abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9
+        if moved:
+            self._offset_terrain_tris(tri_indices, dx, dy, dz)
+        kind, idx = target
+        if kind == "tile":
+            self._selected_tile = idx
+            self._selected_terrain = tri_indices[0]
+            self._terrain_canvas.select_tile(idx)
+        else:
+            self._selected_terrain = idx
+            self._selected_tile = None
+            self._terrain_canvas.select_tile(None)
+            self._terrain_canvas.select_terrain(idx)
+        self._terrain_canvas.redraw()
+        self._world_canvas.redraw()
+        if commit:
+            self._populate_terrain_tree()
+            if kind == "tile":
+                iid = f"tile_{idx}"
+                if self._terrain_tree.exists(iid):
+                    self._terrain_tree.selection_set(iid)
+                    self._terrain_tree.see(iid)
+                label = f"chunk #{idx}"
+            else:
+                iid = f"tri_{idx}"
+                if self._terrain_tree.exists(iid):
+                    self._terrain_tree.selection_set(iid)
+                    self._terrain_tree.see(iid)
+                label = f"triangle #{idx}"
+            if moved:
+                self._log_line(f"Moved terrain {label} by ({dx:.3f}, {dy:.3f}, {dz:.3f}) in memory")
 
     def _on_terrain_saved(self, tri_idx: int, verts: list[list[float]]) -> None:
         if tri_idx < 0 or tri_idx >= len(self._scene.terrain_tris):
@@ -1913,7 +2073,6 @@ class WadEditorApp(tk.Tk):
             messagebox.showinfo("No selection", "Select an object first."); return
         new_idx = max((o.index for o in self._objects), default=-1) + 1
         clone   = make_object_copy(obj, new_idx)
-        clone.pos_x_fixed12 += 512   # nudge +0.125 units so it's not on top
         AddObjectDialog(self, self._type_registry, template=clone,
                         on_add=self._do_add_object)
 
@@ -2079,6 +2238,17 @@ class WadEditorApp(tk.Tk):
             # Full re-parse so indices and file_offsets are consistent
             self._load_game_data()
             self._reload_scene()
+            new_index = max((o.index for o in self._objects), default=None)
+            if new_index is not None:
+                self._selected_obj = new_index
+                iid = self._object_row_iid_for_index(new_index)
+                if iid:
+                    self._obj_tree.selection_set(iid)
+                    self._obj_tree.see(iid)
+                pos_idx = next((i for i, o in enumerate(self._objects)
+                                if o.index == new_index), None)
+                self._world_canvas.select_object(pos_idx)
+                self.after_idle(self._focus_selected_obj)
         except Exception as exc:
             messagebox.showerror("Add failed", str(exc))
 
