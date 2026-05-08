@@ -101,7 +101,7 @@ class SceneData:
                 placed.append([px, py, pz])
                 xs.append(px); ys.append(py); zs.append(pz)
 
-            for tri in rec.table_b:
+            for rec_tri_i, tri in enumerate(rec.table_b):
                 if not (tri.i0 < len(placed) and tri.i1 < len(placed) and tri.i2 < len(placed)):
                     continue
                 if len({tri.i0, tri.i1, tri.i2}) != 3:
@@ -113,6 +113,10 @@ class SceneData:
                     "tile_index": tile_i,
                     "trak_index": rec_i,
                     "tri_index": len(self.terrain_tris) - 1,
+                    "record_tri_index": rec_tri_i,
+                    "i0": tri.i0,
+                    "i1": tri.i1,
+                    "i2": tri.i2,
                 })
 
         for obj in mapx.objects:

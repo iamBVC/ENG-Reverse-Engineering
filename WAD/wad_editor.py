@@ -32,6 +32,7 @@ from eng_wad.editor_dialogs import (
     OffsetEditDialog,
     TerrainEditDialog,
 )
+from eng_wad.editor_terrain_patch import serialize_scene_terrain_edits
 from eng_wad.editor_view import SceneData, WorldCanvas
 from eng_wad.map_patch import (
     add_object_to_map_chunk,
@@ -251,7 +252,7 @@ class WadEditorApp(tk.Tk):
         ttk.Button(btns, text="Move Chunk", command=self._move_selected_chunk).pack(side="left", padx=(4, 0))
         ttk.Button(btns, text="Focus", command=self._focus_selected_terrain).pack(side="left", padx=(4, 0))
         ttk.Label(right,
-            text="Terrain edits are viewport/in-memory only until TRAK reserialization is implemented.",
+            text="Terrain edits patch MAP/TRAK in RAM. Save WAD to write back.",
             foreground="#888", justify="left", wraplength=280).pack(anchor="w", pady=(6, 0))
 
     def _reload_editor_settings(self) -> None:
@@ -364,11 +365,35 @@ class WadEditorApp(tk.Tk):
 
     def _do_save(self, out_path: Path) -> None:
         try:
+            self._serialize_world_edits()
             self.work.pack_wad(out_path)
             self._log_line(f"Saved WAD → {out_path}")
             messagebox.showinfo("Saved", str(out_path))
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc))
+
+    def _serialize_world_edits(self) -> None:
+        if not (self.work and self._mapx and self._trak):
+            return
+        map_data = self.work.get_chunk_data("MAP ")
+        trak_data = self.work.get_chunk_data("TRAK")
+        if map_data is None or trak_data is None:
+            return
+        result = serialize_scene_terrain_edits(
+            self._scene, self._mapx, self._trak, map_data, trak_data)
+        if result.map_changed:
+            self.work.save_chunk_data("MAP ", result.map_data)
+        if result.trak_changed:
+            self.work.save_chunk_data("TRAK", result.trak_data)
+        if result.changed:
+            self._populate_terrain_tree()
+            self._terrain_canvas.redraw()
+            self._world_canvas.redraw()
+            self._log_line(
+                "Serialized terrain edits: "
+                f"{result.moved_tiles} chunks, "
+                f"{result.patched_vertices} vertices, "
+                f"{result.patched_planes} planes")
 
     # ── Overview ─────────────────────────────────────────────────────────────
 
