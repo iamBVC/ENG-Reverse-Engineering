@@ -954,7 +954,7 @@ struct MapWorld {
     MapSection3Runtime92 *section3; // +0x24
     uint32_t section4_count;        // +0x28
     MapSection4Runtime48 *section4; // +0x2C
-    uint32_t *section2;             // +0x30  u32 array; section2_count NOT stored in MapWorld
+    uint32_t *section2;             // +0x30  packed u32 initial-local pool; count NOT stored in MapWorld
     // +0x34 unknown
     MapObjectRuntime72 *objects;    // +0x38
     MapTilePlacement32 *placements; // +0x3C  tile defs, 32-byte runtime stride
@@ -1195,6 +1195,39 @@ Confirmed Section4 transform use:
   - `section4 +0x24` -> actor transform field `+0x3C` copied directly
 - This explains the object-placement outliers where the MAP object origin is correct for initial spawn, but the visible mesh is offset to a Section4 route/waypoint transform before model binding.
 
+### Section2 initial-local pool
+
+The MAP Section2 table is now confirmed as a packed u32 pool used to initialize
+actor script locals.  `MapObjectDisk58.section2_index_raw` does not identify an
+independent record; it is the start index into `world->section2`.  The slice
+length is `MapObjectDisk58.local_count`.
+
+Evidence from sampled WADs:
+
+- Across `t0i0m000` and `t1l1m001`..`t1l1m004`, 328 of 350 MAP objects have a
+  valid Section2 start index.
+- In `t1l1m001`, the exported `object_initial_locals.csv` contains 342 rows,
+  exactly matching the Section2 u32 pool length.  Adjacent object starts line up
+  by `section2_index_raw + local_count`; for example object 0 uses local slice
+  `[0]`, object 4 starts at `[1]` and uses five values, object 5 starts at `[6]`,
+  and the repeated `0x0042310E` objects use three-value slices at `[11]`,
+  `[14]`, `[17]`, etc.
+- Common values are 12.12 fixed-point constants (`0x1000 = 1.0`,
+  `0x0800 = 0.5`, `0x0333 ~= 0.2`, `0x2000 = 2.0`), so many slots are likely
+  object parameters such as scale, timer, radius, mode, or speed.  The semantic
+  name depends on which local indices the STPC script reads/writes.
+
+New diagnostics:
+
+- `map_full/object_initial_locals.csv` exports one row per object local value
+  with raw u32, signed s32, and fixed12 interpretation.
+- `world/map_object_initial_locals.csv` mirrors the same values beside the
+  STPC definition offset.
+- `world/stpc_object_vm_diagnostics.csv` now includes `local_count_values`,
+  `initial_local_slot_values_hex`, local load/address/store index histograms,
+  and actor-cell index histograms.  This is the first editor-facing bridge from
+  object instances to per-type parameter slots.
+
 ### Section3 runtime table
 
 `sub_42AC50` reads Section3 as 90-byte disk records and expands each entry to a 92-byte runtime record (`0x5C` stride).  The disk record is mostly unaligned: after disk `+0x38` the loader reads several u32 fields from offsets `+0x3A`, `+0x3E`, `+0x42`, and so on.
@@ -1315,11 +1348,11 @@ struct Actor340 {
     uint32_t render_or_spawn_flags;  // +0x0EC / 236
     uint32_t spawn_aux;              // +0x0F0 / 240
 
-    void *mem_base;                  // +0x0F4 / 244
-    void *locals_ptr;                // +0x0F8 / 248
+    void *mem_base;                  // +0x0F4 / 244, script local/value memory
+    void *locals_ptr;                // +0x0F8 / 248, cells configured by opcode 0x0C
     uint16_t unk_0FC;                // +0x0FC / 252
     uint16_t unk_0FE;                // +0x0FE / 254
-    uint32_t local_count;            // +0x100 / 256
+    uint32_t local_count;            // +0x100 / 256, MAP Section2 initial-local slice length
     uint32_t script_stack_ptr;       // +0x104 / 260
     uint32_t script_stack_count;     // +0x108 / 264
 
@@ -1470,7 +1503,7 @@ Input globals exposed to STPC scripts:
 ## Recommended next reverse-engineering targets
 
 1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — many schemas still need field-level names.
-2. ~~Consumers of `MapObjectRuntime72 +0x28` and `+0x3C`~~ — **resolved**: `+0x28` is `section2_ptr` (element in the section2 u32 array, or NULL if disk value = 0xFFFFFFFF); `+0x3C` is `section4_ptr` (element in the section4 runtime array, or NULL if sentinel). What section2 u32 values semantically represent (i.e., what `world[0x30][index]` encodes) is still unknown.
+2. ~~Consumers of `MapObjectRuntime72 +0x28` and `+0x3C`~~ — **resolved**: `+0x28` is the initial-local pointer (`world->section2 + object.section2_index`, or NULL if disk value = 0xFFFFFFFF); `+0x3C` is `section4_ptr` (element in the section4 runtime array, or NULL if sentinel). The remaining work is naming each STPC script local slot per object definition.
 3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
 4. Finish naming the `sub_550E60` / `sub_5509F0` function-dispatch ids used by STPC opcodes.  The calling convention is decoded, but most switch-case semantic names are still pending.
 5. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
@@ -1683,7 +1716,7 @@ Several table entries point at tiny handlers that print a script operation name.
 
 ### Cross-WAD STPC object-definition VM diagnostics
 
-`world/stpc_object_vm_diagnostics.csv` is a partial, normalized VM fingerprint export for each unique MAP-referenced STPC object definition.  It abstracts pointer-like operands as `B2_MESH`, `B2_STPCPTR`, `B2_DEFANIM`, etc., so reusable object archetypes can be compared across WADs even when raw STPC-relative offsets differ.
+`world/stpc_object_vm_diagnostics.csv` is a partial, normalized VM fingerprint export for each unique MAP-referenced STPC object definition.  It abstracts pointer-like operands as `B2_MESH`, `B2_STPCPTR`, `B2_DEFANIM`, etc., so reusable object archetypes can be compared across WADs even when raw STPC-relative offsets differ.  It also correlates each definition with MAP Section2 initial-local values and with local-index read/write histograms, so local slots can now be named per object type.
 
 The current diagnostic parser models the confirmed dispatch shape and only skips inline payload widths confirmed from handlers (`0x0C`, `0x45`, `0x94`, `0x95`, `0xA5`, `0xA6`, `0xB1`, `0xB2`, `0xD4`, `0xD7`, `0xDB`, `0xE0`, `0x14D`, `0x175`).  It is therefore safer than a byte scan, but still not a full decompiler.
 
@@ -1706,6 +1739,14 @@ The diagnostic also records raw and named `sub_550E60` / `sub_5509F0` dispatch-I
 No negative `0xB2` operands are currently observed in these bounded MAP object-definition streams.  Negative `0xB2` remains confirmed by the ASM as the DEFANIM table path; broad byte-scan candidate CSVs can still contain negative values that are data or inactive stream candidates.
 
 Normalized signatures are already useful: among these extracted levels there are 18 signatures reused by at least two WADs, including 4 signatures shared across all four `t1l1m001`..`t1l1m004` WADs.  For an IDE/editor, object type identification should therefore prefer normalized VM signatures plus MAP context instead of raw `stpc_def_offset` values.
+
+Initial-local examples from `t1l1m001`:
+
+- `0x0042310E` (Coin-like objects): 36 instances, `local_count=3`; slot 0 is usually `0x1000` and slots 1/2 are `0`.  The VM reads local slots `0`, `1`, `2`, `5`, `13`, and `16`, but only slot 0..2 are instance-provided; higher indices are script-created locals.
+- `0x00422C32` (PachaGivingInfo-like): two instances, `local_count=5`; slots 0, 1, and 3 vary between the two instances while slot 2 stays `0` and slot 4 stays `0x1000`.
+- `0x004224EE`: one instance, `local_count=5`; initial locals are `0x51`, `0xF000`, `0x1000`, `0`, `0x9000`.  These values are now visible in both MAP and world diagnostics.
+
+For editor design, expose these as per-type "initial local slots" first, with raw/fixed12 views and VM usage hints.  Rename individual slots only after confirming their meaning from opcode consumers.
 
 ---
 

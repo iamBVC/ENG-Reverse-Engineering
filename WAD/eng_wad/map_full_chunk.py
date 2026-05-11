@@ -369,7 +369,7 @@ class MapObjectRecord:
 
     script_offset: int         # +0x12, runtime pointer = CPTS base + offset
     local_count: int           # +0x16, Actor340 +0x100
-    section2_index_raw: int    # +0x1A, sentinel => NULL, else section2 + 4*idx
+    section2_index_raw: int    # +0x1A, sentinel => NULL, else first initial-local u32
     stack_word_count: int      # +0x1E, passed as sub_54BFC0 a4
     stack_arg_count: int       # +0x22, SpawnParams.initial_stack_count
     spawn_flags: int           # +0x26, copied to Actor340 +0x138; +0xEC starts at 4
@@ -486,6 +486,21 @@ class MapObjectRecord:
     @property
     def section2_index_or_sentinel(self) -> int:
         return self.section2_index_raw
+
+    def initial_local_values(self, section2: list[int]) -> tuple[int, ...]:
+        """Return the MAP Section2 slice used to initialize this actor's locals.
+
+        sub_54CFC0 passes section2+4*section2_index_raw together with
+        local_count.  In sampled WADs, object Section2 indices form packed
+        adjacent slices whose lengths match local_count.
+        """
+        if self.local_count <= 0:
+            return ()
+        start = self.section2_index_raw
+        end = start + self.local_count
+        if start < 0 or end > len(section2):
+            return ()
+        return tuple(section2[start:end])
 
     @property
     def u32_44(self) -> int:
@@ -1033,6 +1048,26 @@ def export_map_full_exe(parsed: MapFullExe, out_dir: Path) -> None:
             "rt_46_extra_u16": o.extra_u16,
             "spawn_flag_notes": o.spawn_flag_notes,
         } for o in parsed.objects
+    ))
+
+    _write_csv(out_dir / "object_initial_locals.csv", [
+        "object_index", "script_offset", "script_offset_hex", "section2_start",
+        "local_index", "section2_index", "value", "value_hex", "value_s32", "value_fixed12",
+    ], (
+        {
+            "object_index": o.index,
+            "script_offset": o.script_offset,
+            "script_offset_hex": f"0x{o.script_offset:08X}",
+            "section2_start": o.section2_index_raw,
+            "local_index": local_i,
+            "section2_index": o.section2_index_raw + local_i,
+            "value": value,
+            "value_hex": f"0x{value:08X}",
+            "value_s32": struct.unpack("<i", struct.pack("<I", value & 0xFFFFFFFF))[0],
+            "value_fixed12": struct.unpack("<i", struct.pack("<I", value & 0xFFFFFFFF))[0] / 4096.0,
+        }
+        for o in parsed.objects
+        for local_i, value in enumerate(o.initial_local_values(parsed.section2))
     ))
 
     _write_csv(out_dir / "actors_spawn_preview.csv", [

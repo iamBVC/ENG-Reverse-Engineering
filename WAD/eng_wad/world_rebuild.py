@@ -80,6 +80,7 @@ class WorldObjectInstance:
     flags: int
     skip_initial_spawn: bool
     extra_u16: int
+    initial_local_values: tuple[int, ...]
     route_transform_x: float | None = None
     route_transform_y: float | None = None
     route_transform_z: float | None = None
@@ -158,6 +159,14 @@ def _fixed12_signed_from_u32(v: int) -> float:
 
 def _hex(v: int) -> str:
     return f"0x{v:08X}"
+
+
+def _fmt_u32_values(values: Iterable[int]) -> str:
+    return " ".join(_hex(v) for v in values)
+
+
+def _fmt_fixed12_values(values: Iterable[int]) -> str:
+    return " ".join(f"{_fixed12(v):.6g}" for v in values)
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict]) -> None:
@@ -255,6 +264,7 @@ def build_world_object_instances(mapx: MapFullExe) -> list[WorldObjectInstance]:
             flags=o.flags,
             skip_initial_spawn=o.skip_initial_spawn,
             extra_u16=o.extra_u16,
+            initial_local_values=o.initial_local_values(mapx.section2),
             route_transform_x=route_x,
             route_transform_y=route_y,
             route_transform_z=route_z,
@@ -635,9 +645,11 @@ def summarize_stpc_object_definition_vm(
         if 0 <= inst.stpc_def_offset < len(stpc_bytes)
     })
     objects_by_def: dict[int, list[int]] = {}
+    instances_by_def: dict[int, list[WorldObjectInstance]] = {}
     for inst in instances:
         if 0 <= inst.stpc_def_offset < len(stpc_bytes):
             objects_by_def.setdefault(inst.stpc_def_offset, []).append(inst.object_index)
+            instances_by_def.setdefault(inst.stpc_def_offset, []).append(inst)
 
     def bounded_scan_end(start: int) -> int:
         end = min(len(stpc_bytes), start + max(0, scan_bytes))
@@ -688,6 +700,12 @@ def summarize_stpc_object_definition_vm(
     dispatch_e60_ops = {0x0007, 0x001A, 0x001C, 0x001E, 0x0020, 0x0024, 0x0026, 0x0028}
     dispatch_5509_load_ops = {0x000B, 0x001B, 0x001D, 0x001F, 0x0021, 0x0025, 0x0027, 0x0029}
     dispatch_5509_store_ops = {0x0037, 0x0038, 0x0039, 0x003A, 0x003B, 0x003D, 0x003F, 0x0040}
+    local_self_load_ops = {0x0004, 0x0005}
+    local_self_addr_ops = {0x0008}
+    local_context_load_ops = {0x0018, 0x0019}
+    local_self_store_ops = {0x0041}
+    local_context_store_ops = {0x003E}
+    actor_cell_ops = {0x000D, 0x000E, 0x000F}
     dispatch_id_names = {
         0: "zero_or_null",
         3: "geom_payload_word_0x00",
@@ -821,6 +839,13 @@ def summarize_stpc_object_definition_vm(
             for key, count in counter.most_common(limit)
         )
 
+    def fmt_local_slots(slot_values: dict[int, Counter[int]], *, limit_slots: int = 16, limit_values: int = 6) -> str:
+        parts: list[str] = []
+        for slot in sorted(slot_values)[:limit_slots]:
+            vals = ",".join(f"{_hex(value)}:{count}" for value, count in slot_values[slot].most_common(limit_values))
+            parts.append(f"{slot}={vals}")
+        return " ".join(parts)
+
     rows: list[dict[str, object]] = []
     for start in unique_definition_offsets:
         end = bounded_scan_end(start)
@@ -835,6 +860,12 @@ def summarize_stpc_object_definition_vm(
         dispatch_e60_ids: Counter[int] = Counter()
         dispatch_5509_load_ids: Counter[int] = Counter()
         dispatch_5509_store_ids: Counter[int] = Counter()
+        local_self_load_indices: Counter[int] = Counter()
+        local_self_addr_indices: Counter[int] = Counter()
+        local_context_load_indices: Counter[int] = Counter()
+        local_self_store_indices: Counter[int] = Counter()
+        local_context_store_indices: Counter[int] = Counter()
+        actor_cell_indices: Counter[int] = Counter()
         const_stack: list[int | None] = []
 
         while pc + 4 <= end and steps < max_steps:
@@ -854,6 +885,18 @@ def summarize_stpc_object_definition_vm(
                 dispatch_5509_load_ids[imm16] += 1
             elif 0 <= imm16 <= 0x109 and op in dispatch_5509_store_ops:
                 dispatch_5509_store_ids[imm16] += 1
+            if 0 <= imm16 <= 0xFFFF and op in local_self_load_ops:
+                local_self_load_indices[imm16] += 1
+            elif 0 <= imm16 <= 0xFFFF and op in local_self_addr_ops:
+                local_self_addr_indices[imm16] += 1
+            elif 0 <= imm16 <= 0xFFFF and op in local_context_load_ops:
+                local_context_load_indices[imm16] += 1
+            elif 0 <= imm16 <= 0xFFFF and op in local_self_store_ops:
+                local_self_store_indices[imm16] += 1
+            elif 0 <= imm16 <= 0xFFFF and op in local_context_store_ops:
+                local_context_store_indices[imm16] += 1
+            elif 0 <= imm16 <= 0xFFFF and op in actor_cell_ops:
+                actor_cell_indices[imm16] += 1
 
             token = f"{op:03X}"
             if op in model_bind_ops:
@@ -925,6 +968,12 @@ def summarize_stpc_object_definition_vm(
         signature_text = " ".join(normalized[:80])
         signature_hash = hashlib.sha1(signature_text.encode("ascii", errors="ignore")).hexdigest()[:12]
         top_ops = " ".join(f"{op:03X}:{count}" for op, count in op_counts.most_common(16))
+        def_instances = instances_by_def.get(start, [])
+        local_count_values = Counter(len(inst.initial_local_values) for inst in def_instances)
+        local_slot_values: dict[int, Counter[int]] = {}
+        for inst in def_instances:
+            for local_i, value in enumerate(inst.initial_local_values):
+                local_slot_values.setdefault(local_i, Counter())[value] += 1
         rows.append({
             "stpc_def_offset": start,
             "stpc_def_offset_hex": _hex(start),
@@ -974,6 +1023,14 @@ def summarize_stpc_object_definition_vm(
             "dispatch_550e60_call_names": fmt_dispatch_counter(dispatch_e60_ids, limit=24),
             "dispatch_5509f0_load_names": fmt_dispatch_counter(dispatch_5509_load_ids, limit=24),
             "dispatch_5509f0_store_names": fmt_dispatch_counter(dispatch_5509_store_ids, limit=24),
+            "local_count_values": fmt_counter(local_count_values),
+            "initial_local_slot_values_hex": fmt_local_slots(local_slot_values),
+            "local_self_load_indices": fmt_counter(local_self_load_indices, limit=24),
+            "local_self_addr_indices": fmt_counter(local_self_addr_indices, limit=24),
+            "local_context_load_indices": fmt_counter(local_context_load_indices, limit=24),
+            "local_self_store_indices": fmt_counter(local_self_store_indices, limit=24),
+            "local_context_store_indices": fmt_counter(local_context_store_indices, limit=24),
+            "actor_cell_indices": fmt_counter(actor_cell_indices, limit=24),
         })
     return rows
 
@@ -1779,6 +1836,7 @@ def export_world(
         "local_count","section2_index_or_sentinel","stack_word_count","stack_arg_count",
         "spawn_flags","spawn_flags_hex","extra_count","section4_index_or_sentinel",
         "spawn_aux","spawn_aux_hex","flags","flags_hex","skip_initial_spawn","extra_u16",
+        "initial_local_count","initial_locals_hex","initial_locals_fixed12",
         "route_transform_x","route_transform_y","route_transform_z",
         "route_transform_rot_x_units","route_transform_yaw_units","route_transform_rot_z_units",
     ], (
@@ -1811,6 +1869,9 @@ def export_world(
             "flags_hex": f"0x{o.flags:04X}",
             "skip_initial_spawn": o.skip_initial_spawn,
             "extra_u16": o.extra_u16,
+            "initial_local_count": len(o.initial_local_values),
+            "initial_locals_hex": _fmt_u32_values(o.initial_local_values),
+            "initial_locals_fixed12": _fmt_fixed12_values(o.initial_local_values),
             "route_transform_x": o.route_transform_x if o.route_transform_x is not None else "",
             "route_transform_y": o.route_transform_y if o.route_transform_y is not None else "",
             "route_transform_z": o.route_transform_z if o.route_transform_z is not None else "",
@@ -1866,6 +1927,26 @@ def export_world(
         } for off, info in sorted(defs.items())
     ))
 
+    _write_csv(out_dir / "map_object_initial_locals.csv", [
+        "object_index","stpc_def_offset","stpc_def_offset_hex","section2_start",
+        "local_index","section2_index","value","value_hex","value_s32","value_fixed12",
+    ], (
+        {
+            "object_index": o.object_index,
+            "stpc_def_offset": o.stpc_def_offset,
+            "stpc_def_offset_hex": _hex(o.stpc_def_offset),
+            "section2_start": o.section2_index_or_sentinel,
+            "local_index": local_i,
+            "section2_index": o.section2_index_or_sentinel + local_i,
+            "value": value,
+            "value_hex": _hex(value),
+            "value_s32": _i32_from_u32(value),
+            "value_fixed12": _fixed12(value),
+        }
+        for o in instances
+        for local_i, value in enumerate(o.initial_local_values)
+    ))
+
     vm_diag_rows = summarize_stpc_object_definition_vm(
         stpc_bytes=stpc_bytes,
         instances=instances,
@@ -1887,6 +1968,9 @@ def export_world(
         "runtime_ec_10000_toggle_values","runtime_ec_200000_toggle_values","runtime_ec_400000_toggle_values",
         "dispatch_550e60_call_ids","dispatch_5509f0_load_ids","dispatch_5509f0_store_ids",
         "dispatch_550e60_call_names","dispatch_5509f0_load_names","dispatch_5509f0_store_names",
+        "local_count_values","initial_local_slot_values_hex",
+        "local_self_load_indices","local_self_addr_indices","local_context_load_indices",
+        "local_self_store_indices","local_context_store_indices","actor_cell_indices",
     ], vm_diag_rows)
 
     write_world_viewer_html(out_dir / "world_viewer.html", _collect_world_obj_assets(out_dir))
