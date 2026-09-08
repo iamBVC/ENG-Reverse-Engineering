@@ -742,6 +742,10 @@ def parse_map_full_exe(map_data: bytes, trak: TrakFile, *, assume_optional20: bo
 
     object_count = cur.u32()
     object_count_unknown_b = cur.u32()
+    if object_count_unknown_b != object_count:
+        warnings.append(
+            f"MAP object counts disagree: records={object_count}, "
+            f"actor_pool={object_count_unknown_b}")
     objects: list[MapObjectRecord] = []
     for i in range(object_count):
         off = cur.tell()

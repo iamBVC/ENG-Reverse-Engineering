@@ -245,6 +245,8 @@ Contains texture pages and material/palette information.  Texture pixels are RGB
 
 Contains level layout data: terrain tile placements, grid data, object records, the Section2 initial-local pool used by STPC object scripts, vertex color blocks, a Section3 runtime table with STPC-relative pointers/range fields, and a Section4 route table used by object scripts.  It does not appear to store final render geometry by itself; it places or references geometry from other chunks.
 
+The editor can patch, add, and delete the confirmed 58-byte object records.  Add/delete operations update both object-count fields required by the loader; the parser warns when those record and actor-pool counts disagree.
+
 ### `TRAK`
 
 Stores the main world/terrain geometry record table.  Each decoded geometry record contains vertices, triangles, culling/bounds data, and collision/contact entries.  OBJ exports from this chunk are the best starting point for terrain analysis.

@@ -38,6 +38,10 @@ def patch_map_chunk_object(map_data: bytes,
     """Overwrite the on-disk record for *obj* with its current field values."""
     data = bytearray(map_data)
     off  = obj.file_offset
+    if off < 0 or off + OBJ_RECORD_SIZE > len(data):
+        raise ValueError(
+            f"MAP object record at 0x{off:X} is outside the "
+            f"{len(data)}-byte chunk")
     data[off: off + OBJ_RECORD_SIZE] = pack_map_object(obj)
     return bytes(data)
 
@@ -51,19 +55,28 @@ def add_object_to_map_chunk(
 ) -> bytes:
     """Insert a new 58-byte object record into the MAP chunk and update the count.
 
-    The record is appended after the last existing object.  The 4-byte count
-    field (located 8 bytes before the first record) is incremented.
+    The record is appended after the last existing object.  Both 4-byte count
+    fields (located 8 bytes before the first record) are updated; the game uses
+    the second count for actor-pool allocation, so they must remain equal.
     """
     if not mapx.objects:
-        return map_data  # cannot locate section without at least one existing object
+        raise ValueError(
+            "Cannot locate an empty MAP object table from object offsets alone")
+    if len(new_obj_raw) != OBJ_RECORD_SIZE:
+        raise ValueError(
+            f"MAP object record must be {OBJ_RECORD_SIZE} bytes, "
+            f"got {len(new_obj_raw)}")
     count_off = mapx.objects[0].file_offset - 8   # 4-byte count + 4-byte unknown_b
     last_end  = mapx.objects[-1].file_offset + OBJ_RECORD_SIZE
+    if count_off < 0 or last_end > len(map_data):
+        raise ValueError("MAP object table lies outside the chunk")
+    new_count = len(mapx.objects) + 1
     prefix    = map_data[:count_off]
     tail      = map_data[last_end:]
     existing  = map_data[mapx.objects[0].file_offset: last_end]
     return (prefix
-            + struct.pack("<I", len(mapx.objects) + 1)
-            + struct.pack("<I", mapx.object_count_unknown_b)
+            + struct.pack("<I", new_count)
+            + struct.pack("<I", new_count)
             + existing + new_obj_raw + tail)
 
 
@@ -83,14 +96,17 @@ def delete_object_from_map_chunk(
     count_off = mapx.objects[0].file_offset - 8
     first_off = mapx.objects[0].file_offset
     last_end  = mapx.objects[-1].file_offset + OBJ_RECORD_SIZE
+    if count_off < 0 or last_end > len(map_data):
+        raise ValueError("MAP object table lies outside the chunk")
+    new_count = len(mapx.objects) - 1
     prefix    = map_data[:count_off]
     tail      = map_data[last_end:]
     existing  = bytearray(map_data[first_off:last_end])
     rel       = obj.file_offset - first_off
     del existing[rel: rel + OBJ_RECORD_SIZE]
     return (prefix
-            + struct.pack("<I", len(mapx.objects) - 1)
-            + struct.pack("<I", mapx.object_count_unknown_b)
+            + struct.pack("<I", new_count)
+            + struct.pack("<I", new_count)
             + bytes(existing) + tail)
 
 
