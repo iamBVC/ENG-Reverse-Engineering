@@ -622,6 +622,29 @@ def scan_stpc_definition_for_mesh_offsets(
     return hits
 
 
+def _vm_stream_table_payload_size(stpc_bytes: bytes, operand_offset: int) -> int:
+    """Return the byte size consumed by VM opcodes 0x02/0x03.
+
+    sub_553850/sub_5537F0 read a u32 entry count followed by one instruction
+    word per entry. Entries whose low opcode is 0x45 or 0xEA carry one extra
+    dword. ``operand_offset`` points at the count immediately after the opcode.
+    """
+    if operand_offset < 0 or operand_offset + 4 > len(stpc_bytes):
+        return 0
+    count = struct.unpack_from("<I", stpc_bytes, operand_offset)[0]
+    pos = operand_offset + 4
+    for _ in range(count):
+        if pos + 4 > len(stpc_bytes):
+            return max(0, len(stpc_bytes) - operand_offset)
+        entry_op = struct.unpack_from("<I", stpc_bytes, pos)[0] & 0xFFFF
+        pos += 4
+        if entry_op in {0x0045, 0x00EA}:
+            if pos + 4 > len(stpc_bytes):
+                return max(0, len(stpc_bytes) - operand_offset)
+            pos += 4
+    return pos - operand_offset
+
+
 def summarize_stpc_object_definition_vm(
     *,
     stpc_bytes: bytes,
@@ -963,7 +986,15 @@ def summarize_stpc_object_definition_vm(
                 const_stack.clear()
 
             normalized.append(token)
-            pc += inline_skip.get(op, 0)
+            if op == 0x00B4:
+                # sub_5535E0 sets the stop/destroy flags. Bytes following B4
+                # belong to adjacent script data and are not executed by this
+                # definition's linear stream.
+                break
+            if op in {0x0002, 0x0003}:
+                pc += _vm_stream_table_payload_size(stpc_bytes, pc)
+            else:
+                pc += inline_skip.get(op, 0)
 
         signature_text = " ".join(normalized[:80])
         signature_hash = hashlib.sha1(signature_text.encode("ascii", errors="ignore")).hexdigest()[:12]

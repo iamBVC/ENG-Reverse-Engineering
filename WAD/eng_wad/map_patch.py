@@ -46,6 +46,45 @@ def patch_map_chunk_object(map_data: bytes,
     return bytes(data)
 
 
+def patch_map_section2_locals(
+    map_data: bytes,
+    mapx: "MapFullExe",       # type: ignore[name-defined]
+    obj: "MapObjectRecord",   # type: ignore[name-defined]
+    values: list[int] | tuple[int, ...],
+) -> bytes:
+    """Patch one object's existing MAP Section2 initial-local slice.
+
+    This deliberately does not resize or relocate the packed Section2 pool.
+    Changing its layout requires updating every later object's start index and
+    is handled separately from this safe fixed-layout editing path.
+    """
+    if obj.local_count != len(values):
+        raise ValueError(
+            f"Object expects {obj.local_count} Section2 locals, got {len(values)}")
+    if obj.local_count == 0:
+        return map_data
+    start = obj.section2_index_raw
+    end = start + obj.local_count
+    if start == 0xFFFFFFFF or start < 0 or end > len(mapx.section2):
+        raise ValueError(
+            f"Object Section2 slice [{start}:{end}] is outside the "
+            f"{len(mapx.section2)}-value pool")
+
+    # Header (3*u32), tile records, then the Section2 count u32.
+    section2_data_offset = 12 + mapx.tile_count * 24 + 4
+    byte_offset = section2_data_offset + start * 4
+    byte_end = byte_offset + len(values) * 4
+    if byte_offset < 0 or byte_end > len(map_data):
+        raise ValueError("MAP Section2 slice lies outside the chunk")
+
+    data = bytearray(map_data)
+    for i, value in enumerate(values):
+        if not 0 <= value <= 0xFFFFFFFF:
+            raise ValueError(f"Section2 local {i} is outside the u32 range")
+        struct.pack_into("<I", data, byte_offset + i * 4, value)
+    return bytes(data)
+
+
 def add_object_to_map_chunk(
     map_data: bytes,
     mapx: "MapFullExe",       # type: ignore[name-defined]

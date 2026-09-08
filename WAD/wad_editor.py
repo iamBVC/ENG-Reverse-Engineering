@@ -41,7 +41,9 @@ from eng_wad.map_patch import (
     make_object_copy,
     pack_map_object,
     patch_map_chunk_object,
+    patch_map_section2_locals,
 )
+from eng_wad.section2_semantics import section2_schema
 from eng_wad.memory_wad import MemoryWad
 from eng_wad.stpc_names import build_stpc_name_map
 from eng_wad.stpc_chunk import parse_stpc_meshes_from_bytes
@@ -946,7 +948,18 @@ class WadEditorApp(tk.Tk):
         if obj is None: return
         ObjectEditDialog(self, obj, on_save=self._on_obj_saved,
                          known_types=self._type_registry,
-                         ground_y_provider=self._ground_y_at)
+                         ground_y_provider=self._ground_y_at,
+                         section2_values=(
+                             list(obj.initial_local_values(self._mapx.section2))
+                             if self._mapx is not None and (
+                                 obj.local_count == 0 or
+                                 len(obj.initial_local_values(self._mapx.section2)) == obj.local_count)
+                             else None),
+                         section2_schema=section2_schema(
+                             self._stpc_names.get(obj.script_offset, ""),
+                             obj.local_count))
+        # Schema matching is intentionally name + local-count specific so an
+        # unrelated STPC program with the same debug name is not mislabeled.
 
     def _clone_selected_obj(self) -> None:
         obj = self._get_selected_obj()
@@ -1066,8 +1079,24 @@ class WadEditorApp(tk.Tk):
             self._write_obj_to_map_bin(obj)
             self._log_line(f"Moved object #{obj.index}  pos=({snapped[0]:.3f}, {snapped[1]:.3f}, {snapped[2]:.3f})")
 
-    def _on_obj_saved(self, obj: Any) -> None:
-        self._write_obj_to_map_bin(obj)
+    def _on_obj_saved(self, obj: Any, section2_values: list[int] | None = None) -> None:
+        if not self.work:
+            return
+        map_data = self.work.get_chunk_data("MAP ")
+        if map_data is None:
+            return
+        try:
+            patched = patch_map_chunk_object(map_data, obj)
+            if section2_values is not None and self._mapx is not None:
+                patched = patch_map_section2_locals(
+                    patched, self._mapx, obj, section2_values)
+            self.work.save_chunk_data("MAP ", patched)
+            if self._mapx is not None and section2_values is not None:
+                start = obj.section2_index_raw
+                self._mapx.section2[start:start + len(section2_values)] = section2_values
+        except Exception as exc:
+            messagebox.showerror("Object save failed", str(exc), parent=self)
+            return
         # Update in-memory position for viewport
         for i, o in enumerate(self._objects):
             if o.index == obj.index and i < len(self._scene.object_positions):

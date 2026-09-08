@@ -9,6 +9,7 @@ from eng_wad.map_patch import (
     add_object_to_map_chunk,
     delete_object_from_map_chunk,
     patch_map_chunk_object,
+    patch_map_section2_locals,
 )
 
 
@@ -75,6 +76,30 @@ class MapPatchTests(unittest.TestCase):
         obj = _object(0, len(self.chunk))
         with self.assertRaisesRegex(ValueError, "outside"):
             patch_map_chunk_object(self.chunk, obj)
+
+    def test_patch_section2_locals_updates_only_selected_slice(self) -> None:
+        # 12-byte header, one 24-byte tile, count, then four u32 locals.
+        chunk = bytearray(80)
+        struct.pack_into("<III", chunk, 0, 1, 0, 0)
+        struct.pack_into("<I4I", chunk, 36, 4, 10, 20, 30, 40)
+        obj = _object(0, 0)
+        obj.local_count = 2
+        obj.section2_index_raw = 1
+        mapx = SimpleNamespace(tile_count=1, section2=[10, 20, 30, 40])
+
+        result = patch_map_section2_locals(bytes(chunk), mapx, obj,
+                                           [0xFFFFFFFF, 0x00001000])
+
+        self.assertEqual(struct.unpack_from("<4I", result, 40),
+                         (10, 0xFFFFFFFF, 0x1000, 40))
+
+    def test_patch_section2_locals_rejects_invalid_slice(self) -> None:
+        obj = _object(0, 0)
+        obj.local_count = 2
+        obj.section2_index_raw = 3
+        mapx = SimpleNamespace(tile_count=0, section2=[1, 2, 3, 4])
+        with self.assertRaisesRegex(ValueError, "outside"):
+            patch_map_section2_locals(bytes(64), mapx, obj, [5, 6])
 
 
 if __name__ == "__main__":

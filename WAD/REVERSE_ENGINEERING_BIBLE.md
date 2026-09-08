@@ -1742,7 +1742,21 @@ Normalized signatures are already useful: among these extracted levels there are
 
 Initial-local examples from `t1l1m001`:
 
-- `0x0042310E` (Coin-like objects): 36 instances, `local_count=3`; slot 0 is usually `0x1000` and slots 1/2 are `0`.  The VM reads local slots `0`, `1`, `2`, `5`, `13`, and `16`, but only slot 0..2 are instance-provided; higher indices are script-created locals.
+- `0x0042310E` (`Coin`): 36 instances, `local_count=3`; slot 0 is usually `0x1000` and slots 1/2 are `0`. The earlier report of reads from slots 5, 13, and 16 was a diagnostic overrun past opcode `0xB4`. Executable handler `sub_5535E0` confirms that `0xB4` stops the script; the corrected bounded stream reads only initial slots 0, 1, and 2. Opcode `0x02`/`0x03` inline stream tables are now skipped with their executable-confirmed variable width as well.
+
+Confirmed standard `Coin` three-local schema (normalized VM signature
+`cdf06c171970` in `t1l1m001` through `t1l1m004`):
+
+| Slot | Editor name | Type | Confirmed direct effect |
+|---:|---|---|---|
+| 0 | Run interaction block | fixed12 Boolean | Opcode `0x04` loads the slot and `0x14 +23` skips the contact/collection response block when it is zero. The enabled block examines contact state, adjusts actor Y, assigns a random Y rotation, and continues the normal Coin behavior. |
+| 1 | Enable contact propagation flags | fixed12 Boolean | When nonzero, the script ORs `0x00008000` into actor `+0xE8`, sets actor `+0xEC` bit `0x2`, and calls `sub_403020`. This is the engine's contact/transform propagation path; no standard Coin instance in the four sampled levels enables it. |
+| 2 | Skip default render setup | fixed12 Boolean | The script applies logical NOT and conditionally skips six instruction words. Zero performs the default setup: actor `+0x128 = 526`, actor `+0x12C = 0x1000`, actor `+0xEC` bit `0x2` enabled, and an initial Y-rotation adjustment. Nonzero bypasses that setup. One Coin in `t1l1m003` uses `0x1000`; the remaining standard sampled Coins use zero. |
+
+These names describe proven control-flow effects. The higher-level visual name
+of actor `+0x128` and the final gameplay terminology for the `+0xE8 0x8000`
+mode remain unresolved, so the editor descriptions retain those concrete
+effects rather than inventing designer-facing terminology.
 - `0x00422C32` (PachaGivingInfo-like): two instances, `local_count=5`; slots 0, 1, and 3 vary between the two instances while slot 2 stays `0` and slot 4 stays `0x1000`.
 - `0x004224EE`: one instance, `local_count=5`; initial locals are `0x51`, `0xF000`, `0x1000`, `0`, `0x9000`.  These values are now visible in both MAP and world diagnostics.
 

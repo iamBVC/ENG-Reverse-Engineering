@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+import struct
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 from typing import Any
 
 from .map_patch import OBJ_RECORD_SIZE, make_object_copy
+from .section2_semantics import Section2FieldSemantic
 
 def _parse_int_text(text: str) -> int:
     text = text.strip()
@@ -25,7 +27,9 @@ def _fmt_u16(v: int) -> str:
 class ObjectEditDialog(tk.Toplevel):
     def __init__(self, parent: tk.Widget, obj: Any, *, on_save: Any = None,
                  known_types: list[tuple[int, str]] | None = None,
-                 ground_y_provider: Any = None) -> None:
+                 ground_y_provider: Any = None,
+                 section2_values: list[int] | None = None,
+                 section2_schema: tuple[Section2FieldSemantic, ...] | None = None) -> None:
         super().__init__(parent)
         self.title(f"Edit Object #{obj.index}")
         self.resizable(False, False)
@@ -33,6 +37,8 @@ class ObjectEditDialog(tk.Toplevel):
         self._obj = obj
         self._on_save = on_save
         self._ground_y_provider = ground_y_provider
+        self._section2_values = None if section2_values is None else list(section2_values)
+        self._section2_schema = section2_schema
         self._type_by_label = {label: off for off, label in (known_types or [])}
         self._vars: dict[str, tk.StringVar] = {}
 
@@ -68,8 +74,17 @@ class ObjectEditDialog(tk.Toplevel):
             col = 0 if i <= 8 else 2
             row = i if i <= 8 else i - 8
             ttk.Label(frm, text=label).grid(row=row, column=col, sticky="e", padx=(0, 8), pady=3)
-            ttk.Entry(frm, textvariable=var, width=16).grid(row=row, column=col + 1, sticky="w", pady=3)
+            state = "readonly" if key in {"local_count", "section2_index_raw"} else "normal"
+            ttk.Entry(frm, textvariable=var, width=16, state=state).grid(row=row, column=col + 1, sticky="w", pady=3)
         ttk.Button(frm, text="Snap Y to Ground", command=self._snap_y).grid(row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        locals_text = "Edit Section2 locals"
+        if self._section2_values is not None:
+            locals_text += f" ({len(self._section2_values)})"
+        locals_button = ttk.Button(frm, text=locals_text, command=self._edit_section2_locals)
+        locals_button.grid(row=9, column=2, columnspan=2, sticky="e", pady=(8, 0))
+        if self._section2_values is None:
+            locals_button.state(["disabled"])
 
         btns = ttk.Frame(self, padding=(12, 0, 12, 12))
         btns.pack(fill="x")
@@ -93,6 +108,11 @@ class ObjectEditDialog(tk.Toplevel):
         if y is not None:
             self._vars["y"].set(f"{y:.6f}")
 
+    def _edit_section2_locals(self) -> None:
+        if self._section2_values is None:
+            return
+        Section2LocalsDialog(self, self._section2_values, self._section2_schema)
+
     def _save(self) -> None:
         try:
             self._obj.script_offset = self._parse_type()
@@ -108,8 +128,111 @@ class ObjectEditDialog(tk.Toplevel):
             messagebox.showerror("Parse error", str(exc), parent=self)
             return
         if self._on_save:
-            self._on_save(self._obj)
+            self._on_save(self._obj, self._section2_values)
         self.destroy()
+
+
+class Section2LocalsDialog(tk.Toplevel):
+    """Fixed-layout editor for one object's initial script-local values."""
+
+    def __init__(self, parent: tk.Widget, values: list[int],
+                 schema: tuple[Section2FieldSemantic, ...] | None = None) -> None:
+        super().__init__(parent)
+        self.title("Section2 Initial Locals")
+        self.geometry("580x360")
+        self.transient(parent)
+        self.grab_set()
+        self._values = values
+        self._schema = schema if schema is not None and len(schema) == len(values) else None
+
+        ttk.Label(
+            self,
+            text=("Named fields below are backed by traced STPC control flow. "
+                  "Unidentified object variants remain in diagnostic form."),
+            wraplength=550,
+        ).pack(fill="x", padx=10, pady=(10, 6))
+
+        self._tree = ttk.Treeview(
+            self, columns=("slot", "field", "value", "confidence"),
+            show="headings", selectmode="browse")
+        for key, label, width, anchor in (
+            ("slot", "Local", 55, "center"),
+            ("field", "Field", 245, "w"),
+            ("value", "Value", 120, "center"),
+            ("confidence", "Evidence", 95, "center"),
+        ):
+            self._tree.heading(key, text=label)
+            self._tree.column(key, width=width, anchor=anchor)
+        scroll = ttk.Scrollbar(self, orient="vertical", command=self._tree.yview)
+        self._tree.configure(yscrollcommand=scroll.set)
+        self._tree.pack(side="left", fill="both", expand=True, padx=(10, 0), pady=(0, 10))
+        scroll.pack(side="left", fill="y", pady=(0, 10))
+        self._tree.bind("<Double-1>", lambda _event: self._edit_selected())
+
+        buttons = ttk.Frame(self, padding=(8, 0, 10, 10))
+        buttons.pack(side="right", fill="y")
+        ttk.Button(buttons, text="Edit…", command=self._edit_selected).pack(fill="x", pady=(0, 6))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(fill="x")
+        self._refresh()
+
+    @staticmethod
+    def _signed(value: int) -> int:
+        return struct.unpack("<i", struct.pack("<I", value))[0]
+
+    def _refresh(self, selected: int | None = None) -> None:
+        self._tree.delete(*self._tree.get_children())
+        for slot, value in enumerate(self._values):
+            signed = self._signed(value)
+            semantic = self._schema[slot] if self._schema else None
+            if semantic and semantic.value_type == "fixed12_bool":
+                display_value = ("Enabled" if value != 0 else "Disabled")
+                if value not in {0, 0x1000}:
+                    display_value += f" (noncanonical {_fmt_u32(value)})"
+                field_name = semantic.name
+                confidence = semantic.confidence.title()
+            else:
+                display_value = f"{signed / 4096.0:.6f} / {_fmt_u32(value)}"
+                field_name = "Unidentified"
+                confidence = "Unknown"
+            self._tree.insert("", "end", iid=str(slot), values=(
+                slot, field_name, display_value, confidence))
+        if selected is not None and self._tree.exists(str(selected)):
+            self._tree.selection_set(str(selected))
+            self._tree.see(str(selected))
+
+    def _edit_selected(self) -> None:
+        selection = self._tree.selection()
+        if not selection:
+            return
+        slot = int(selection[0])
+        semantic = self._schema[slot] if self._schema else None
+        if semantic and semantic.value_type == "fixed12_bool":
+            answer = messagebox.askyesnocancel(
+                semantic.name,
+                semantic.description + "\n\nEnable this field?",
+                parent=self)
+            if answer is None:
+                return
+            self._values[slot] = 0x1000 if answer else 0
+            self._refresh(slot)
+            return
+        text = simpledialog.askstring(
+            f"Edit local {slot}",
+            "Raw u32 value (decimal or 0x-prefixed hexadecimal):",
+            initialvalue=_fmt_u32(self._values[slot]), parent=self)
+        if text is None:
+            return
+        try:
+            value = _parse_int_text(text)
+            if value < 0:
+                value &= 0xFFFFFFFF
+            if not 0 <= value <= 0xFFFFFFFF:
+                raise ValueError("value is outside the u32 range")
+        except ValueError as exc:
+            messagebox.showerror("Invalid local value", str(exc), parent=self)
+            return
+        self._values[slot] = value
+        self._refresh(slot)
 
 
 class AddObjectDialog(tk.Toplevel):
