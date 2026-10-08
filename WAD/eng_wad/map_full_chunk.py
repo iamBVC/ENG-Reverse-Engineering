@@ -285,9 +285,9 @@ class MapTileDefExe:
     """One 24-byte tile definition record, expanded by the game to 32 bytes.
 
     sub_42AC50 reads 6 sequential u32s from the file and stores them at runtime
-    offsets +0x00, +0x04, +0x08, +0x10, +0x14, +0x18 (skipping +0x0C which is
-    zero-initialised by the allocator).  Field names here use the disk sequential
-    byte positions (0, 4, 8, 12, 16, 20).
+    offsets +0x00, +0x04, +0x08, +0x10, +0x14, +0x18, skipping +0x0C (which the
+    loader never writes; the bump allocator does not zero memory).  Field names
+    here use the disk sequential byte positions (0, 4, 8, 12, 16, 20).
     """
 
     index: int

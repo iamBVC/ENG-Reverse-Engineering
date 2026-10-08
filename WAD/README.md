@@ -230,9 +230,9 @@ Percentages are approximate and describe how much of each chunk is understood fr
 | `AMPC` | ~65% | Parses the confirmed resource-bank wrapper and 40-byte ambient emitter table. | Exact payload internals for the `pBAV`/`pQES` resource blobs and remaining ambient flag bits. |
 | `TRAK` | ~75% | Exports geometry records, vertices, triangles, collision entries, OBJ, viewer. | Header fields `+0x00/+0x04/+0x08/+0x7E`, collision group names, remaining triangle flags. |
 | `STPC` | ~76% | Parses the confirmed top-level geometry cursor layout, including matrix-group/skinned records and the Section2 variable-array relocation model; exports OBJ/MTL, manifest, face diagnostics, script-to-geometry refs, `0xB2` pointer candidates, and partial object-VM diagnostics; documents the core VM stack, role-pointer, load/store, debug-named high opcodes, model-bind, child-spawn, movement, DEFANIM references, route transforms, `Actor340 +0xEC/+0xE8` flag writers, input/tick dispatch globals, the first `sub_550E60` / `sub_5509F0` property IDs, and local-slot usage histograms. | Remaining high-opcode semantics, animation payload fields, Block32 semantics, and full IDE-friendly object/script names. |
-| `MAP ` | ~70% | Parses tile placement, grid, object58 table, Section2 initial-local pool, vertex colors, Section3/Section4 loader layouts, route position/rotation transforms, and MAP diagnostics. | Final Section3 semantic names, some flags/type ids, complete object runtime behavior. |
+| `MAP ` | ~70% | Parses tile placement, grid, object58 table, Section2 initial-local pool, vertex colors, Section3/Section4 loader layouts, route position/rotation transforms, and MAP diagnostics. | Final Section3 semantic names, some flags/type ids, and complete object runtime behavior. |
 | `LGHT` | ~90% | Exports directional, point, and negative/special point lights. | Final type-2/type-4 byte currently named `falloff_or_mode`; two copied runtime color fields. |
-| `LGPC` | ~75% | Parses the localized dialogue/text table, exports raw entry matrix and line/id CSV. | Exact semantic name of header `+0x08`, selected row/language global name, and non-2-row variants. |
+| `LGPC` | ~75% | Parses the localized dialogue/text table, exports raw entry matrix and line/id CSV. | Exact semantic name of header `+0x08`.  The row-selection global is now confirmed as the persisted `Language` setting, and this executable ships only Italian menu strings, so index 0 is the only valid index. |
 | `WFPC` | ~55% | Reads the executable-confirmed `dword_6DA330` feature flags, exports flag diagnostics, and uses confirmed MAP layout bits. | Exact names for several observed-only bits and some runtime-only consumers. |
 
 ## Chunk summary
@@ -243,7 +243,7 @@ Contains texture pages and material/palette information.  Texture pixels are RGB
 
 ### `MAP `
 
-Contains level layout data: terrain tile placements, grid data, object records, the Section2 initial-local pool used by STPC object scripts, vertex color blocks, a Section3 runtime table with STPC-relative pointers/range fields, and a Section4 route table used by object scripts.  It does not appear to store final render geometry by itself; it places or references geometry from other chunks.
+Contains level layout data: terrain tile placements, grid data, object records, the Section2 initial-local pool used by STPC object scripts, vertex color blocks, a Section3 runtime table with STPC-relative pointers/range fields, and a Section4 route table used by object scripts.  It does not appear to store final render geometry by itself; it places or references geometry from other chunks.  Tile placement records are now fully named: `+0x04` is a yaw in 4096ths of a turn (observed only at quarter turns in the samples) and `+0x10/+0x14/+0x18` are 12.12 fixed-point position, with the file storing negated Z.
 
 The object editor can inspect and edit an object's existing Section2 initial-local
 slice. Values are shown as raw `u32`, signed `s32`, and fixed12 interpretations.

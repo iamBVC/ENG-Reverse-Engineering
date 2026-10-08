@@ -36,7 +36,7 @@ The loader then reads chunk tag and chunk size pairs and dispatches on the littl
 | `1179602516` | `FONT` | 256-entry glyph material/metric table | `sub_558C90` |
 | `1279739988` | `LGHT` | light records | `sub_42C180` |
 | `1279742019` | `LGPC` / `CPGL` | localized dialogue/text table | `sub_558DB0` |
-| `1280198223` | unknown | small loader path | `sub_42AB10` |
+| `1280198223` | `LNFO` | 8-byte chunk (two u32s) read into `dword_5FF070` / `dword_5FF060` | `sub_42AB10` |
 | `1296125984` | `MAP ` | main map/full placement chunk | `sub_42AC50` |
 | `1095585859` | `AMPC` / `CPMA` | ambient-audio resource bank and emitters | `sub_558D70` |
 | `1162757152` | `END ` | terminator | closes WAD |
@@ -525,20 +525,21 @@ Later chunk loaders and runtime paths test individual bits.  Confirmed or observ
 
 | Mask | Status | Consumer | Meaning |
 |---:|---|---|---|
-| `0x00000010` | confirmed | `sub_42AC50`, `loc_42BECC` | MAP has `final_optional_dword` before `final_u16`; otherwise `dword_6DA328` defaults to 200. |
+| `0x00000010` | confirmed | `sub_42AC50`, `loc_42BECC` | MAP has `final_optional_dword` before `final_u16`; otherwise `dword_6DA328` defaults to 200 (asm lines 63722-63731). `dword_6DA320 = 100` is written unconditionally at `loc_42BEEF` (asm line 63735). `dword_6DA328` sizes a 72-byte-stride pool created by `sub_4280C0` (`GlobalAlloc(count * 72)`, asm lines 58027-58053) into `dword_6D94DC` (pool base), `dword_6D9BD8` (free-list head) and `dword_6D9BDC` (counter of allocated entries, initialised to 0); the pool's gameplay purpose is still unnamed. |
+| `0x00000040` | observed only | no confirmed consumer yet | Active only in `t1l1m004` among current samples. |
 | `0x00000080` | observed only | no confirmed `dword_6DA330` consumer yet | Active in all sampled WADs. |
-| `0x00000100` | loader-confirmed, unobserved | `sub_42AB50`, `loc_42ABE8` | STPC has an extra tail count and repeated 16-byte records with variable 8-byte subrecords. |
+| `0x00000100` | loader-confirmed, unobserved | `sub_42AB50`, `loc_42ABE8` | STPC has an extra tail count and repeated 16-byte records with variable 8-byte subrecords (asm line 61957, `test ch, 1`).  Not to be confused with `sub_42AB10`, which reads the unrelated 8-byte `LNFO` chunk (tag `1280198223`). |
 | `0x00000200` | observed only | no confirmed consumer yet | Active in tested full level WADs. |
 | `0x00000400` | observed only | no confirmed consumer yet | Active in several WADs; absent in `t1l1m003/t1l1m004`. |
-| `0x00000800` | runtime-confirmed, unobserved | `sub_419676`, nearby init paths | Passed into `sub_424B60/sub_424B90` during render/camera initialization. |
-| `0x00010000` | confirmed | `sub_42AC50`, `loc_42B273` | MAP includes optional 20-byte records and extra vertex-color blocks for marked tiles. |
-| `0x00080000` | runtime-confirmed, unobserved | `sub_550E60` jump-table case 142 | Passed to `sub_54BBD0`; semantic name still unknown. |
+| `0x00000800` | runtime-confirmed | `sub_424B60`, `sub_424B90`, `loc_42F037` | Passed as an int argument during render/camera initialization (asm lines 37448, 43919). At `loc_42F037` (asm line 68085, `test ah, 8`) a predicate returns 1 only when `WFPC & 0x800` **and** `[edi+0x1C] & 0x4000` are both set. |
+| `0x00010000` | confirmed | `sub_42AC50`, `loc_42B273` | MAP includes the optional20 table at `MapWorld +0x20` / `+0x50`; disk 20 bytes -> runtime 24 bytes per record (asm lines 62628-62691). |
+| `0x00080000` | runtime-confirmed, unobserved | `sub_550E60` jump-table case 142 | `WFPC & 0x80000` is pushed onto the actor script stack (asm line 382165), so scripts can query it. Semantic name still unknown. |
 | `0x00100000` | loader-confirmed, unobserved | `SPRT` branch at `loc_558AD1` | SPRT includes `optional_count` and a u32 table after `material_base_index`. |
-| `0x00200000` | loader-confirmed, unobserved | `sub_42AC50`, `loc_42BBFB` | MAP includes a global chain/table structure at `dword_6D9C90/dword_6D9CC0`. |
+| `0x00200000` | loader-confirmed | `sub_42AC50`, `loc_42BBFB` | MAP includes the nested group/chain table at `dword_6D9C90` / `dword_6D9CC0`; layout documented below. |
 | `0x00400000` | observed only | no confirmed consumer yet | Active only in `t1l1m001` among current samples. |
-| `0x04000000` | loader-confirmed, unobserved | `sub_42AC50`, `loc_42BD57` | When the MAP chain table exists, each chain record includes an extra dword at runtime `+0x14`. |
-| `0x08000000` | observed only | no confirmed `dword_6DA330` consumer yet | Active in all sampled WADs. |
-| `0x10000000` | confirmed | `sub_42AC50`, `loc_42B335`; `sub_42C790` | MAP allocates wider per-tile vertex-list pointers and uses optional20 records in follow-up processing. |
+| `0x04000000` | loader-confirmed | `sub_42AC50`, `loc_42BD57` | When the `0x200000` group table exists, each 28-byte chain record also carries an extra u32 at runtime `+0x14`; otherwise that field is explicitly zeroed (asm lines 63613-63632). |
+| `0x08000000` | observed only | no confirmed `dword_6DA330` consumer yet | Active in all sampled WADs.  There is no `WFPC & 0x08000000` test anywhere in the executable; the `tile_count * 8` allocation at `loc_42B335` is gated by `0x10000000`, not by this bit. |
+| `0x10000000` | confirmed | `sub_42AC50`, `loc_42B335`; `sub_42C790` (asm line 64606); asm lines 387398, 387509 | Widens the `MapWorld +0x58` pointer array to `tile_count * 8` (asm lines 62694-62707) so a **second** pointer array starts at `+0x58 + 4 * tile_count` (asm lines 63011-63016); the second array is written at index `tile_count + extra_ordinal` for each tile that also has a `+0x50` optional20 record.  The later consumers perform an extra `mov ecx, [ecx]` dereference when the bit is set. |
 
 Observed sample values:
 
@@ -553,6 +554,48 @@ Observed sample values:
 | `t1l1m004` | `0x180102D0` | `0x10`, `0x40`, `0x80`, `0x200`, `0x10000`, `0x08000000`, `0x10000000` |
 
 The extractor writes `wfpc/summary.txt`, `wfpc/summary.json`, and `wfpc/flags.csv`.  `parse_map_full_exe` now receives `assume_optional20` from `WFPC & 0x10000` and `assume_final_dword` from `WFPC & 0x10`, matching the executable's gated MAP read order.
+
+### WFPC `0x200000` nested group table
+
+Confirmed from `sub_42AC50`, asm lines 63491-63719.  This is the only structure gated by `0x200000`, and it lives in globals rather than in `MapWorld`:
+
+```text
+u32 group_count                       -> dword_6D9CC0
+alloc group_count * 8                 -> dword_6D9C90        (array of 8-byte {count, ptr} records)
+
+for g in 0 .. group_count-1:
+    u32 entry_count                   -> dword_6D9C90[g] slot 0
+    alloc entry_count * 8             -> dword_6D9C90[g]     (group block header, stride 8)
+
+    for j in 0 .. entry_count-1:
+        u16 a -> block[j*8 + 0]       chain record count
+        u16 b -> block[j*8 + 2]       chain kind bitmask, OR-updated below
+        alloc a * 0x1C                -> block[j*8 + 4]
+
+        for k in 0 .. a-1:                                   (record stride 0x1C)
+            +0x00 u32  prev pointer, 0 for the first record   computed, not read
+            +0x04 u32  next pointer, 0 for the last record    computed, not read
+            +0x08 u32  read from file
+            +0x0C u32  read from file
+            +0x14 u32  read from file only when WFPC & 0x04000000, else zeroed
+            +0x10 u16  read from file, kind selector
+            +0x12 u16  read from file
+
+            switch (u16 value at record +0x10):
+                1, 6, 7, 11, 13   -> block[j*8 + 2] |= (1 << kind)
+                10                -> block[j*8 + 2] |= 0x440    (bits 6 and 10)
+                12                -> block[j*8 + 2] |= 0x1040   (bits 6 and 12)
+                2..5, 8, 9, other -> no change
+
+after the group loop:  dword_6D9CC0 = group_count - 1
+flag clear:            dword_6D9CC0 = 0 and dword_6D9C90 = 0
+```
+
+Disk bytes consumed per inner `j` entry are `4 + a * 12`, or `4 + a * 16` when `WFPC & 0x04000000` is set (plus the leading `u32 entry_count` per group).
+
+Two corrections to the earlier draft of this section: runtime `+0x10` and `+0x12` **are** read (two `sub_415AF0` u16 reads at asm lines 63639-63650), and the runtime group count is `group_count - 1`, not `group_count` (asm line 63713).
+
+`dword_6D9C90` and `dword_6D9CC0` are referenced **only inside `sub_42AC50`** in the PC executable; no other direct consumer was found, so the chain records are built but their reader is still unidentified.
 
 ## LGPC localized dialogue/text chunk
 
@@ -594,6 +637,39 @@ text_entry        = dword_6DA334[dialogue_index * dword_6DA338 + dword_584F04]
 ```
 
 The last row is treated as a `#...` voice/id tag.  If it begins with `'#'`, the code strips the `#`, parses the following number through `sub_40D890`, and calls the audio/speech path through `sub_546620`.  The selected visible string row is controlled by `dword_584F04`; in the current Italian PC WAD samples row `0` is the displayed localized string and row `1` is the `#...` tag.
+
+#### `dword_584F04` is the language index
+
+`dword_584F04` is now resolved: it is the **language index**, not a text style or channel selector.  It has 89 references in the executable and exactly **one write site**, asm line 394474, in the tail of the WAD loader:
+
+```asm
+loc_558BCE:                     ; Stream
+push    esi
+call    _fclose
+call    sub_4071D0
+push    edi
+call    sub_41E1C0
+mov     edx, dword_5F6EC0       ; the persisted "Language" setting
+add     esp, 8
+mov     dword_581164, edi
+mov     dword_584F04, edx       ; only write in the whole executable
+```
+
+The source `dword_5F6EC0` is identified by the saved-settings table, which pairs it with its key name at asm lines 415878-415879:
+
+```asm
+dd offset dword_5F6EC0
+dd offset aLanguage     ; "Language"
+```
+
+`sub_41D340` initialises `dword_5F6EC0` to 0 (asm line 42440), so the default language index is 0.  The same index selects the built-in menu labels, e.g. asm lines 19156-19169:
+
+```asm
+mov     eax, dword_584F04
+mov     eax, off_57BC14[eax*4]  ; "Salvataggio gioco 1"
+```
+
+**Important nuance for this build.**  Those menu pointer arrays hold exactly one string per label, all Italian: `off_57BC14`, `off_57BC18` and `off_57BC1C` are three adjacent single-pointer labels at asm lines 440533-440535 pointing at `aSalvataggioGio`, `aSalvataggioGio_0` and `aSalvataggioGio_1`, and the surrounding run (asm lines 440520-440563) contains no English variants at all.  Indexing `off_57BC14[n*4]` with `n > 0` therefore walks into the *next* label rather than into a language variant.  Index 0 is the only valid index in this executable, so LGPC row selection in every shipped PC WAD sample reduces to row 0 even though the two-row-per-language layout exists in the container format.
 
 Observed samples:
 
@@ -781,6 +857,24 @@ Current exporter output includes:
 
 The record format is `GeometryRecord84`.
 
+### TRAK chunk container layout (confirmed from `sub_42AAC0` + `sub_5563F0`)
+
+`sub_42AAC0` allocates the whole chunk with `sub_41EF00` (a bump allocator over a single 16 MB `operator new` block, globals `dword_586580` block base, `dword_586584` cursor, `dword_586588` remaining; it returns 0 when the request exceeds the remaining space), reads it with `sub_415A90`, then calls `sub_5563F0(&cursor, record_count, &dword_5846EC)` with `cursor = buffer + 4`.
+
+```text
++0x00  u32 record_count
++0x04  headers[record_count]        132-byte GeometryRecord84 headers, contiguous
+       then, per record in order:   vertices   (24 * vertex_count)
+                                    triangles  (28 * triangle_count)
+                                    collision  (32 * (group0 + group1 + group2))
+```
+
+`sub_5563F0` does not allocate.  It sets `dword_5846EC = cursor` (that is, `buffer + 4`, the header array base) and advances the cursor to `buffer + 4 + record_count * 132`, then walks the headers with `add edx, 84h` and writes each relocated `+0x70` / `+0x74` / `+0x80` pointer from the single advancing cursor.  Every record access elsewhere in the executable is therefore `dword_5846EC + 132 * index`, which is why MAP uses `shl edx, 5; add edx, eax` (multiply by 33) before `[ecx + edx*4 + 6Ch]`.
+
+Validated against the shipped level WADs: reconstructing the chunk from `4 + 132 * record_count + sum(24*vc + 28*tc + 32*(g0+g1+g2))` reproduces the `TRAK` chunk size exactly for every sampled WAD (for example `t1l1m001`: 127 records, 16764 header bytes, 547476 payload bytes, 564244 total).
+
+`sub_5563F0` also rewrites each triangle's material pointer to `dword_581154 + 20 * material_index` while relocating, so triangle material references are resolved at load time rather than at render time.
+
 ## STPC / CPTS chunk
 
 `STPC` is loaded by `sub_42AB50` into `dword_6D9DBC`.  It contains packed scene/container data, embedded `GeometryRecord8C` records, animation data, and object/script data consumed by MAP object records.
@@ -942,7 +1036,8 @@ The executable-confirmed MAP parser follows `sub_42AC50`.
 struct MapWorld {
     uint32_t tile_count;          // +0x00
     uint32_t object_count;        // +0x04
-    uint32_t object_count_b;      // +0x08  read after vertex colors; exact semantics unknown
+    uint32_t object_count_b;      // +0x08  read right after object_count; used by sub_54D0D0 actor
+                                   //          pool sizing and returned to scripts by sub_550E60 case 52
     uint16_t final_u16;           // +0x0C  read at very end via sub_415AF0
 
     uint32_t grid_cell_count;     // +0x10  computed: grid_height * grid_width
@@ -966,23 +1061,82 @@ struct MapWorld {
     uint32_t *tile_trak_indices;    // +0x4C
     Optional20Runtime24 *optional20;// +0x50
     // +0x54 unknown
-    uint8_t **vertex_color_blocks;  // +0x58  [tile_count] ptrs; each points to vertex RGBA bytes
+    uint8_t **vertex_color_blocks;  // +0x58  [tile_count] ptrs; each points to vertex RGBA bytes.
+                                   //          when WFPC & 0x10000000 the array is tile_count*8 wide and a
+                                   //          second pointer array follows at +0x58 + 4*tile_count
 
     uint32_t light_count;           // +0x5C
     RuntimeLight112 **lights;       // +0x60
 };
 ```
 
-### MAP initial tile records (24 bytes each)
+### MAP chunk on-disk field order (confirmed from `sub_42AC50`)
 
-`sub_42AC50` reads `tile_count` × 24-byte tile records at the start of the MAP chunk.  Each record contains 6 u32s: `x (f32), y (f32), z (f32), unk_float, flags_or_id, nonzero_marker`.
+`sub_42AC50` (asm lines 62011-63754) is a single strictly sequential reader.  `sub_415AB0` is a plain 4-byte `fread` and `sub_415AF0` a plain 2-byte `fread`, so the field order below is also the byte order on disk.  Read helpers: `sub_415AB0` = fread 4 (asm line 32672), `sub_415AF0` = fread 2 (asm line 32722).
 
-These are **not** stored in a persistent `MapWorld` array.  The loader uses them only to:
+```text
+ 1. u32 tile_count                -> MapWorld +0x00
+ 2. u32 grid_width                -> MapWorld +0x14
+ 3. u32 grid_height               -> MapWorld +0x18
+ 4. tile_count * 24 B  "Array A" tile records (see below; not stored in MapWorld)
+ 5. u32 count + count * u32       -> MapWorld +0x30  (Section2 initial-local pool;
+                                                      the count is not stored in MapWorld)
+ 6. u32 section3_count -> +0x1C, then records: disk 90 B -> runtime 92 B -> +0x24
+ 7. u32 section4_count -> +0x28, then records: disk 34 B -> runtime 48 B -> +0x2C
+ 8. Section5 zone table: exactly 0x100 bytes = 32 entries * 2 u32 -> global dword_6DA350
+                                                      (asm lines 62489-62511)
+ 9. grid_height * grid_width * u32 -> MapWorld +0x48  (grid_flat, one zone id per cell)
+10. tile_count * 24 B  "Array B" placement records -> MapWorld +0x3C (32-byte runtime stride)
+11. tile_count * u32   -> MapWorld +0x4C  (TRAK record index per tile)
+12. if WFPC & 0x10000: u32 count -> +0x20, then records: disk 20 B -> runtime 24 B -> +0x50
+13. per-tile vertex-colour blocks (sizes derived from TRAK vertex counts, see below)
+14. if WFPC & 0x200000: the nested group table (see the WFPC chapter)
+15. u32 object_count -> +0x04, u32 object_count_b -> +0x08 (asm lines 63298/63302),
+    then object_count records: disk 58 B -> runtime 72 B -> +0x38
+16. if WFPC & 0x10: u32 -> dword_6DA328, else dword_6DA328 = 200;
+    dword_6DA320 = 100 always (asm lines 63722-63735)
+17. u16 final value -> MapWorld +0x0C
+```
 
-1. Compute a grid cell index from `z` and `x` (using the rounding constant `flt_56E158`) and insert the tile into the spatial hash linked list (`world+0x40`/`world+0x44`).
-2. If `nonzero_marker != 0`, append the tile index to the temporary `Block` list that later links optional20 records to tiles.
+Object records are 58 bytes on disk, confirmed by counting the reader: 12 `sub_415AB0` u32 reads plus 5 `sub_415AF0` u16 reads in the record loop at asm lines 63317-63485 (`12*4 + 5*2 = 58`).  The runtime array is allocated with stride 72 (`(count + count*8) * 8`, asm lines 63304-63309) and the loop advances `add edi, 48h`.
 
-The `y`, `unk_float`, and `flags_or_id` fields are read but not consumed by the loader.  `flags_or_id` (5th u32) may serve a purpose in a render or collision consumer not yet traced.
+Verified against `t1l1m001.wad` (`MAP ` chunk data offset 6067810, size 229516): `tile_count=1358`, `grid_width=96`, `grid_height=96`, `section2=342`, `section3=13`, `section4=178`, `optional20=18`, `WFPC=0x18410690`.
+
+### Two separate per-tile arrays (Array A and Array B)
+
+The MAP chunk contains **two** `tile_count`-length 24-byte tile arrays in the same tile order, with different encodings.  The earlier draft of this section treated the first one as "the tile records"; it is a throwaway spatial-index array, and the persistent table is the second one.
+
+**Array A** — chunk start, 24 bytes, never stored in `MapWorld`:
+
+```text
+u32[0] f32 pos_x        u32[1] f32 pos_y        u32[2] f32 pos_z (negative)
+u32[3] yaw_4096         u32[4] unnamed tile id  u32[5] nonzero_marker
+```
+
+The loader consumes only `u32[0]`, `u32[2]` and `u32[5]`:
+
+1. It computes a grid cell index and inserts the tile into the spatial hash (`world+0x40` / `world+0x44`).  The formula at asm lines 62115-62127 is
+   `cell = (int)(pos_x - 0.5) - grid_width * (int)(pos_z + 0.5)`, using `flt_56E158 = 0.5` (asm line 406253).
+2. `u32[5] != 0` appends the tile index to the temporary `Block` list, which later links optional20 records to tiles.
+
+`u32[1]`, `u32[3]` and `u32[4]` are read but not consumed by the loader.  `u32[4]` is a small per-tile id (observed range `0..0x7E` with 121 distinct values in `t1l1m001`; `0..0x84` across the five sampled WADs) with no counterpart in Array B.
+
+Measured across `t0i0m000`, `t1l1m001`, `t1l1m002`, `t1l1m003`, `t1l1m004`: the number of Array A entries with `u32[5] != 0` equals the optional20 record count in every WAD (18/18, 7/7, 12/12, 6/6; `t0i0m000` has 0/0 and no optional20 table).  That closes the link between the `Block` list and the optional20 table.
+
+**Array B** — `MapWorld +0x3C` placements, 24 bytes on disk -> 32 bytes at runtime (runtime offsets 0, 4, 8, 0x10, 0x14, 0x18; runtime `+0x0C` and `+0x1C` are skipped by the reader and never written, so their contents are whatever the bump allocator returned):
+
+```text
+disk u32[0] -> runtime +0x00   always 0 in every sampled WAD
+disk u32[1] -> runtime +0x04   yaw_4096; only 0x0, 0x400, 0x800, 0xC00 observed (0/90/180/270 deg)
+disk u32[2] -> runtime +0x08   always 0 in every sampled WAD
+disk u32[3] -> runtime +0x10   pos_x
+disk u32[4] -> runtime +0x14   pos_y
+disk u32[5] -> runtime +0x18   negated pos_z (the file stores -Z)
+```
+
+Cross-checks over all tiles of the five WADs above: `A[i].u32[3] == B[i].u32[1]` for 100 % of tiles in all five, and `B[i].u32[0] == 0` and `B[i].u32[2] == 0` for 100 % of tiles in all five.  The yaw values are strictly quarter-turn quantised in every sampled WAD.
+
+The `A[i].f32` position and the `B[i]` integer encoding are equivalent, re-derived independently for 100 % of tiles in all five WADs with zero delta: `A.u32[0] == B.pos_x / 4096`, `A.u32[1] == B.pos_y / 4096` and `A.u32[2] == -B.pos_z / 4096`.  The sign follows the file's negated-Z convention, so comparing `A.u32[2]` against `+B.pos_z` fails on every non-zero tile.  The Array B scale is confirmed: `sub_42BF40` does `fild dword ptr [eax+10h]`, `fild dword ptr [eax+14h]` and `fild dword ptr [eax+18h]`, each followed by `fmul ds:dbl_56E020`, and `dbl_56E020 = 0.000244140625 = 1/4096` (asm line 406132), so `+0x10/+0x14/+0x18` are signed 12.12 fixed-point world units.  The `+0x18` value is additionally negated with `fchs` (asm line 63883).
 
 ### MAP tile placement / render dispatch
 
@@ -1009,6 +1163,103 @@ Confirmed export coordinate basis:
 - MAP object actor positions are copied directly into `Actor340 +0x30/+0x34/+0x38` by `sub_54CFC0`.
 - Terrain queries convert actor Z into terrain space by shifting and negating it (`mov eax, [actor+0x24]`, `sar eax, 0x0C`, `neg eax` in the relevant query path).  The world exporter therefore uses terrain as the reference orientation and exports STPC actor/object Z as `-actor_z`.
 - A centered terrain Z mirror was tested and rejected for the normal world export; the correct default is no centered mirror, no global object Z offset, and one final whole-world OBJ Z flip so terrain and STPC objects are mirrored together without changing their relative alignment.
+
+### Section5 zone table and the active-zone gate
+
+The Section5 table is the 32 × 2 u32 block read at step 8 of the MAP field order.  It is **not** part of `MapWorld`: `sub_42AC50` allocates exactly `0x100` bytes with `sub_41EF00(0x100)` into the global `dword_6DA350` and fills it with 32 pairs of `sub_415AB0` reads (asm lines 62489-62511).  `sub_558C30` zeroes it during level reset (asm line 394522).  `sub_42AC50` also initialises `dword_586424 = 0xFFFF0000` immediately after loading it (asm line 62512).
+
+`MapWorld +0x48` (`grid_flat`) holds one **zone id per grid cell**.  Measured over every cell of `t0i0m000`, `t1l1m001`, `t1l1m002`, `t1l1m003`, `t1l1m004` the values stay inside `[0..30]` with zero out-of-range entries, so the 32 table entries are indexed directly by that value.
+
+Confirmed semantics of the two entry fields:
+
+- `entry.u32_00` is a **32-bit zone-connection bitmask**.  In every sampled WAD most entries are exactly `1 << index` (for example `[0]=0x00000001`, `[19]=0x00080000`, `[31]=0x80000000`); the remaining entries OR in extra bits (for example `t1l1m001 [1]=0x2884030E`, `[4]=0x700A08B8`), which is multi-zone connectivity.  Across the five WADs each table has 13-28 self-only entries and 4-19 multi-zone entries, and no entry is zero.
+- `entry.u32_04` is **0 in every entry of every sampled WAD** (5 WADs × 32 entries, and 7 WADs × 32 entries in the earlier pass).  It is a per-zone value that shipped unused; the executable still reads it as the default for `dword_586424`.
+
+The consumer is `sub_41E020` (asm lines 43685-43813), called per frame:
+
+```c
+ix = (int)(dword_5790B0 >> 12);          // player/camera tile x
+iy = (int)(dword_5790B8 >> 12);          // player/camera tile y
+world = dword_584648;
+dword_58642C = -1;
+if (ix < 0 || ix >= world->grid_width || iy < 0 || iy >= world->grid_height) {
+    dword_586424 = 0xFFFF0000;           // out of the grid: no zone gate
+    goto scan;
+}
+cell = world->grid_width * iy + ix;
+if (!dword_6DA350) { dword_586424 = 0xFFFF0000; goto scan; }
+zone = world->grid_flat[cell];
+dword_58642C = dword_6DA350[zone].u32_00;          // active zone mask
+if (dword_58641C) {
+    dword_586424 = dword_58641C;                  // explicit override wins
+} else {
+    dword_586424 = dword_6DA350[zone].u32_04;
+    node = world->grid_heads[cell];               // +0x40
+    if (node) {
+        while (node->next) node = node->next;     // LAST node in the bucket
+        dword_586424 += world->placements[node->tile_index].pos_y;   // +0x14, stride 32
+    }
+}
+scan:
+if (dword_58642C == 0) dword_58642C = -1;         // a zone with no links gates nothing
+for (a = dword_6D9E38; a; a = a->next) {          // actor list
+    if (a->flags0 /* +0xE8 */ & 0x04) continue;   // skipped actor
+    if (a->flags0 & 0x800) { a->flags1 /* +0xEC */ |= 0x00040000; continue; }
+    a->flags1 &= ~0x00040000;
+    ax = a->pos_x >> 12 /* +0x30 */;  ay = a->pos_y >> 12 /* +0x38 */;
+    if (in bounds) {
+        c2 = world->grid_width * ay + ax;
+        if (dword_58642C & (1 << world->grid_flat[c2])) a->flags1 |= 0x00040000;
+    }
+}
+```
+
+Consequences:
+
+- **`Actor340 +0x0EC` bit `0x00040000` means "this actor is in a zone connected to the player/camera zone"**, or the actor has `flags0 & 0x800` (an always-visible override), or the gate is disabled.  Consumers branch on it, for example `sub_555140` at asm line 389499: `test dword ptr [ecx+0ECh], 40000h; jz skip`.
+- Terrain is culled by the same mask.  `sub_42BF40` at `loc_42C011` (asm lines 63860-63869) computes `1 << world->grid_flat[grid_width*y + x]` and skips the whole grid cell when `dword_58642C` does not contain that bit.
+- `dword_58642C` is the current active-zone bitmask; `dword_586424` is the **fallback reference height (fixed-point)** for the player's grid cell, with sentinel `0xFFFF0000` when the camera is outside the grid; `dword_58641C` is an explicit override for `dword_586424`, cleared by `sub_41E1C0` (asm line 43847) and `sub_54DE00` (asm line 376055).
+- `dword_58641C` is script-visible: `sub_5509F0` jump-table **case 120** returns `offset dword_58641C` (asm line 381695).
+- `dword_586424` is the fallback for `Actor340 +0x14C`.  `sub_555140` (asm lines 389552-389560) uses `actor+0x14C` unless it equals `0xFFFFF000`, in which case it uses `dword_586424`.  Because `dword_586424` is built from `placements[].pos_y + zone.u32_04`, the existing `+0x14C yaw_override` name is questionable and the field behaves like a height override.
+
+### Per-tile vertex-colour blocks (`MapWorld +0x58`)
+
+For each tile `i`, `trak_index = MapWorld +0x4C[i]` and `vertex_count = u16 at dword_5846EC[trak_index*132 + 0x6C]` (the TRAK `GeometryRecord84.vertex_count`).  The loader allocates `vertex_count * 4` and reads `vertex_count` u32s (asm lines 62719-62830).
+
+Two transformations are applied while reading:
+
+- When the global byte flag `dword_6D7C60+1` is **0**, each vertex is converted to greyscale using the luminance weights `flt_56E130`, `flt_56E138`, `flt_56E134` and all three channels are set equal (asm lines 62770-62796).
+- Afterwards each of the three channels is **doubled and clamped to 0xFF** (asm lines 62801-62817).  The 4th byte is left alone, so it carries a per-vertex control byte rather than a normal alpha.
+
+That control byte then drives a second colour pass.  The loader tracks the maximum 4th byte seen in the first block (`var_20`, asm lines 62760-62767).  If that maximum is greater than 1 it allocates `(max - 1) * vertex_count * 4` more bytes, stores `max` into the first vertex's 4th byte (`mov [eax+3], bl`, asm line 62857), and reads `max - 1` further blocks of `vertex_count` u32s (asm lines 62861-62900).  So a tile consumes `max(1, max_control_byte) * vertex_count * 4` bytes.
+
+`WFPC & 0x10000000` only changes the size and shape of the pointer arrays at `MapWorld +0x58`; it does not change how many colour bytes are read.  (`WFPC & 0x08000000` has no known consumer at all.)
+
+**The colour byte accounting is byte-exact once the optional20 extra blocks are included.**  `sub_42AC50` also reads a second colour block for every tile that appears in the `+0x50` optional20 table: at `loc_42B672` (asm lines 63002-63016) it scans the `[esi+0x20]`-count table with stride 24 for the entry whose runtime `+0x14` equals `&tile_trak_indices[tile]`, then reads the vertices of that entry's `+0x10` TRAK record into the same tile block.  With the per-tile rule above plus these extra blocks, the MAP chunk reconstructs byte-for-byte for every sampled WAD (`parsed_size == chunk size` for `t0i0m000` and `t1l1m001`-`t1l1m004`).  For `t1l1m001` the first-block bytes are 99,828 and the optional20 extra blocks add 5,884, giving a 105,712-byte colour region, so the per-tile rule alone is about 5.9 % short (2-3 % on the other full levels), not the 12 % that measuring up to the end of the chunk would suggest (116,714 + 105,712 + 8 + 122 * 58 + 4 + 2 = the 229,516-byte chunk).
+
+### Terrain render loop field map (`sub_42BF40`)
+
+`sub_42BF40(world, dword_5846EC)` (asm lines 63769-63999) is the function that walks visible grid cells and draws terrain, and it is the single best cross-check on the `MapWorld` layout because it touches seven of the fields in one place.  `esi` is the world pointer throughout.
+
+```text
+MapWorld field   Access in sub_42BF40                                        Meaning
++0x14            [esi+14h] as row stride and loop bound (asm 63830, 63852)   grid_width
++0x18            [esi+18h] as loop bound (asm 63810)                         grid_height
++0x3C            [esi+3Ch] + tile_index*32 (asm 63871-63873)                 placements
++0x40            [esi+40h][cell], then node = [node+4] (asm 63856, 63971)    grid_heads, linked list
++0x48            1 << [esi+48h][cell] tested against dword_58642C (asm 63863-63869)
+                                                                              grid_flat, used as a zone bit index
++0x4C            [esi+4Ch][tile] * 33 -> 132-byte record, u16 at +0x6C (asm 63902-63908)
+                                                                              TRAK record index; +0x6C = vertex_count
++0x58            [esi+58h][tile], byte at [block+3] compared with 1 (asm 63893-63896)
+                                                                              vertex-colour block, +3 = block count
+```
+
+The grid node record is therefore `{ u32 tile_index; GridNode *next; }`, matching `MapWorld +0x44`, and the list walk at asm line 63971 continues until the next pointer is NULL.  The `*33` scaling (`shl 5` then `add`) at asm lines 63905-63906 and 63933-63934 is what proves the TRAK header array uses a 132-byte stride.
+
+Two globals gate the colour path: `dword_5865CC` selects between the coloured call and a plain geometry call (asm lines 63886-63891), and `dword_5865D4` combined with `[block+3] > 1` selects whether an extra colour block is passed (asm lines 63896-63899).  The coloured path calls `sub_556510(record, translation, yaw_radians, colour_block)` with four arguments (`add esp, 10h`, asm line 63938); the plain path calls `sub_41FB30` with fourteen (`add esp, 38h`, asm line 63965).
+
+The visible cell window is computed from the camera floats `dword_6D8408` and `dword_6D8400` with `__ftol` and clamped against `grid_height - 1` and `grid_width - 1` (asm lines 63786-63841), so the loop is a clamped rectangle rather than the whole grid.
 
 ### Object table: disk 58 bytes -> runtime 72 bytes -> Actor340
 
@@ -1384,7 +1635,11 @@ struct Actor340 {
     uint32_t unk_140;                // +0x140 / 320, default 0
     uint8_t unknown_144[8];
     uint32_t unk_148;                // +0x148 / 328
-    int32_t yaw_override;            // +0x14C / 332, default -4096
+    int32_t height_override;         // +0x14C / 332, default 0xFFFFF000 (-4096) means no override.
+                                     //          sub_555140 (asm lines 389552-389560) uses this value
+                                     //          unless it equals 0xFFFFF000, then substitutes
+                                     //          dword_586424, the active grid-cell reference height
+                                     //          built from placements[].pos_y + zone.u32_04
     int8_t b336, b337, b338, b339;   // +0x150..+0x153, default -1
 }; // 0x154 / 340
 #pragma pack(pop)
@@ -1494,24 +1749,29 @@ Input globals exposed to STPC scripts:
 3. Exact meaning of STPC Section2 animation payloads and the non-transform fields in MAP Section4; Section4 position and XYZ rotation use through opcode `0xFE` is confirmed.
 4. The final `LGHT` type 2/4 byte `falloff_or_mode` needs lighting evaluator xrefs for a precise name.
 5. `GeometryRecord84` fields `+0x00`, `+0x04`, `+0x08`, and `+0x7E` — now have binary observations (see below), but semantic names not yet confirmed.
-6. STPC object-definition structure and script VM opcodes partially decoded (see below); geometry table parsing, mesh binding, child-transform inheritance, and Section4 route transforms are confirmed, but complete actor/object behavior still needs VM semantics.
+6. The 293 real high-opcode handlers in `funcs_54D1B8` still need per-handler operand widths and semantics.  The table extent, the no-op count and the calling convention are now confirmed, but any handler that re-reads its own immediate changes the operand width for that opcode.
 7. Remaining material tables `dword_581144` and `dword_58114C` are used by render state/texture refs but are not fully named.
 8. `SPRT` optional table behind `dword_6DA330 & 0x100000` is loader-confirmed but not observed in current sample WADs; high-level sprite records and animation/frame command semantics remain unnamed.
 9. Several observed WFPC bits are still unnamed: `0x40`, `0x80`, `0x200`, `0x400`, `0x00400000`, and `0x08000000`.
-10. `LGPC +0x08` is read by the loader but not consumed in the confirmed path yet; `dword_584F04` row-selection semantics need a precise name.
+10. ~~The per-tile vertex-colour region~~ — **resolved**: with the optional20-linked extra colour blocks (`loc_42B672`) the documented rule reconstructs every sampled MAP chunk byte-for-byte, so the MAP field order is byte-exact.
+11. The `dword_6D9C90` / `dword_6D9CC0` chain table has a confirmed record layout and a confirmed size formula, but no confirmed consumer or semantic name.
+12. `MapTilePlacement32 +0x00` and `+0x08` have no confirmed semantic names.  Both are 0 in 100 % of tiles across all five sampled WADs, so no consumer has been observable.
+13. `LGPC +0x08` is read by the loader but not consumed in the confirmed path yet.
+14. The three script-stack operands of opcode `0x192` and its 7/8/5/6 level-advance wrap constants are not yet named.
 
 ## Recommended next reverse-engineering targets
 
-1. Script VM opcode handlers in `funcs_54D1B8` (opcodes > 0x44) — many schemas still need field-level names.
+1. Script VM opcode handlers in `funcs_54D1B8` (opcodes `0x45`-`0x1B1`).  293 of the 365 entries are real handlers and 72 are `nullsub_2`, so this is the single largest remaining block of unknown semantics.
 2. ~~Consumers of `MapObjectRuntime72 +0x28` and `+0x3C`~~ — **resolved**: `+0x28` is the initial-local pointer (`world->section2 + object.section2_index`, or NULL if disk value = 0xFFFFFFFF); `+0x3C` is `section4_ptr` (element in the section4 runtime array, or NULL if sentinel). The remaining work is naming each STPC script local slot per object definition.
 3. Lighting evaluator functions that iterate the active light list and read `RuntimeLight112 +0x50..+0x68`.
 4. Finish naming the `sub_550E60` / `sub_5509F0` function-dispatch ids used by STPC opcodes.  The calling convention is decoded, but most switch-case semantic names are still pending.
 5. Sprite setup structures that feed `sub_425D40`, especially fields `+0x05`, `+0x0C`, `+0x2C`, and the inline variant table at `+0x2F`.
-6. Xrefs or indirect consumers for observed-only WFPC bits, especially always-on `0x80` and `0x08000000`.
-7. `dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection.
-8. `MapWorld +0x08` (`object_count_b`) — read from file immediately after `object_count`; exact semantics unknown (actor pool capacity, total count of something, etc.).
-9. Section5 32×8 table (runtime global `dword_6DA350`): 32 × 2 u32 entries read from MAP file into a global (not the `MapWorld` struct).  What these lookup values encode is still unknown.
-10. `MapTileDefDisk24` unnamed fields: `+0x00`, `+0x08`, and disk `+0x0C` (runtime `+0x10`, `+0x1C` is zero-init) have no confirmed semantic names yet.
+6. Xrefs or indirect consumers for the remaining observed-only WFPC bits, especially always-on `0x80`.
+7. ~~`dword_584F04` writes/initialization to identify whether LGPC row selection is language, text style, or channel selection~~ — **resolved**: it is the language index.  Its only write site in the executable is asm line 394474 in the WAD loader tail, sourced from `dword_5F6EC0`, which the saved-settings table names `"Language"` (asm lines 415878-415879) and `sub_41D340` initialises to 0 (asm line 42440).  The built-in menu arrays in this build hold one Italian string per label, so index 0 is the only valid index in the shipped PC executable.
+8. ~~`MapWorld +0x08` (`object_count_b`)~~ — **partially resolved**: it is read from file immediately after `object_count` (asm line 63302), feeds `sub_54D0D0` actor pool sizing, and is returned to scripts by `sub_550E60` jump-table case 52.  Tracing the spawn loop is still needed to name the relationship between the two counts.
+9. ~~Section5 32×8 table (runtime global `dword_6DA350`)~~ — **resolved**: `entry.u32_00` is the per-zone connection bitmask that becomes `dword_58642C` and gates both terrain culling and `Actor340 +0x0EC` bit `0x00040000`; `entry.u32_04` is 0 in every entry of every sampled WAD and only seeds the `dword_586424` fallback height.
+10. ~~`MapTileDefDisk24` unnamed fields~~ — **mostly resolved**: disk `+0x04` is `yaw_4096`, proven by the `2*pi/4096` multiplier constant `dbl_56E018` (asm line 406131); disk `+0x0C/+0x10/+0x14` are `pos_x`, `pos_y` and negated `pos_z` in 12.12 fixed point, proven by the `1/4096` constant `dbl_56E020` (asm line 406132); and the apparent `cmp eax, 0` conflict at asm line 390210 is a different value reusing the same stack slot.  Only disk `+0x00` and `+0x08` remain unnamed.
+11. ~~The vertex-colour byte accounting around `loc_42B25C`~~ — **resolved**: the previously missing bytes are the optional20-linked extra colour blocks (`loc_42B672`), and the MAP field order is byte-exact for every sampled WAD.
 
 ---
 
@@ -1685,9 +1945,13 @@ Section4 route transforms matter too: if `0xFE` executes before the mesh bind, t
 
 ### STPC high-opcode debug names from the ASM
 
-The high-opcode pointer table begins at opcode `0x45` with `sub_5535F0`; the nearby IDA label `funcs_54D1B8` lands on unrelated bytes before the actual pointer list.  Interpreting the list as base opcode `0x45` aligns the known handlers: `0x54 -> sub_553C10`, `0x94 -> sub_5531D0`, `0x95 -> sub_5533F0`, `0xB2 -> sub_553630`, `0xE0 -> sub_553230`, and `0xFE -> sub_54DFE0`.
+The high-opcode pointer table is the contiguous `dd offset ...` run at **asm lines 438608-438972**: exactly **365 entries**, of which **72 are `nullsub_2` no-ops** and **293 are real handlers**.  Read as base opcode `0x45`, it covers opcodes `0x45` through `0x1B1` inclusive, and the low table `funcs_54D1AB` starts on the very next line (asm line 438973) with its own 69 entries for opcodes `0x00`-`0x44`.
 
-Several table entries point at tiny handlers that print a script operation name.  These are useful labels for editor-facing opcode names even when the gameplay side effect still needs deeper analysis:
+The base is confirmed by address arithmetic, not by the IDA label.  Anchoring on the labelled dwords `dword_5790A0` (asm line 438528) and `dword_5790B0` (asm line 438538) and walking the `db`/`dd`/`align 4` items between them puts the first pointer of the run at **`0x579108`**.  `0x579108 - 0x45*4 = 0x578FF4`, which is exactly the address of the stray `funcs_54D1B8 dd 442E5947h` item IDA emits at asm line 438485 inside the unrelated string blob `unk_578FF0`.  So the label sits on the correct base address but on stale bytes: the high table's slots `0x00`-`0x44` are dead space, and only indices `0x45` and up hold handlers.
+
+Indexing the run by entry ordinal reproduces every known anchor exactly: `0x45 -> sub_5535F0` (line 438608), `0x54 -> sub_553C10` (438623), `0x94 -> sub_5531D0` (438687), `0x95 -> sub_5533F0` (438688), `0xB2 -> sub_553630` (438717), `0xE0 -> sub_553230` (438763), `0xFE -> sub_54DFE0` (438793), `0x115 -> sub_54E8B0` (438816), `0x192 -> sub_54D620` (438941), and `0x1B1 -> nullsub_2` (438972).  The same entry-ordinal indexing on the low table reproduces `0x22 -> sub_54D200`, `0x23 -> sub_54D220` and `0x3C -> sub_54D240`.  There is no duplicated table region: repeated handler names across opcodes are simply shared handlers.
+
+Several table entries point at tiny handlers that print a name.  Some print a script operation name, which is directly useful as an editor-facing opcode label; others print a developer message that names a gameplay condition instead.  Both are listed below even where the gameplay side effect still needs deeper analysis:
 
 | Opcode | Handler | ASM debug/script name |
 |---:|---|---|
@@ -1713,6 +1977,32 @@ Several table entries point at tiny handlers that print a script operation name.
 | `0xA2` | `sub_54D460` | `stLightFade` |
 | `0xA3` | `sub_54D480` | `stLightAtten` |
 | `0xA4` | `sub_54D4A0` | `stLightType` |
+| `0x115` | `sub_54E8B0` | `show_level_start_info %d` |
+| `0x192` | `sub_54D620` | `***** All coins collected ******` |
+
+#### High-opcode operand convention
+
+Because the dispatch passes only `actor` for opcodes above `0x44`, a high opcode that needs its immediate must re-read the instruction word itself and advance the program counter.  `sub_54E8B0` (asm lines 377290-377307) is the clearest example:
+
+```c
+sub_54E8B0(actor):                                  // opcode 0x115
+    byte_6DA294 = *(int8_t *)actor->script_pc;      // low byte of the instruction word
+    actor->script_pc += 4;                          // one full word consumed
+    printf("show_level_start_info %d \n", (int8_t)byte_6DA294);
+```
+
+Any parser that assumes the dispatch consumes the operand for high opcodes will therefore mis-synchronise on these handlers.  The width list in the VM diagnostics parser has to be built per handler, which is why only a subset of widths is currently modelled.
+
+#### Opcode `0x192` — collectable completion and level advance
+
+`sub_54D620` (asm lines 375096-375246) is a real gameplay handler rather than a debug print, and it is the function that emits the `***** All coins collected ******` message (string at asm line 375141).  Confirmed behaviour:
+
+- Saves `dword_584EB4`, `dword_584EB8`, `dword_584EBC`, `dword_584EC0` into scratch globals `dword_585008`-`dword_585014`, then pops three values from the actor script stack with `sub_54BC00`, arithmetic-shifts each right by 12, and writes them back to `dword_584EBC`, `dword_584EB8`, `dword_584EB4`; `dword_584EC0` is set to 0 (asm lines 375100-375126).
+- Reads a required count as `word_5722F4[5 * level + map]` and compares it against `dword_584F1C[6 * level + map] >> 12` (asm lines 375130-375139).  `level` is the saved `dword_584EB8` and `map` the saved `dword_584EBC`, so `dword_584F1C` is a per-level collectable-progress array of dwords with 6 slots per level and `word_5722F4` is the matching required-total table with 5 slots per level.
+- On equality it prints the all-coins message and ORs `0x02` into `byte_584EC8[6 * level + map]`, a parallel per-level flag-byte array (asm lines 375141-375150).  If the global flag `dword_584710 & 0x08` is set it ORs `0x03` instead, which is the debug/always-complete path (asm lines 375155-375161).
+- The rest of the handler advances the level/map pair packed into `dword_585018` (low byte = level, second byte = map), with special cases at the (level, map) pairs (8, 5) and (8, 6) plus a `dword_584EB4 == dword_584EB8 == dword_584EBC == 7` case, and sets or clears the global byte `byte_6D94B0` before returning through `sub_415390` (asm lines 375164-375245).
+
+The exact meaning of the three script-stack operands and of the 7/8/5/6 wrap constants is not yet confirmed, but the collectable tables and the completion flag are.
 
 ### Cross-WAD STPC object-definition VM diagnostics
 
@@ -1807,8 +2097,19 @@ bits  0–15   opcode index (0x00 – 0x44 → funcs_54D1AB; above 0x44 → func
 bits 16–31   signed 16-bit immediate argument (sign-extended to 32 bits)
 ```
 
-Opcodes 0x00–0x44 pass both `(actor, imm16)` to the handler (callee cleans 8 bytes).
-Opcodes above 0x44 pass only `actor` (callee cleans 4 bytes).
+Opcodes `0x00`-`0x44` push `(sign-extended imm16, actor)`; opcodes above `0x44` push only `actor`.  The stack cleanup is done by the dispatch, not by the handler: `add esp, 8` at asm line 374518 and `add esp, 4` at asm line 374524.
+
+The loop halts when `actor->flags0 /* +0xE8 */ & 0x12` is set.  It is tested once on entry (asm line 374501) and again after every dispatch (asm line 374527), so a handler stops the actor simply by setting `0x02` or `0x10` in `flags0`.
+
+### Table extents (confirmed from asm lines 438608-439005)
+
+```text
+opcode range   entries   no-ops   real handlers   table label    asm lines
+0x00 - 0x44       69        6             63       funcs_54D1AB   438973-439005
+0x45 - 0x1B1     365       72            293       funcs_54D1B8   438608-438972
+```
+
+The two runs are adjacent in the same read-only section: the high table physically starts 365 entries before the low table and its nominal base sits 69 entries (`0x114` bytes) before its first real handler, so high indices `0x00`-`0x44` fall on preceding string bytes and are never reached (the dispatch only uses that table for opcodes above `0x44`).  See the STPC chapter for the address arithmetic that pins this down.
 
 ### Complete `funcs_54D1AB` table (opcodes 0x00–0x44, confirmed from asm line 438973)
 
@@ -2031,26 +2332,50 @@ In the current `t1l1m001` export, 42 of 122 MAP objects reference a valid Sectio
 
 ## MAP TileDef disk format (confirmed from `sub_42AC50`)
 
-The 24-byte disk records are read in sequential order and expanded to 32-byte runtime records.  The allocator zero-initialises each entry, so runtime `+0x0C` is never written by the loader.
+The 24-byte disk records are read in sequential order and expanded to 32-byte runtime records.  The loader skips runtime `+0x0C`, and the bump allocator (`sub_41EF00` over a plain `operator new` block) does not zero memory, so `+0x0C` holds whatever the allocator returned.
 
 ```text
-Disk offset   Size   Runtime offset   Notes
-0x00          u32    +0x00            unnamed
-0x04          u32    +0x04            unnamed
-0x08          u32    +0x08            unnamed
-0x0C          u32    +0x10            unnamed  (runtime +0x0C is zero-init, skipped)
-0x10          u32    +0x14            unnamed
-0x14          u32    +0x18            unnamed
+Disk offset   Size   Runtime offset   Field                  Confirmed values
+0x00          u32    +0x00            always_zero            0 in 100 % of tiles in all five sampled WADs
+0x04          u32    +0x04            yaw_4096               only 0x0, 0x400, 0x800, 0xC00 observed
+0x08          u32    +0x08            always_zero            0 in 100 % of tiles in all five sampled WADs
+0x0C          u32    +0x10            pos_x_fixed12          (runtime +0x0C is zero-init, skipped)
+0x10          u32    +0x14            pos_y_fixed12          signed 12.12 fixed-point world units
+0x14          u32    +0x18            negated pos_z_fixed12  the file stores -Z
 ```
 
-`sub_42BF40` reads the tile placements table (`world+0x3C`) to dispatch terrain rendering.  Confirmed fields accessed from `sub_42BF40`:
+`sub_42BF40` reads the tile placements table (`world+0x3C`, 32-byte stride via `shl eax, 5`) and consumes exactly four fields per tile (asm lines 63871-63890):
 
-- `+0x04` = `yaw_4096`: tile yaw angle (4096 units/revolution, 2π radians/revolution)
-- `+0x10` = `pos_x_fixed12`: tile world X (12.12 fixed-point)
-- `+0x14` = `pos_y_fixed12`: tile world Y
-- `+0x18` = `pos_z_fixed12`: tile world Z (negated at render time)
+```c
+mov     eax, [ebp+0]              // tile index taken from the grid node
+shl     eax, 5
+add     eax, [esi+3Ch]            // eax = &placements[tile]
+fild    dword ptr [eax+10h]       // pos_x
+fmul    ds:dbl_56E020             // * 1/4096
+fild    dword ptr [eax+14h]       // pos_y
+fmul    ds:dbl_56E020
+fild    dword ptr [eax+18h]       // pos_z, negated
+fmul    ds:dbl_56E020
+fchs
+fild    dword ptr [eax+4]         // yaw
+fmul    ds:dbl_56E018             // * 2*pi/4096 -> radians
+```
 
-The disk fields at `+0x00`, `+0x08`, `+0x0C` (runtime `+0x10`), `+0x10` (runtime `+0x14`), `+0x14` (runtime `+0x18`) map to `MapTilePlacement32.unknown_00`, `unknown_08`, `unknown_0C`, `pos_x_fixed12`, `pos_y_fixed12`, `pos_z_fixed12`, `unknown_1C`.
+`dbl_56E020 = 0.000244140625 = 1/4096` and `dbl_56E018 = 0.001533980787885742 = 2*pi/4096` (asm lines 406131-406132).  Those two constants are what make `+0x04` an angle in 4096 units per revolution rather than a count or an id.  `sub_555140` treats the same field as an angle independently: it loads it with `fild [esp+4DCh+var_4C0]`, doubles it and multiplies by `dbl_56E020` (asm lines 389824-389826) while assembling the tile rotation matrix at asm lines 389808-389823.
+
+`sub_555140` also reads the field directly and rejects the sentinel `0xFFFFFFFF` for the whole tile (asm lines 389544-389550):
+
+```c
+mov     edx, dword_584648         // world
+shl     ecx, 5                    // tile_index * 32
+mov     eax, [edx+3Ch]            // placements base
+mov     eax, [ecx+eax+4]          // placements[tile].yaw_4096
+cmp     eax, 0FFFFFFFFh
+mov     [var_4C0], eax
+jz      loc_556264                // no placement for this tile: skip it
+```
+
+An earlier draft flagged a possible conflict with the `cmp eax, 0` / `jle` gate at asm lines 390210-390213.  That gate does **not** test this value.  The same stack slot `var_4C0` is overwritten with the constant 4 as a loop counter at asm line 389985 and with the item count returned by `sub_439F20` at asm line 390102 before asm line 390210 executes, so the yaw reading stands unchallenged and `MapTilePlacement32.unknown_00` / `unknown_08` remain the only unnamed fields in this record.
 
 ---
 
