@@ -188,15 +188,8 @@ def infer(errors: list[tuple[str, str, str, str]], table: dict[str, str]) -> int
 
 
 
-def implicated_families(seed: dict[str, str]) -> dict[int, list[str]]:
-    """Families of float-proven symbols that the current errors touch.
-
-    Grouped by 256-byte page, because related tables live next to each other (the
-    lighting floats at 0x6D7B9x, the colour scale at 0x57DB2x).  A family is tried
-    as a unit: typing one symbol in such a table is right for every function that
-    reads it as a float - which is how a targeted six-symbol test recovered three
-    functions where the global seed of all 1,644 was a wash.
-    """
+def groups_by_address(seed: dict[str, str], span: int) -> dict[int, list[str]]:
+    """Seeded symbols grouped by address, `span` bytes at a time."""
     wanted = set()
     for _code, _msg, line, _window in error_lines():
         wanted.update(SYM_RE.findall(line))
@@ -206,17 +199,53 @@ def implicated_families(seed: dict[str, str]) -> dict[int, list[str]]:
             continue
         hit = re.search(r"([0-9a-f]{6,8})$", name)
         if hit:
-            groups.setdefault(int(hit.group(1), 16) >> 8, []).append(name)
+            groups.setdefault(int(hit.group(1), 16) // span, []).append(name)
     return groups
 
 
+def groups_by_error_line(seed: dict[str, str]) -> dict[int, list[str]]:
+    """Seeded symbols grouped as they co-occur on an error line.
+
+    This is the unit that matters: `DAT_006d7b98 * _DAT_0057db20` only compiles when
+    *both* slots are floats, so trying symbols one at a time (or by address) misses
+    it, while the pair together is exactly the fix.
+    """
+    groups: dict[int, list[str]] = {}
+    for _code, _msg, line, _window in error_lines():
+        names = sorted({n for n in SYM_RE.findall(line) if n in seed})
+        if names:
+            key = int(names[0].split("_")[-1], 16)
+            groups.setdefault(key, names)
+    return groups
+
+
+def implicated_families(seed: dict[str, str], span: int = 16, mode: str = "address") -> dict[int, list[str]]:
+    return groups_by_error_line(seed) if mode == "error" else groups_by_address(seed, span)
+    """Placeholder replaced above."""
+
+
 def greedy_families(seed: dict[str, str], table: dict[str, str], best: int,
-                    max_families: int) -> tuple[int, int]:
+                    max_families: int, span: int = 16, mode: str = "error",
+                    passes: int = 3) -> tuple[int, int]:
     """Try each implicated family; keep only the ones that improve the count."""
-    groups = implicated_families(seed)
-    print(f"{len(groups)} families implicated by the current errors")
     kept = 0
-    chosen = sorted(groups.items(), key=lambda kv: -len(kv[1]))[:max_families]
+    for p in range(passes):
+        groups = implicated_families(seed, span, mode)
+        fresh_groups = {k: [n for n in v if n not in table] for k, v in groups.items()}
+        fresh_groups = {k: v for k, v in fresh_groups.items() if v}
+        if not fresh_groups:
+            break
+        print(f"pass {p + 1}: {len(fresh_groups)} families implicated, span {span} bytes")
+        chosen = sorted(fresh_groups.items(), key=lambda kv: -len(kv[1]))[:max_families]
+        best, added_now = _try_families(seed, table, best, chosen, span)
+        kept += added_now
+        if not added_now:
+            break
+    return best, kept
+
+
+def _try_families(seed, table, best, chosen, span):
+    kept = 0
     for i, (page, names) in enumerate(chosen, 1):
         fresh = [n for n in names if n not in table]
         if not fresh:
@@ -228,7 +257,7 @@ def greedy_families(seed: dict[str, str], table: dict[str, str], best: int,
                        capture_output=True, text=True)
         now = clean_count()
         if now > best:
-            print(f"  [{i}/{len(chosen)}] page 0x{page:05X} ({len(fresh)} symbols): "
+            print(f"  [{i}/{len(chosen)}] group 0x{page * span:05X} ({len(fresh)} symbols): "
                   f"{best} -> {now} ({now - best:+d})  kept")
             best = now
             kept += 1
@@ -253,6 +282,8 @@ def main() -> int:
     ap.add_argument("--rounds", type=int, default=5)
     ap.add_argument("--families", action="store_true")
     ap.add_argument("--max-families", type=int, default=40)
+    ap.add_argument("--family-span", type=int, default=16)
+    ap.add_argument("--group", default="error", choices=("error", "address"))
     args = ap.parse_args()
 
     table = load_overrides()
@@ -271,9 +302,13 @@ def main() -> int:
         print(f"seeded {len(seeded)} types from x87 operands in the listing "
               f"(total {len(table)}): clean {before} -> {after} ({after - before:+d})")
         if after <= before:
-            print("  the seed did not help: reverting it")
-            table.clear()
-            OVERRIDES.unlink(missing_ok=True)
+            print("  the seed did not help: reverting the seeded keys only")
+            for n in seeded:
+                table.pop(n, None)          # keep overrides that already earned their place
+            if table:
+                save_overrides(table)
+            else:
+                OVERRIDES.unlink(missing_ok=True)
             subprocess.run([sys.executable, str(ROOT / "tools" / "make_bulk.py")],
                            capture_output=True, text=True)
         else:
@@ -303,7 +338,7 @@ def main() -> int:
     if args.families:
         best, kept = greedy_families(
             seed_from_asm(ROOT.parent / "WAD" / "groove.exe.asm"),
-            table, best, args.max_families)
+            table, best, args.max_families, args.family_span, args.group)
         print(f"\nfamily search kept {kept} families")
 
     print(f"\nfinal: {best} functions compiling cleanly, {len(table)} overrides in the table")

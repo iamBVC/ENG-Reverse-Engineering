@@ -35,6 +35,16 @@
 #include <stdbool.h>
 #endif
 
+/* `NAN` is how the decompiler prints a NaN float constant, and the CRT internals
+ * below are called by the binary's own string/float code.  Declaring them here is
+ * cheaper than reversing them, and they are the last few C2065 names left. */
+#ifndef __cplusplus
+#include <math.h>
+#endif
+void __cfltcvt(void);
+void __fassign(void);
+struct type_info;
+
 /* Ghidra models the SEH chain head (FS:[0]) as a plain global.  A plain global
  * is NOT faithful: the real slot lives in the TIB, so the decompiled
  * exception-registration sequences (34 functions, plus the `Catch@...`
@@ -59,6 +69,25 @@ typedef OSVERSIONINFOA      _OSVERSIONINFOA;
 typedef SECURITY_ATTRIBUTES _SECURITY_ATTRIBUTES;
 typedef CPINFO              _cpinfo;
 typedef EXCEPTION_POINTERS  _EXCEPTION_POINTERS;
+/* Ghidra prefixes a type when it cannot name it; these are the Win32 ones the
+ * decompiled code actually mentions (each aliased to the system definition). */
+/* Ghidra's own layout for this one: it names the anonymous struct member `s`, which
+ * the system LARGE_INTEGER does not, so aliasing it left `.s.LowPart` an error. */
+typedef struct { unsigned int LowPart; int HighPart; } groove_lowhigh;
+typedef struct { groove_lowhigh s; groove_lowhigh u; long long QuadPart; } _LARGE_INTEGER;
+/* Ghidra models a handle as a struct with an `unused` member (it prints
+ * `local_7c[0].unused = 0x7c`), so alias it to that shape rather than to HDC. */
+typedef struct { int unused; } HDC__;
+typedef HWND                HWND__;
+typedef HINSTANCE           HINSTANCE__;
+typedef struct tagMSG       tagMSG;
+typedef struct tagPOINT     tagPOINT;
+typedef struct tagRECT      tagRECT;
+typedef void                *LPUNKNOWN;
+
+/* Ghidra's packed-integer pseudo-types beyond the common ones. */
+typedef unsigned int        unkuint10;
+typedef unsigned int        unkbyte10;
 
 /* Sub-field access for Ghidra's `value._<offset>_<size>_` idiom: the decompiler
  * names an unnamed field by its byte offset and size.  Sizes 1/2/4 map onto real

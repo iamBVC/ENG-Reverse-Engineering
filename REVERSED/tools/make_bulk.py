@@ -53,7 +53,9 @@ IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # Ghidra idioms that need rewriting before a C compiler will take the source.
 # `x._<offset>_<size>_` is how the decompiler names an unnamed struct/union field;
 # `NAME_<size>` is a sub-part of a datum at the same address.
-FIELD_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\._(\d+)_(\d+)_")
+# the value carrying a sub-field can be indexed or reached through a pointer:
+# `x[i]._0_1_`, `p->f._2_2_` are the same idea as `x._0_1_`
+FIELD_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*(?:\s*\[[^\]]*\]|->[A-Za-z_][A-Za-z0-9_]*)*)\._(\d+)_(\d+)_")
 FIELD_WRITE_RE = re.compile(
     r"^([ \t]*)([A-Za-z_][A-Za-z0-9_]*)\._(\d+)_3_ = ([^;]+);", re.M)
 SUBNAME_RE = re.compile(r"\b((?:DAT|UNK|_DAT|_UNK)_[0-9a-fA-F]{8})_([0-9])\b")
@@ -82,9 +84,14 @@ def is_game_code(name: str) -> bool:
 def normalize(body: str) -> str:
     """Rewrite the Ghidra-isms that stop a C compiler accepting the source.
 
+    First a naming difference: Windows names the LARGE_INTEGER struct member `u`
+    where Ghidra prints `s`.  Same layout, different name, so map the access.
+
     Kept deliberately conservative: only patterns whose meaning is unambiguous
     (a sub-field of a variable, or a sub-part of a named datum) are touched.
     """
+    body = body.replace(".s.LowPart", ".u.LowPart").replace(".s.HighPart", ".u.HighPart")
+
     # writes of a 3-byte field must become a statement, not an lvalue
     body = FIELD_WRITE_RE.sub(lambda m: f"{m.group(1)}G_WR3({m.group(2)}, {m.group(3)}, {m.group(4)});",
                               body)
@@ -253,6 +260,16 @@ def main() -> int:
     # that no generator rule can decide (see the note in README).  Keeping them in a
     # CSV means every fix is recorded, reviewable and survives regeneration - which
     # is how the ~200-function queue is meant to be worked through.
+    # Declarations for locals/parameters Ghidra never emitted (tools/gen_auto_decls.py):
+    # approximate by construction, so they live in their own file rather than in the
+    # hand-checked patch table.
+    auto_decls: dict[str, list[tuple[str, str]]] = {}
+    decl_path = OUT / "auto_decls.csv"
+    if decl_path.exists():
+        with decl_path.open(encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                auto_decls.setdefault(row["function"], []).append((row["name"], row["type"]))
+
     bulk_patches: dict[str, list[tuple[str, str]]] = {}
     patch_path = OUT / "bulk_patches.csv"
     if patch_path.exists():
@@ -264,6 +281,7 @@ def main() -> int:
     signatures: dict[str, str] = {}
     referenced: dict[int, set[str]] = {}
     patched = 0
+    injected = 0
     for path in files:
         if not is_game_code(path.stem):
             continue
@@ -279,6 +297,15 @@ def main() -> int:
                 patched += 1
             else:
                 print(f"  note: patch pattern not found in {name}: {find[:40]!r}")
+        if name in auto_decls:
+            lines = body.splitlines()
+            for i, line in enumerate(lines):
+                if line.strip() == "{":
+                    inject = ["  " + ctype + " " + nm + ";" for nm, ctype in auto_decls[name]]
+                    lines[i + 1:i + 1] = inject
+                    body = chr(10).join(lines)
+                    injected += len(inject)
+                    break
         bodies[name] = body
         sig = definition_signature(body)
         if sig:
@@ -494,6 +521,16 @@ def main() -> int:
             # an unknown Ghidra type (unkbyte10, ...): fall back to int, which is
             # always assignment-compatible in these expressions
             rtype = "int"
+        if "__fastcall" in s or "__stdcall" in s:
+            # For these conventions an empty parameter list is NOT "unspecified
+            # arguments" (MSVC reports C2709 against the definition), and keeping the
+            # real parameter list turns every differing call site into C2197/C2198.
+            # So declare nothing at all: the definition is then the only prototype,
+            # which is correct for calls after it.  Calls that appear earlier get C's
+            # implicit declaration and pass arguments on the stack instead of in
+            # registers - a wrong ABI for those few calls, and the same kind of
+            # approximation as the `code()` return type above.
+            continue
         loose[n] = f"{rtype} {n}()" if rtype else f"int {n}()"
     protos = loose
 
@@ -560,6 +597,7 @@ def main() -> int:
         f"functions with prototypes  : {len(protos)}",
         f"names sanitised for C      : {len(renames)}",
         f"hand patches applied       : {patched}",
+        f"auto declarations injected  : {injected}",
         "",
         f"clean subset (compilable?) : {len(clean)}",
         f"needs hand fixing          : {len(dirty)}",

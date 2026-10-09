@@ -333,9 +333,16 @@ rather than one by one, and two systematic causes came out of it:
 |---|---|---|
 | `C2186`: the result of an indirect call through `code *` is assigned, but `code` returned void | 49 | `typedef int code();` - the looser return type is harmless where the callee really returns void |
 | `C2040`/`C2373`/`C2371`: a definition disagreed with its own loosened prototype | ~90 | loosen **only the parameter list** and keep the declared return type verbatim - `char *`, `undefined *` and `void __fastcall` all have to survive; the old whitelist silently rewrote them to `int` |
+| `C2186` again: a function Ghidra typed `void` whose callers use its result | 149 | the definition's return type changes to `int` - generated automatically, written into `bulk_patches.csv` so every one is recorded |
+| `C2039`/`C2065`: Windows types Ghidra renamed (`_LARGE_INTEGER.s.LowPart`, `HDC__`, `tagMSG`) | ~10 | aliases in the shim to the real system types |
 
-Result: **798 -> 873 functions compiling cleanly**, a further +3 from a targeted type
-override (below) for **876**.
+| `C2065` again: locals/parameters Ghidra never declared (`_param_9`, `local_50`, `hdc`) | ~30 | the first three shim fixes cleared most of them (an unknown *type* was breaking the declaration); the rest are generated into `auto_decls.csv` and injected at the top of the function |
+| `C2709`: a `__fastcall`/`__stdcall` definition against a bare `()` prototype | ~18 | for these conventions `()` is *not* "unspecified arguments", and keeping the real list only moves the error to the call sites - so no prototype is emitted for them and the definition is the only prototype |
+| `C2039`/`C2224`: `LARGE_INTEGER.s` (Windows calls it `u`), and sub-fields reached through an index (`local_118[0]._0_1_`) | 22 | one is a rename in the normalizer, the other a generalisation of the sub-field pattern to indexed and `->` forms |
+| `C2197`: a callee Ghidra declared `(void)` called with 5 arguments (`sub_426500`) | 6 | [`tools/gen_arity_patches.py`](tools/gen_arity_patches.py) widens the *callee's* parameter list - safe, because the decompiled body only ever reads the parameters it names. Two of four candidates did not match the bulk text and are noted below. |
+
+Result: **798 -> 909 functions compiling cleanly**, with a targeted type override
+below accounting for three of those.
 
 The next cluster is global typing: ~60 symbols account for ~200 of the remaining
 errors, because the decompiled code decodes the same slot as an integer, a float or a
@@ -370,11 +377,23 @@ generator says (`DAT_006d7b98`), so the first "no change" measurement was vacuou
 and a revert now clears the in-memory table too, otherwise a later stage re-applies
 the guesses it just rejected.
 
-The honest conclusion: the remaining ~330 errors are per-site work in the decompiled
-code, which is what [`src_generated/bulk_patches.csv`](tools/make_bulk.py) exists
-for - a recorded, reviewable (function, find, replace) table that survives
-regeneration.  Next session should work that queue and refine the family search to
-smaller groups (4-8 adjacent symbols rather than 256-byte pages).
+The honest conclusion: the remaining ~240 errors are per-site work in the decompiled
+code, which is what `src_generated/bulk_patches.csv` exists for - a recorded,
+reviewable (function, find, replace) table that survives regeneration.
+
+Two smaller notes for the next session.  `gen_arity_patches.py` matches patch text
+against the *decompiled* source, but the patch itself is applied to the *bulk*, and
+the two differ for a couple of functions (`sub_426500` decompiles to a 1-byte stub
+whose definition line is not the one in the chunk), so those two patches are reported
+as not-found rather than silently doing nothing.  And clearing the `C2197` errors did
+not make any function *clean*: their callers have other errors as well, which is the
+shape of the remaining queue.
+
+A third tool, [`tools/try_patches.py`](tools/try_patches.py), tests that conclusion
+directly: for each erroring line it applies the type the compiler's message implies,
+and keeps the change only if the clean count rises.  It kept **0 of 18** candidates -
+the same answer as every other mass-typing attempt, and now backed by a measurement
+of the per-line unit rather than a guess.
 
 ### Coverage, honestly
 
