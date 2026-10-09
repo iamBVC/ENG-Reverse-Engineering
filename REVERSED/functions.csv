@@ -1,0 +1,1214 @@
+name,address,size,insns,kind,convention,args,leaf,callees,status
+Callback,,0,611,library,stdcall,,0,_fwrite __CxxThrowException DirectDrawCreate dword sub_413D80 sub_412940 sub_413A60 sub_413170 nullsub_2 sub_40FBE0,todo
+sub_56D64F,0x56D64F,0,6,game,cdecl,,1,,todo
+sub_405CD0,0x405CD0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_405FE0,0x405FE0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_406580,0x406580,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_406E30,0x406E30,16,1,game,cdecl,,1,,reloc
+sub_408390,0x408390,16,2,game,cdecl,arg_C,1,,exact
+sub_40D900,0x40D900,16,1,game,cdecl,,1,,reloc
+sub_40D910,0x40D910,16,1,game,cdecl,,1,,reloc
+sub_40E010,0x40E010,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_40E040,0x40E040,16,2,game,cdecl,,0,sub_40E050,todo
+sub_4136C0,0x4136C0,16,5,game,cdecl,"arg_0,arg_4",1,,diff
+sub_413B10,0x413B10,16,1,game,cdecl,,1,,reloc
+sub_4145D0,0x4145D0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_4155E0,0x4155E0,16,1,game,cdecl,,1,,reloc
+sub_415660,0x415660,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_415B30,0x415B30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_415D30,0x415D30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_415E60,0x415E60,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_415FE0,0x415FE0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416070,0x416070,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_4161E0,0x4161E0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416370,0x416370,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416760,0x416760,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416A40,0x416A40,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416D40,0x416D40,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416EA0,0x416EA0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_416FA0,0x416FA0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_419410,0x419410,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_4195C0,0x4195C0,16,2,game,cdecl,,0,sub_41ACA0,todo
+sub_4197E0,0x4197E0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41A350,0x41A350,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41A410,0x41A410,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41AB30,0x41AB30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41AB90,0x41AB90,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41AD10,0x41AD10,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41AD70,0x41AD70,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41AF90,0x41AF90,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41B870,0x41B870,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41BC80,0x41BC80,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41BCB0,0x41BCB0,16,4,game,cdecl,,1,,diff
+sub_41CE60,0x41CE60,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41D330,0x41D330,16,3,game,cdecl,,1,,diff
+sub_41DFF0,0x41DFF0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_41E1B0,0x41E1B0,16,2,game,cdecl,,1,,reloc
+sub_41E400,0x41E400,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_424560,0x424560,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_424B30,0x424B30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_4255A0,0x4255A0,16,1,game,cdecl,,1,,exact
+sub_425C80,0x425C80,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_426860,0x426860,16,1,game,cdecl,,1,,exact
+sub_427F20,0x427F20,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_427F50,0x427F50,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_42AA30,0x42AA30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_42C850,0x42C850,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_435CB0,0x435CB0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_436160,0x436160,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_437F60,0x437F60,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_43AD20,0x43AD20,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_43CAF0,0x43CAF0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_43CB20,0x43CB20,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_43CB30,0x43CB30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_5460C0,0x5460C0,16,5,game,cdecl,,1,,todo
+sub_549B40,0x549B40,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_549BA0,0x549BA0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54A640,0x54A640,16,2,game,cdecl,,1,,todo
+sub_54AC30,0x54AC30,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54AFF0,0x54AFF0,16,3,game,cdecl,,1,,todo
+sub_54B170,0x54B170,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54B180,0x54B180,16,1,game,cdecl,,1,,todo
+sub_54B3F0,0x54B3F0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54B850,0x54B850,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54B940,0x54B940,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54BBA0,0x54BBA0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_54DAA0,0x54DAA0,16,1,game,cdecl,,1,,todo
+sub_54DAD0,0x54DAD0,16,1,game,cdecl,,1,,todo
+sub_54DB40,0x54DB40,16,3,game,cdecl,arg_0,1,,todo
+sub_54DB50,0x54DB50,16,3,game,cdecl,arg_0,1,,todo
+sub_54E4B0,0x54E4B0,16,2,game,cdecl,arg_0,1,,todo
+sub_54E4C0,0x54E4C0,16,2,game,cdecl,arg_0,1,,todo
+sub_54F6F0,0x54F6F0,16,1,game,cdecl,,1,,todo
+sub_54F7C0,0x54F7C0,16,2,game,cdecl,arg_0,1,,todo
+sub_54FCE0,0x54FCE0,16,2,game,cdecl,arg_0,1,,todo
+sub_54FD30,0x54FD30,16,2,game,cdecl,arg_0,1,,todo
+sub_54FEE0,0x54FEE0,16,2,game,cdecl,arg_0,1,,todo
+sub_5500D0,0x5500D0,16,2,game,cdecl,arg_0,1,,todo
+sub_5500E0,0x5500E0,16,2,game,cdecl,arg_0,1,,todo
+sub_550110,0x550110,16,2,game,cdecl,arg_0,1,,todo
+sub_550120,0x550120,16,2,game,cdecl,arg_0,1,,todo
+sub_550130,0x550130,16,2,game,cdecl,arg_0,1,,todo
+sub_5535E0,0x5535E0,16,2,game,cdecl,arg_0,1,,todo
+sub_553DD0,0x553DD0,16,2,game,cdecl,arg_0,1,,todo
+sub_554CC0,0x554CC0,16,5,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_554F00,0x554F00,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_554FB0,0x554FB0,16,4,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_556310,0x556310,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_5587F0,0x5587F0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_558FC0,0x558FC0,16,1,ilt_thunk,cdecl,,1,,thunk
+sub_567FCA,0x567FCA,17,3,game,cdecl,,0,ds,todo
+sub_569908,0x569908,22,5,game,cdecl,"arg_0,arg_4",0,__ld12cvt,todo
+sub_56991E,0x56991E,22,5,game,cdecl,"arg_0,arg_4",0,__ld12cvt,todo
+sub_56D2B4,0x56D2B4,24,8,game,stdcall,arg_0,0,sub_56D1E1,todo
+sub_56D1C5,0x56D1C5,28,11,game,stdcall,arg_0,0,unknown_libname_98,todo
+sub_405CE0,0x405CE0,32,3,game,cdecl,,1,,todo
+sub_4060A0,0x4060A0,32,7,game,cdecl,,1,,todo
+sub_408300,0x408300,32,8,game,cdecl,,0,dword sub_406990 sub_406C50 sub_406E30,todo
+sub_40D920,0x40D920,32,5,game,cdecl,,0,sub_40D940,todo
+sub_40DB70,0x40DB70,32,5,game,cdecl,,0,sub_40D970,diff
+sub_40E020,0x40E020,32,3,game,cdecl,,1,,reloc
+sub_40E0A0,0x40E0A0,32,9,game,cdecl,,1,,diff
+sub_40E610,0x40E610,32,8,game,cdecl,"arg_0,Buffer",0,_sprintf,diff
+sub_40FC90,0x40FC90,32,6,game,stdcall,arg_0,1,,reloc
+sub_40FCB0,0x40FCB0,32,6,game,stdcall,arg_0,1,,todo
+sub_40FE10,0x40FE10,32,4,game,cdecl,,0,sub_4114A0 sub_410ED0 sub_4106C0,todo
+sub_412D70,0x412D70,32,10,game,cdecl,arg_4,1,,todo
+sub_4134F0,0x4134F0,32,13,game,cdecl,"arg_0,arg_4",1,,todo
+sub_4136A0,0x4136A0,32,5,game,cdecl,"arg_0,arg_4",1,,todo
+sub_413790,0x413790,32,11,game,cdecl,"arg_0,arg_4",1,,todo
+sub_4137B0,0x4137B0,32,11,game,cdecl,"arg_0,arg_4",1,,todo
+sub_413D80,0x413D80,32,5,game,stdcall,arg_0,1,,todo
+sub_4145E0,0x4145E0,32,3,game,cdecl,,1,,todo
+sub_415670,0x415670,32,3,game,cdecl,,1,,todo
+sub_415A90,0x415A90,32,11,game,cdecl,"Stream,Buffer,ElementSize",0,_fread,diff
+sub_415AB0,0x415AB0,32,10,game,cdecl,"Stream,Buffer",0,_fread,diff
+sub_415AD0,0x415AD0,32,10,game,cdecl,"Stream,Buffer",0,_fread,diff
+sub_415AF0,0x415AF0,32,10,game,cdecl,"Stream,Buffer",0,_fread,diff
+sub_415B10,0x415B10,32,7,game,cdecl,"Stream,Offset",0,_fseek,todo
+sub_4170A0,0x4170A0,32,5,game,cdecl,arg_0,1,,todo
+sub_4170C0,0x4170C0,32,4,game,cdecl,,1,,todo
+sub_4171A0,0x4171A0,32,5,game,cdecl,,0,sub_4170E0 sub_424680 sub_4170C0,todo
+sub_4171C0,0x4171C0,32,4,game,cdecl,,0,sub_417690,todo
+sub_417210,0x417210,32,4,game,cdecl,,0,sub_417690,todo
+sub_4176C0,0x4176C0,32,6,game,cdecl,,0,sub_4170A0,todo
+sub_417710,0x417710,32,7,game,cdecl,,0,sub_4170A0 sub_418AA0,todo
+sub_417730,0x417730,32,7,game,cdecl,,0,sub_4170A0 sub_418C10,todo
+sub_418140,0x418140,32,6,game,cdecl,,0,sub_4170A0,todo
+sub_418160,0x418160,32,7,game,cdecl,,0,sub_4170A0 sub_417260,todo
+sub_4189D0,0x4189D0,32,7,game,cdecl,,0,sub_4170A0 sub_418970,todo
+sub_418BC0,0x418BC0,32,5,game,cdecl,arg_0,1,,todo
+sub_4197F0,0x4197F0,32,3,game,cdecl,,1,,todo
+sub_41A420,0x41A420,32,3,game,cdecl,,1,,todo
+sub_41ABA0,0x41ABA0,32,3,game,cdecl,,1,,todo
+sub_41AD80,0x41AD80,32,3,game,cdecl,,1,,todo
+sub_41AFA0,0x41AFA0,32,3,game,cdecl,,1,,todo
+sub_41B880,0x41B880,32,3,game,cdecl,,1,,todo
+sub_41BC90,0x41BC90,32,3,game,cdecl,,1,,todo
+sub_41BF80,0x41BF80,32,6,game,cdecl,arg_0,1,,todo
+sub_41BFA0,0x41BFA0,32,6,game,cdecl,"arg_0,arg_4",0,sub_41BF80,todo
+sub_41C160,0x41C160,32,11,game,cdecl,,1,,todo
+sub_41C180,0x41C180,32,4,game,cdecl,,1,,todo
+sub_41C620,0x41C620,32,4,game,cdecl,,1,,todo
+sub_41C9B0,0x41C9B0,32,4,game,cdecl,,1,,todo
+sub_41C9D0,0x41C9D0,32,6,game,cdecl,,1,,todo
+sub_41C9F0,0x41C9F0,32,11,game,cdecl,,1,,todo
+sub_41CDB0,0x41CDB0,32,5,game,cdecl,,1,,todo
+sub_41DD80,0x41DD80,32,7,game,cdecl,,0,dword,todo
+sub_41E000,0x41E000,32,3,game,cdecl,,1,,todo
+sub_41E190,0x41E190,32,5,game,cdecl,,0,sub_41E1C0,todo
+sub_41E790,0x41E790,32,8,game,stdcall,"arg_0,arg_4,arg_8",1,,todo
+sub_41EDC0,0x41EDC0,32,3,game,cdecl,,1,,todo
+sub_41EE40,0x41EE40,32,8,game,cdecl,arg_0,0,sub_41AE20,todo
+sub_41EE60,0x41EE60,32,5,game,cdecl,,0,sub_41AF00,todo
+sub_41EE80,0x41EE80,32,7,game,cdecl,,1,,todo
+sub_41EEE0,0x41EEE0,32,3,game,cdecl,,1,,reloc
+sub_424570,0x424570,32,3,game,cdecl,,1,,todo
+sub_424B40,0x424B40,32,3,game,cdecl,,1,,todo
+sub_424B90,0x424B90,32,10,game,cdecl,"arg_0,arg_4",1,,todo
+sub_425C90,0x425C90,32,3,game,cdecl,,1,,todo
+sub_426870,0x426870,32,8,game,cdecl,arg_0,1,,todo
+sub_427F30,0x427F30,32,3,game,cdecl,,1,,todo
+sub_427FF0,0x427FF0,32,9,game,cdecl,,1,,todo
+sub_428D60,0x428D60,32,7,game,cdecl,,1,,todo
+sub_42AA40,0x42AA40,32,3,game,cdecl,,1,,todo
+sub_435CC0,0x435CC0,32,3,game,cdecl,,1,,todo
+sub_436170,0x436170,32,3,game,cdecl,,1,,todo
+sub_43AD30,0x43AD30,32,3,game,cdecl,,1,,todo
+sub_43B010,0x43B010,32,12,game,cdecl,arg_0,1,,todo
+sub_43B060,0x43B060,32,9,game,cdecl,arg_0,1,,todo
+sub_43C940,0x43C940,32,7,game,cdecl,,0,dword,todo
+sub_43CB00,0x43CB00,32,3,game,cdecl,,1,,todo
+sub_545FE0,0x545FE0,32,10,game,cdecl,arg_0,1,,todo
+sub_546040,0x546040,32,10,game,cdecl,arg_0,1,,todo
+sub_5460A0,0x5460A0,32,8,game,cdecl,arg_0,0,ds,todo
+sub_546600,0x546600,32,7,game,cdecl,arg_0,1,,todo
+sub_546900,0x546900,32,10,game,cdecl,"lpFileName,dwFlagsAndAttributes",0,ds,todo
+sub_546A10,0x546A10,32,9,game,cdecl,,0,sub_546990,todo
+sub_546B50,0x546B50,32,6,game,cdecl,arg_0,1,,todo
+sub_546E10,0x546E10,32,10,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546E30,0x546E30,32,11,game,cdecl,arg_0,1,,todo
+sub_547450,0x547450,32,7,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_547950,0x547950,32,8,game,cdecl,"arg_0,arg_4",1,,todo
+sub_547970,0x547970,32,8,game,cdecl,"arg_0,arg_4",1,,todo
+sub_547990,0x547990,32,7,game,cdecl,arg_4,0,ds,todo
+sub_549980,0x549980,32,6,game,cdecl,"arg_4,arg_8",1,,todo
+sub_549BB0,0x549BB0,32,3,game,cdecl,,1,,todo
+sub_549C30,0x549C30,32,3,game,cdecl,,1,,todo
+sub_54A820,0x54A820,32,6,game,cdecl,,0,sub_414FB0,todo
+sub_54AC40,0x54AC40,32,3,game,cdecl,,1,,todo
+sub_54B400,0x54B400,32,3,game,cdecl,,1,,todo
+sub_54B7F0,0x54B7F0,32,1,ilt_thunk,cdecl,,1,,thunk
+sub_54B950,0x54B950,32,3,game,cdecl,,1,,todo
+sub_54BBB0,0x54BBB0,32,3,game,cdecl,,1,,todo
+sub_54D200,0x54D200,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D220,0x54D220,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D240,0x54D240,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D260,0x54D260,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D280,0x54D280,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D2A0,0x54D2A0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D2C0,0x54D2C0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D2E0,0x54D2E0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D300,0x54D300,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D320,0x54D320,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D340,0x54D340,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D360,0x54D360,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D380,0x54D380,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D3A0,0x54D3A0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D3C0,0x54D3C0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D3E0,0x54D3E0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D400,0x54D400,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D420,0x54D420,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D440,0x54D440,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D460,0x54D460,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D480,0x54D480,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D4A0,0x54D4A0,32,6,game,cdecl,arg_0,0,sub_414600,todo
+sub_54D4F0,0x54D4F0,32,7,game,cdecl,arg_0,0,sub_54BC00 nullsub_2,todo
+sub_54D510,0x54D510,32,7,game,cdecl,,0,sub_546990,todo
+sub_54D880,0x54D880,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54D970,0x54D970,32,9,game,cdecl,arg_0,1,,todo
+sub_54DA00,0x54DA00,32,12,game,cdecl,arg_0,0,sub_426860,todo
+sub_54DA20,0x54DA20,32,12,game,cdecl,arg_0,0,sub_426860,todo
+sub_54DA40,0x54DA40,32,7,game,cdecl,,0,sub_426860,todo
+sub_54DA60,0x54DA60,32,7,game,cdecl,,0,sub_426860,todo
+sub_54DA80,0x54DA80,32,1,game,cdecl,,1,,todo
+sub_54DAB0,0x54DAB0,32,1,game,cdecl,,1,,todo
+sub_54DAE0,0x54DAE0,32,7,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DB90,0x54DB90,32,6,game,cdecl,,1,,todo
+sub_54DBE0,0x54DBE0,32,5,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DC00,0x54DC00,32,8,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DC20,0x54DC20,32,8,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DDC0,0x54DDC0,32,10,game,cdecl,arg_0,1,,todo
+sub_54DDE0,0x54DDE0,32,12,game,cdecl,arg_0,1,,todo
+sub_54E030,0x54E030,32,10,game,cdecl,arg_0,1,,todo
+sub_54E1C0,0x54E1C0,32,9,game,cdecl,arg_0,0,sub_54BC00 sub_546240,todo
+sub_54E840,0x54E840,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E890,0x54E890,32,7,game,cdecl,arg_0,1,,todo
+sub_54E910,0x54E910,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E930,0x54E930,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E9C0,0x54E9C0,32,8,game,cdecl,arg_0,0,sub_403020,todo
+sub_54E9E0,0x54E9E0,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54EA00,0x54EA00,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54EA20,0x54EA20,32,3,game,cdecl,arg_0,1,,todo
+sub_54EA40,0x54EA40,32,3,game,cdecl,arg_0,1,,todo
+sub_54EA60,0x54EA60,32,3,game,cdecl,arg_0,1,,todo
+sub_54F240,0x54F240,32,3,game,cdecl,arg_0,1,,todo
+sub_54F580,0x54F580,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F5A0,0x54F5A0,32,8,game,cdecl,,0,sub_4268C0,todo
+sub_54F680,0x54F680,32,6,game,cdecl,,1,,todo
+sub_54F6D0,0x54F6D0,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F700,0x54F700,32,3,game,cdecl,,0,sub_4268C0,todo
+sub_54F7D0,0x54F7D0,32,5,game,cdecl,arg_0,1,,todo
+sub_54F9F0,0x54F9F0,32,9,game,cdecl,arg_0,1,,todo
+sub_54FA10,0x54FA10,32,9,game,cdecl,arg_0,1,,todo
+sub_54FA30,0x54FA30,32,7,game,cdecl,arg_0,1,,todo
+sub_54FC00,0x54FC00,32,10,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FC20,0x54FC20,32,12,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FD40,0x54FD40,32,9,game,cdecl,arg_0,1,,todo
+sub_54FFE0,0x54FFE0,32,9,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550000,0x550000,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550020,0x550020,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550040,0x550040,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_5500F0,0x5500F0,32,3,game,cdecl,arg_0,1,,todo
+sub_550140,0x550140,32,5,game,cdecl,arg_0,1,,todo
+sub_5501B0,0x5501B0,32,10,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_5508B0,0x5508B0,32,10,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_5508D0,0x5508D0,32,11,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_5508F0,0x5508F0,32,9,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550940,0x550940,32,9,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_552AB0,0x552AB0,32,7,game,cdecl,"arg_0,arg_4",0,sub_550E60,todo
+sub_552AD0,0x552AD0,32,12,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552AF0,0x552AF0,32,8,game,cdecl,"arg_0,arg_4",0,sub_550E60,todo
+sub_552B10,0x552B10,32,8,game,cdecl,"arg_0,arg_4",0,sub_550E60,todo
+sub_553150,0x553150,32,10,game,cdecl,arg_0,0,sub_54BC00 sub_429D40,todo
+sub_5535F0,0x5535F0,32,9,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_553610,0x553610,32,6,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553690,0x553690,32,7,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_5536B0,0x5536B0,32,7,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_5536D0,0x5536D0,32,6,game,cdecl,,1,,todo
+sub_5536F0,0x5536F0,32,8,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553710,0x553710,32,8,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553730,0x553730,32,13,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_553750,0x553750,32,9,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553770,0x553770,32,9,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553790,0x553790,32,8,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_5537B0,0x5537B0,32,8,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_5537D0,0x5537D0,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553890,0x553890,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_5538B0,0x5538B0,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553900,0x553900,32,12,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553A40,0x553A40,32,10,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553AC0,0x553AC0,32,9,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553AE0,0x553AE0,32,9,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553B00,0x553B00,32,6,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553C90,0x553C90,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553CB0,0x553CB0,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553CD0,0x553CD0,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553CF0,0x553CF0,32,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553D80,0x553D80,32,4,game,cdecl,"arg_0,arg_4",1,,todo
+sub_553EF0,0x553EF0,32,9,game,cdecl,arg_0,1,,todo
+sub_5544B0,0x5544B0,32,7,game,cdecl,arg_0,1,,todo
+sub_5544D0,0x5544D0,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_554950,0x554950,32,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_554970,0x554970,32,6,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_554DA0,0x554DA0,32,7,game,cdecl,arg_0,0,sub_54BC00 sub_40DB90,todo
+sub_554DC0,0x554DC0,32,8,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_554DE0,0x554DE0,32,8,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_554E00,0x554E00,32,8,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_554F10,0x554F10,32,3,game,cdecl,,1,,todo
+sub_555090,0x555090,32,8,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_5550B0,0x5550B0,32,9,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_5550D0,0x5550D0,32,11,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_556320,0x556320,32,3,game,cdecl,,1,,todo
+sub_558800,0x558800,32,3,game,cdecl,,1,,todo
+sub_558FD0,0x558FD0,32,3,game,cdecl,,1,,todo
+sub_569934,0x569934,45,19,game,cdecl,"arg_0,arg_4",0,___strgtold12 sub_569908,todo
+sub_402810,0x402810,48,21,game,stdcall,"arg_0,arg_4,arg_8,arg_C",0,ebx,todo
+sub_404C90,0x404C90,48,15,game,cdecl,"arg_0,arg_4",1,,todo
+sub_405790,0x405790,48,11,game,cdecl,"lpValueName,arg_4",0,sub_4058A0,todo
+sub_405800,0x405800,48,10,game,cdecl,"lpValueName,lpData",0,sub_405BA0,todo
+sub_405870,0x405870,48,10,game,cdecl,"lpValueName,Data",0,sub_405C00,todo
+sub_40D230,0x40D230,48,18,game,cdecl,"arg_0,color",0,sub_40D130 dword,todo
+sub_40D450,0x40D450,48,19,game,cdecl,arg_0,1,,todo
+sub_40D8D0,0x40D8D0,48,9,game,cdecl,arg_0,0,sub_40D4C0,todo
+sub_40D940,0x40D940,48,8,game,cdecl,arg_0,1,,todo
+sub_40F2E0,0x40F2E0,48,15,game,stdcall,"arg_0,arg_4",0,sub_40F360,todo
+sub_40FCD0,0x40FCD0,48,9,game,stdcall,arg_0,1,,todo
+sub_411470,0x411470,48,9,game,stdcall,arg_0,1,,todo
+sub_4134C0,0x4134C0,48,12,game,cdecl,"arg_0,String2",0,sub_405720 __strcmpi,todo
+sub_4136D0,0x4136D0,48,12,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_414FB0,0x414FB0,48,1,game,cdecl,,1,,todo
+sub_414FE0,0x414FE0,48,5,game,cdecl,,1,,todo
+sub_4171E0,0x4171E0,48,7,game,cdecl,,0,sub_4170A0,todo
+sub_417230,0x417230,48,7,game,cdecl,,0,sub_4170A0,todo
+sub_417690,0x417690,48,9,game,cdecl,,0,sub_424680,todo
+sub_4176E0,0x4176E0,48,9,game,cdecl,,0,sub_4170A0 sub_5460C0 sub_4184E0,todo
+sub_418020,0x418020,48,12,game,cdecl,,0,sub_410330 sub_4170C0,todo
+sub_418BE0,0x418BE0,48,13,game,cdecl,,0,sub_418AA0 sub_419A60,todo
+sub_418CD0,0x418CD0,48,6,game,cdecl,arg_0,1,,todo
+sub_418D50,0x418D50,48,15,game,cdecl,,0,sub_419A60,todo
+sub_41BCC0,0x41BCC0,48,16,game,stdcall,arg_0,0,sub_41BFC0,todo
+sub_41DC10,0x41DC10,48,9,game,cdecl,,0,ds,todo
+sub_41E960,0x41E960,48,13,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_41E870,todo
+sub_41ED90,0x41ED90,48,12,game,cdecl,arg_0,1,,diff
+sub_41EDE0,0x41EDE0,48,12,game,cdecl,,1,,todo
+sub_41EE10,0x41EE10,48,13,game,cdecl,,0,sub_41AF00,todo
+sub_41EF00,0x41EF00,48,12,game,cdecl,arg_0,1,,diff
+sub_41F600,0x41F600,48,20,game,cdecl,"arg_0,arg_4",1,,todo
+sub_424B60,0x424B60,48,12,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_424B90 sub_424BB0,todo
+sub_424BB0,0x424BB0,48,8,game,cdecl,"arg_0,arg_4",1,,todo
+sub_426890,0x426890,48,8,game,cdecl,,1,,todo
+sub_4281E0,0x4281E0,48,15,game,cdecl,"arg_0,arg_4,arg_8",0,sub_428210,todo
+sub_4284A0,0x4284A0,48,15,game,cdecl,,1,,todo
+sub_435CE0,0x435CE0,48,6,game,cdecl,,1,,todo
+sub_436740,0x436740,48,15,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_436550,todo
+sub_436A20,0x436A20,48,12,game,cdecl,arg_0,1,,todo
+sub_436A50,0x436A50,48,9,game,cdecl,"arg_0,arg_4",0,sub_436740,todo
+sub_438A90,0x438A90,48,9,game,cdecl,arg_0,1,,todo
+sub_438B80,0x438B80,48,9,game,cdecl,arg_0,1,,todo
+sub_43B030,0x43B030,48,18,game,cdecl,arg_0,1,,todo
+sub_546140,0x546140,48,11,game,cdecl,arg_0,1,,todo
+sub_5465D0,0x5465D0,48,7,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546960,0x546960,48,7,game,cdecl,arg_4,1,,todo
+sub_547890,0x547890,48,17,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5479B0,0x5479B0,48,11,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5489C0,0x5489C0,48,11,game,cdecl,"arg_0,arg_4",0,sub_547D70,todo
+sub_5489F0,0x5489F0,48,11,game,cdecl,"arg_0,arg_4",0,sub_547D70,todo
+sub_548C90,0x548C90,48,21,game,cdecl,arg_0,0,sub_548CC0,todo
+sub_548CC0,0x548CC0,48,11,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5499A0,0x5499A0,48,10,game,cdecl,arg_4,1,,todo
+sub_5499D0,0x5499D0,48,13,game,cdecl,"arg_4,arg_8",1,,todo
+sub_549BD0,0x549BD0,48,7,game,cdecl,,1,,todo
+sub_549C00,0x549C00,48,7,game,cdecl,,1,,todo
+sub_54A840,0x54A840,48,5,game,cdecl,,1,,todo
+sub_54A870,0x54A870,48,10,game,cdecl,arg_0,1,,todo
+sub_54BBD0,0x54BBD0,48,10,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54BC00,0x54BC00,48,9,game,cdecl,arg_0,1,,todo
+sub_54D4C0,0x54D4C0,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_546B70,todo
+sub_54D530,0x54D530,48,13,game,cdecl,arg_0,0,sub_54BC00 sub_546920,todo
+sub_54D9D0,0x54D9D0,48,18,game,cdecl,arg_0,0,sub_426860 sub_54BBD0,todo
+sub_54DB60,0x54DB60,48,10,game,cdecl,arg_0,0,sub_414600,todo
+sub_54DBB0,0x54DBB0,48,8,game,cdecl,,1,,todo
+sub_54DD00,0x54DD00,48,12,game,cdecl,arg_0,1,,todo
+sub_54DD30,0x54DD30,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DD60,0x54DD60,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DD90,0x54DD90,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54DEC0,0x54DEC0,48,13,game,cdecl,,1,,todo
+sub_54E090,0x54E090,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54E0C0,0x54E0C0,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_546400,todo
+sub_54E0F0,0x54E0F0,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_546460,todo
+sub_54E120,0x54E120,48,14,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E190,0x54E190,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_546360,todo
+sub_54E400,0x54E400,48,12,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E480,0x54E480,48,14,game,cdecl,arg_0,0,sub_54BC00 sub_5461E0 sub_54BBD0,todo
+sub_54E790,0x54E790,48,12,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54E810,0x54E810,48,13,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54E860,0x54E860,48,7,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E8B0,0x54E8B0,48,12,game,cdecl,arg_0,0,sub_414600,todo
+sub_54E8E0,0x54E8E0,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54EA80,0x54EA80,48,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54EAB0,0x54EAB0,48,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54EAE0,0x54EAE0,48,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F260,0x54F260,48,8,game,cdecl,arg_0,1,,todo
+sub_54F550,0x54F550,48,8,game,cdecl,arg_0,1,,todo
+sub_54F650,0x54F650,48,9,game,cdecl,,0,sub_4268C0,todo
+sub_54F6A0,0x54F6A0,48,8,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F720,0x54F720,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54F750,0x54F750,48,12,game,cdecl,arg_0,1,,todo
+sub_54FA50,0x54FA50,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54FB40,0x54FB40,48,11,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54FB70,0x54FB70,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FBA0,0x54FBA0,48,18,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FBD0,0x54FBD0,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FDD0,0x54FDD0,48,12,game,cdecl,arg_0,1,,todo
+sub_550590,0x550590,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_550720,0x550720,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_550910,0x550910,48,16,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_552B30,0x552B30,48,13,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552B60,0x552B60,48,15,game,cdecl,"arg_0,arg_4",0,sub_550E60 sub_54BBD0,todo
+sub_552BD0,0x552BD0,48,15,game,cdecl,"arg_0,arg_4",0,sub_550E60 sub_54BBD0,todo
+sub_552C40,0x552C40,48,15,game,cdecl,"arg_0,arg_4",0,sub_550E60 sub_54BBD0,todo
+sub_552CB0,0x552CB0,48,15,game,cdecl,"arg_0,arg_4",0,sub_550E60 sub_54BBD0,todo
+sub_552D20,0x552D20,48,15,game,cdecl,"arg_0,arg_4",0,sub_550E60 sub_54BBD0,todo
+sub_552D90,0x552D90,48,15,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_552E00,0x552E00,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_552E30,0x552E30,48,15,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_552EA0,0x552EA0,48,15,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_5538D0,0x5538D0,48,15,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553920,0x553920,48,19,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553950,0x553950,48,19,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553980,0x553980,48,19,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_5539B0,0x5539B0,48,19,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_5539E0,0x5539E0,48,19,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553A10,0x553A10,48,16,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553A60,0x553A60,48,16,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553A90,0x553A90,48,15,game,cdecl,"arg_0,arg_4",0,sub_54BC00 sub_5509F0,todo
+sub_553B20,0x553B20,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553B50,0x553B50,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553B80,0x553B80,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553BB0,0x553BB0,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553BE0,0x553BE0,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_553D10,0x553D10,48,13,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553DA0,0x553DA0,48,9,game,cdecl,"arg_0,arg_4",1,,todo
+sub_553DE0,0x553DE0,48,12,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_553E50,0x553E50,48,13,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553E80,0x553E80,48,13,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_554480,0x554480,48,12,game,cdecl,arg_0,1,,todo
+sub_554990,0x554990,48,17,game,cdecl,arg_0,0,sub_54BC00 sub_54DAE0 sub_54BBD0,todo
+sub_554BC0,0x554BC0,48,10,game,cdecl,arg_0,0,sub_4051D0,todo
+sub_56D27B,0x56D27B,57,10,game,cdecl,,0,sub_56D2B4 __CxxThrowException,todo
+sub_56D363,0x56D363,57,10,game,cdecl,,0,sub_56D39C __CxxThrowException,todo
+sub_404C10,0x404C10,64,26,game,cdecl,"arg_0,arg_4",1,,todo
+sub_404C50,0x404C50,64,19,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_4057C0,0x4057C0,64,16,game,cdecl,"lpValueName,arg_4",0,sub_405B00,todo
+sub_405830,0x405830,64,15,game,cdecl,"lpValueName,arg_4",0,_sprintf sub_405BA0,todo
+sub_406590,0x406590,64,3,game,cdecl,,1,,todo
+sub_40D2C0,0x40D2C0,64,12,game,cdecl,,0,_fopen _fclose sub_40D260,todo
+sub_40D480,0x40D480,64,12,game,cdecl,arg_0,0,sub_40D4C0,todo
+sub_40D890,0x40D890,64,23,game,cdecl,arg_0,0,_isxdigit,todo
+sub_40E7F0,0x40E7F0,64,23,game,cdecl,arg_0,0,dword,todo
+sub_40E960,0x40E960,64,12,game,stdcall,arg_0,1,,todo
+sub_40EF50,0x40EF50,64,16,game,stdcall,"arg_0,arg_4",1,,todo
+sub_40F4B0,0x40F4B0,64,2,game,cdecl,,0,unknown_libname_15,todo
+sub_40FC50,0x40FC50,64,17,game,cdecl,,0,_fwrite _fclose,todo
+sub_4106C0,0x4106C0,64,14,game,cdecl,,0,dword,todo
+sub_413480,0x413480,64,21,game,cdecl,"arg_0,arg_4",1,,todo
+sub_413750,0x413750,64,19,game,cdecl,,0,_free,todo
+sub_418100,0x418100,64,16,game,cdecl,,0,sub_4170A0 sub_417750,todo
+sub_4184A0,0x4184A0,64,9,game,cdecl,,0,sub_410480,todo
+sub_419420,0x419420,64,3,game,cdecl,,1,,todo
+sub_41A360,0x41A360,64,3,game,cdecl,,1,,todo
+sub_41A440,0x41A440,64,12,game,cdecl,arg_0,0,sub_402910,todo
+sub_41AF00,0x41AF00,64,14,game,cdecl,"arg_0,arg_4",1,,todo
+sub_41BD70,0x41BD70,64,24,game,stdcall,arg_0,0,sub_41BF80 sub_41BFA0,todo
+sub_41BFC0,0x41BFC0,64,24,game,cdecl,"Block,arg_4",0,sub_41BFC0,todo
+sub_41C1A0,0x41C1A0,64,3,game,cdecl,,1,,todo
+sub_41CBA0,0x41CBA0,64,10,game,cdecl,,1,,todo
+sub_41CD70,0x41CD70,64,12,game,cdecl,,1,,todo
+sub_41D980,0x41D980,64,16,game,cdecl,,0,ds,todo
+sub_41ED50,0x41ED50,64,12,game,cdecl,,1,,todo
+sub_41EEA0,0x41EEA0,64,14,game,cdecl,,1,,diff
+sub_41EF30,0x41EF30,64,9,game,cdecl,,1,,todo
+sub_426BB0,0x426BB0,64,14,game,cdecl,,0,sub_436C60,todo
+sub_427E00,0x427E00,64,13,game,cdecl,arg_0,0,sub_425D40,todo
+sub_427FB0,0x427FB0,64,11,game,cdecl,,1,,todo
+sub_42AB10,0x42AB10,64,14,game,cdecl,Stream,0,sub_415AB0,todo
+sub_42C460,0x42C460,64,22,game,cdecl,arg_0,0,sub_41BCC0,todo
+sub_436510,0x436510,64,22,game,cdecl,arg_0,1,,todo
+sub_436890,0x436890,64,18,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18",0,sub_436550,todo
+sub_438AC0,0x438AC0,64,9,game,cdecl,arg_0,1,,todo
+sub_438B00,0x438B00,64,9,game,cdecl,arg_0,1,,todo
+sub_438B40,0x438B40,64,9,game,cdecl,arg_0,1,,todo
+sub_43AD50,0x43AD50,64,13,game,cdecl,,1,,todo
+sub_546000,0x546000,64,17,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546060,0x546060,64,17,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546920,0x546920,64,14,game,cdecl,arg_4,1,,todo
+sub_547710,0x547710,64,24,game,cdecl,"arg_0,arg_4",0,sub_546E30 sub_546E10,todo
+sub_547800,0x547800,64,20,game,cdecl,"arg_0,arg_4",0,ds sub_546E30 sub_546E10,todo
+sub_5478C0,0x5478C0,64,20,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5479E0,0x5479E0,64,19,game,cdecl,"arg_0,arg_4",1,,todo
+sub_547CE0,0x547CE0,64,26,game,cdecl,"arg_0,arg_4,arg_8",0,sub_546E10,todo
+sub_547E40,0x547E40,64,14,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_547D70,todo
+sub_547E80,0x547E80,64,23,game,cdecl,arg_0,0,sub_546E30 sub_546E10,todo
+sub_548760,0x548760,64,21,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5497B0,0x5497B0,64,16,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_5497F0,0x5497F0,64,19,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_549880,0x549880,64,19,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_54B420,0x54B420,64,13,game,cdecl,,0,sub_415390,todo
+sub_54B810,0x54B810,64,17,game,cdecl,,0,sub_40E0C0 sub_41A220 sub_425BB0,todo
+sub_54B860,0x54B860,64,18,game,cdecl,,0,sub_40E0C0 sub_41A220 sub_425BB0 sub_425C00,todo
+sub_54BA90,0x54BA90,64,11,game,cdecl,,0,sub_41A440,todo
+sub_54D990,0x54D990,64,26,game,cdecl,arg_0,0,sub_54BC00 sub_4155F0,todo
+sub_54DB00,0x54DB00,64,13,game,cdecl,,1,,todo
+sub_54DC40,0x54DC40,64,23,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54DC80,0x54DC80,64,23,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54DCC0,0x54DCC0,64,24,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54DEF0,0x54DEF0,64,18,game,cdecl,,0,sub_54DE00,todo
+sub_54E050,0x54E050,64,13,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E150,0x54E150,64,23,game,cdecl,arg_0,0,sub_54BC00 sub_5463B0,todo
+sub_54E230,0x54E230,64,17,game,cdecl,arg_0,0,sub_54BC00 sub_546170,todo
+sub_54F3F0,0x54F3F0,64,26,game,cdecl,arg_0,0,sub_404C10,todo
+sub_54F430,0x54F430,64,26,game,cdecl,arg_0,0,sub_404C90,todo
+sub_54F470,0x54F470,64,25,game,cdecl,arg_0,0,sub_404C90,todo
+sub_54F610,0x54F610,64,14,game,cdecl,arg_0,0,sub_54BC00 __ftol sub_54BBD0,todo
+sub_54F780,0x54F780,64,12,game,cdecl,arg_0,1,,todo
+sub_54F890,0x54F890,64,20,game,cdecl,arg_0,0,sub_54BC00 sub_404C50 sub_54BBD0,todo
+sub_54F920,0x54F920,64,20,game,cdecl,arg_0,0,sub_54BC00 sub_404C90 sub_54BBD0,todo
+sub_54F960,0x54F960,64,26,game,cdecl,arg_0,0,sub_54BC00 _rand sub_54BBD0,todo
+sub_54FCF0,0x54FCF0,64,16,game,cdecl,arg_0,1,,todo
+sub_54FE00,0x54FE00,64,16,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54FEA0,0x54FEA0,64,17,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_5505C0,0x5505C0,64,17,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_550750,0x550750,64,17,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_550960,0x550960,64,17,game,cdecl,arg_0,0,sub_54BC00 sub_5501D0,todo
+sub_552B90,0x552B90,64,20,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552C00,0x552C00,64,20,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552C70,0x552C70,64,20,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552CE0,0x552CE0,64,20,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552D50,0x552D50,64,20,game,cdecl,"arg_0,arg_4",0,sub_5509F0 sub_54BBD0,todo
+sub_552DC0,0x552DC0,64,25,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_552E60,0x552E60,64,27,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_552FB0,0x552FB0,64,26,game,cdecl,arg_0,0,sub_54BC00 sub_42A700,todo
+sub_552FF0,0x552FF0,64,25,game,cdecl,arg_0,0,sub_54BC00 sub_42A830,todo
+sub_553850,0x553850,64,24,game,cdecl,arg_0,1,,todo
+sub_553D40,0x553D40,64,16,game,cdecl,"arg_0,arg_4",0,sub_54BBD0,todo
+sub_553E10,0x553E10,64,16,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_553EB0,0x553EB0,64,16,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_5544F0,0x5544F0,64,26,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_554E20,0x554E20,64,16,game,cdecl,arg_0,1,,todo
+sub_558D30,0x558D30,64,25,game,cdecl,"ElementSize,Stream",0,sub_415AB0 sub_545350,todo
+sub_558D70,0x558D70,64,25,game,cdecl,"ElementSize,Stream",0,sub_415AB0 sub_545350,todo
+sub_402910,0x402910,80,14,game,stdcall,"arg_0,arg_4",1,,todo
+sub_404D60,0x404D60,80,20,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_405C00,0x405C00,80,30,game,cdecl,"arg_0,arg_4,lpValueName,Data",0,sub_405960 ds,todo
+sub_40E050,0x40E050,80,2,game,cdecl,,1,,todo
+sub_40E5C0,0x40E5C0,80,31,game,stdcall,"arg_0,arg_4",1,,todo
+sub_40E830,0x40E830,80,33,game,cdecl,"arg_0,arg_4,arg_8",0,dword,todo
+sub_40F290,0x40F290,80,23,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,dword sub_40F310,todo
+sub_40F310,0x40F310,80,20,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,dword,todo
+sub_40F360,0x40F360,80,21,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,dword,todo
+sub_410430,0x410430,80,20,game,cdecl,,1,,todo
+sub_4114A0,0x4114A0,80,20,game,cdecl,,0,dword,todo
+sub_413570,0x413570,80,27,game,stdcall,"Source,arg_4,arg_8",0,__strdup,todo
+sub_413700,0x413700,80,24,game,stdcall,"Source,arg_4",0,__strdup,todo
+sub_4137D0,0x4137D0,80,27,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_4151E0,0x4151E0,80,11,game,cdecl,,1,,todo
+sub_415230,0x415230,80,11,game,cdecl,,1,,todo
+sub_415340,0x415340,80,16,game,cdecl,,0,eax dword_58372C,todo
+sub_417150,0x417150,80,21,game,cdecl,,0,sub_546B70 sub_546D50,todo
+sub_417450,0x417450,80,16,game,cdecl,,0,sub_546170 sub_438180 sub_439600 sub_417260,todo
+sub_417500,0x417500,80,16,game,cdecl,,0,sub_546170 sub_438180 sub_439600 sub_417260,todo
+sub_417550,0x417550,80,16,game,cdecl,,0,sub_546170 sub_438180 sub_439600 sub_417260,todo
+sub_4175A0,0x4175A0,80,16,game,cdecl,,0,sub_546170 sub_438180 sub_417260,todo
+sub_418A50,0x418A50,80,22,game,cdecl,,0,sub_546170 sub_418970,todo
+sub_418D00,0x418D00,80,22,game,cdecl,,0,sub_40ECD0 sub_419A60 sub_40F290 sub_418C10,todo
+sub_41AB40,0x41AB40,80,3,game,cdecl,,1,,todo
+sub_41AD20,0x41AD20,80,3,game,cdecl,,1,,todo
+sub_41AF40,0x41AF40,80,6,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_41BEE0,0x41BEE0,80,26,game,cdecl,,1,,todo
+sub_41BF30,0x41BF30,80,12,game,cdecl,,0,sub_41BEE0,todo
+sub_41C000,0x41C000,80,28,game,cdecl,"arg_0,arg_4,arg_8",0,sub_41BB90,todo
+sub_41CC70,0x41CC70,80,14,game,cdecl,,0,sub_41C640 sub_41CA10 sub_41CBE0,todo
+sub_41CCC0,0x41CCC0,80,13,game,cdecl,,0,sub_41CA10 sub_41CBE0,todo
+sub_41E820,0x41E820,80,19,game,cdecl,"arg_0,arg_4",1,,todo
+sub_4254F0,0x4254F0,80,6,game,cdecl,,1,,todo
+sub_425BB0,0x425BB0,80,17,game,cdecl,,1,,todo
+sub_4266F0,0x4266F0,80,30,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_425CB0,todo
+sub_427E40,0x427E40,80,15,game,cdecl,arg_0,0,sub_425D40,todo
+sub_427F60,0x427F60,80,20,game,cdecl,,0,sub_402810,todo
+sub_429DB0,0x429DB0,80,14,game,cdecl,arg_0,1,,todo
+sub_42AAC0,0x42AAC0,80,27,game,cdecl,"Stream,ElementSize",0,sub_41EF00 sub_415A90 sub_5563F0,todo
+sub_436840,0x436840,80,26,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_436550,todo
+sub_439110,0x439110,80,20,game,cdecl,arg_0,1,,todo
+sub_545140,0x545140,80,19,game,cdecl,,0,sub_415690 _fopen sub_545350,todo
+sub_545DE0,0x545DE0,80,18,game,cdecl,"arg_0,arg_4",1,,todo
+sub_545F40,0x545F40,80,21,game,cdecl,"arg_0,arg_4",1,,todo
+sub_545F90,0x545F90,80,30,game,cdecl,"arg_0,arg_4",0,sub_545F40 sub_546060,todo
+sub_546360,0x546360,80,25,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_5463B0,0x5463B0,80,27,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_546E50,0x546E50,80,32,game,cdecl,,0,ebx,todo
+sub_5476C0,0x5476C0,80,33,game,cdecl,"arg_0,arg_4",0,dword sub_5475B0,todo
+sub_547840,0x547840,80,26,game,cdecl,"arg_0,arg_4",0,ds,todo
+sub_547900,0x547900,80,21,game,cdecl,"arg_0,arg_4",1,,todo
+sub_547C00,0x547C00,80,18,game,cdecl,arg_0,0,__ftol,todo
+sub_547D20,0x547D20,80,31,game,cdecl,"arg_0,arg_4",0,sub_546E30 sub_546E10,todo
+sub_547DF0,0x547DF0,80,35,game,cdecl,"arg_0,arg_4",0,sub_546E30 sub_546E10,todo
+sub_548600,0x548600,80,32,game,cdecl,arg_0,0,sub_547EC0 sub_547D70 sub_547D20,todo
+sub_549070,0x549070,80,31,game,cdecl,"arg_0,arg_4",1,,todo
+sub_549710,0x549710,80,22,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_549760,0x549760,80,27,game,cdecl,"arg_0,arg_4,arg_8",0,sub_547890 sub_547D70,todo
+sub_549830,0x549830,80,26,game,cdecl,"arg_0,arg_4,arg_C",1,,todo
+sub_549A70,0x549A70,80,20,game,cdecl,"arg_0,arg_4",0,sub_547D70,todo
+sub_549B50,0x549B50,80,3,game,cdecl,,1,,todo
+sub_54AD30,0x54AD30,80,17,game,cdecl,,0,sub_415390 sub_41CA10 sub_41CB00 sub_41C9B0 sub_41ABC0 sub_4255A0,todo
+sub_54B000,0x54B000,80,12,game,cdecl,,0,sub_54AFF0 sub_4267E0 sub_415390,todo
+sub_54C3F0,0x54C3F0,80,25,game,cdecl,arg_0,1,,todo
+sub_54D830,0x54D830,80,21,game,cdecl,arg_0,1,,todo
+sub_54DFE0,0x54DFE0,80,21,game,cdecl,arg_0,1,,todo
+sub_54E1E0,0x54E1E0,80,25,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0 sub_546170,todo
+sub_54E2D0,0x54E2D0,80,27,game,cdecl,arg_0,0,sub_54BC00 sub_546170 sub_546360,todo
+sub_54E430,0x54E430,80,12,game,cdecl,,1,,todo
+sub_54E7C0,0x54E7C0,80,23,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54F4B0,0x54F4B0,80,29,game,cdecl,arg_0,0,sub_404C90,todo
+sub_54F500,0x54F500,80,28,game,cdecl,arg_0,0,sub_404C10,todo
+sub_54F5C0,0x54F5C0,80,16,game,cdecl,,0,sub_4268C0,todo
+sub_54F7F0,0x54F7F0,80,21,game,cdecl,arg_0,0,sub_54BC00 __ftol sub_54BBD0,todo
+sub_54F840,0x54F840,80,23,game,cdecl,arg_0,0,sub_54BC00 sub_404BB0 sub_54BBD0,todo
+sub_54F8D0,0x54F8D0,80,23,game,cdecl,arg_0,0,sub_54BC00 sub_404C10 sub_54BBD0,todo
+sub_54F9A0,0x54F9A0,80,29,game,cdecl,arg_0,0,sub_54BC00 _rand sub_54BBD0,todo
+sub_54FA80,0x54FA80,80,19,game,cdecl,"arg_0,arg_4",1,,todo
+sub_550160,0x550160,80,22,game,cdecl,arg_0,0,sub_54BC00 sub_41FA30,todo
+sub_5509A0,0x5509A0,80,18,game,cdecl,,0,__ftol sub_546140,todo
+sub_5530B0,0x5530B0,80,33,game,cdecl,arg_0,0,sub_54BC00 sub_429B70,todo
+sub_553100,0x553100,80,33,game,cdecl,arg_0,0,sub_54BC00 sub_429C30,todo
+sub_5549C0,0x5549C0,80,32,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_554D50,0x554D50,80,21,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_555040,0x555040,80,14,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_5550F0,0x5550F0,80,10,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_567E4C,0x567E4C,86,28,game,cdecl,,0,eax,todo
+sub_56D0A0,0x56D0A0,90,27,game,cdecl,,0,__EH_prolog _strlen sub_56D0FA __CxxThrowException,todo
+sub_56D16B,0x56D16B,90,10,game,cdecl,,0,sub_56D1E1 __CxxThrowException,todo
+sub_404BB0,0x404BB0,96,28,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_405BA0,0x405BA0,96,37,game,cdecl,"arg_0,arg_4,lpValueName,lpData",0,sub_405960 ds,todo
+sub_405D00,0x405D00,96,15,game,cdecl,,0,sub_439110 sub_419510 sub_415390,todo
+sub_40D260,0x40D260,96,26,game,cdecl,"Format,ArgList",0,_vsprintf _vprintf _fopen _fputs _fclose,todo
+sub_40E630,0x40E630,96,33,game,cdecl,,1,,todo
+sub_40E690,0x40E690,96,34,game,cdecl,arg_0,1,,todo
+sub_413510,0x413510,96,38,game,stdcall,arg_0,1,,todo
+sub_415010,0x415010,96,19,game,cdecl,,1,,todo
+sub_4174A0,0x4174A0,96,19,game,cdecl,,0,sub_546170 sub_438180 sub_439600 sub_417260 sub_408300 sub_4071D0 sub_437D00,todo
+sub_418970,0x418970,96,20,game,cdecl,,1,,todo
+sub_4189F0,0x4189F0,96,27,game,cdecl,,0,sub_546170 sub_418970,todo
+sub_41CD10,0x41CD10,96,22,game,cdecl,,0,sub_41CBE0 sub_414FB0,todo
+sub_41DD20,0x41DD20,96,28,game,cdecl,,0,sub_41DD80 sub_439280 sub_439490 sub_439160 sub_438070,todo
+sub_41E730,0x41E730,96,29,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_41EC10,0x41EC10,96,24,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18",1,,todo
+sub_425540,0x425540,96,25,game,cdecl,,0,sub_4255A0,todo
+sub_4264B0,0x4264B0,96,23,game,cdecl,arg_0,1,,todo
+sub_427BE0,0x427BE0,96,16,game,cdecl,,0,sub_5460C0 sub_545FE0 sub_546040,todo
+sub_42AA60,0x42AA60,96,30,game,cdecl,,0,sub_41EF00,todo
+sub_42C860,0x42C860,96,3,game,cdecl,,1,,todo
+sub_436C60,0x436C60,96,10,game,cdecl,"arg_0,arg_4,arg_8",0,sub_436A80,todo
+sub_437A60,0x437A60,96,40,game,cdecl,"arg_0,arg_4",1,,todo
+sub_438BB0,0x438BB0,96,15,game,cdecl,arg_0,1,,todo
+sub_5461E0,0x5461E0,96,39,game,cdecl,"arg_0,arg_4",0,sub_548760,todo
+sub_546300,0x546300,96,31,game,cdecl,,0,sub_5489F0,todo
+sub_546400,0x546400,96,32,game,cdecl,"arg_0,arg_4,arg_8",0,sub_547E40,todo
+sub_546D50,0x546D50,96,32,game,cdecl,,0,ebx,todo
+sub_546DB0,0x546DB0,96,32,game,cdecl,,0,ebx,todo
+sub_54A180,0x54A180,96,21,game,cdecl,,0,sub_419280 sub_415390 sub_414FB0,todo
+sub_54ABD0,0x54ABD0,96,11,game,cdecl,,0,sub_414FB0 sub_43C940,todo
+sub_54ACD0,0x54ACD0,96,23,game,cdecl,,0,_sprintf sub_54AC60 sub_43B790 sub_43B8A0 sub_436A50 sub_439490 sub_43C940,todo
+sub_54C440,0x54C440,96,27,game,cdecl,,0,sub_54C3F0,todo
+sub_54D910,0x54D910,96,27,game,cdecl,arg_0,0,sub_54BC00 sub_415390,todo
+sub_54E270,0x54E270,96,36,game,cdecl,arg_0,0,sub_54BC00 sub_546170 sub_546360 sub_54BBD0,todo
+sub_54E3A0,0x54E3A0,96,39,game,cdecl,arg_0,0,sub_54BC00 sub_546170 sub_546360 sub_546460,todo
+sub_54E6C0,0x54E6C0,96,38,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F290,0x54F290,96,30,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54F390,0x54F390,96,39,game,cdecl,arg_0,1,,todo
+sub_54FE40,0x54FE40,96,20,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_553170,0x553170,96,35,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_5531D0,0x5531D0,96,31,game,cdecl,arg_0,0,sub_54BC00 sub_553170 sub_54BFC0,todo
+sub_553230,0x553230,96,31,game,cdecl,arg_0,0,sub_54BC00 sub_553170 sub_54BFC0,todo
+sub_553630,0x553630,96,31,game,cdecl,arg_0,0,sub_54BBD0,todo
+sub_5537F0,0x5537F0,96,30,game,cdecl,arg_0,1,,todo
+sub_553F10,0x553F10,96,37,game,cdecl,arg_0,1,,todo
+sub_554A10,0x554A10,96,38,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_554A70,0x554A70,96,43,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_558820,0x558820,96,27,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_558C30,todo
+sub_558C30,0x558C30,96,25,game,cdecl,arg_0,0,sub_437E90 sub_408300 sub_42C460 sub_545190,todo
+sub_401080,0x401080,112,39,game,cdecl,arg_0,1,,todo
+sub_405720,0x405720,112,41,game,cdecl,arg_0,0,_sprintf,todo
+sub_406740,0x406740,112,1,game,cdecl,,1,,todo
+sub_4071D0,0x4071D0,112,38,game,cdecl,,0,sub_406880 sub_406AB0 sub_406D30 sub_406E40 sub_407240,todo
+sub_408320,0x408320,112,40,game,cdecl,,0,dword,todo
+sub_40F220,0x40F220,112,30,game,cdecl,,0,dword,todo
+sub_40FBE0,0x40FBE0,112,40,game,cdecl,"Buffer,arg_4,arg_8,ElementSize",0,_fwrite,todo
+sub_4155F0,0x4155F0,112,12,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_4170E0,0x4170E0,112,26,game,cdecl,,0,sub_546CC0 sub_546DB0 sub_545F90 sub_405870,todo
+sub_4199F0,0x4199F0,112,37,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_41A3A0,0x41A3A0,112,11,game,cdecl,,1,,todo
+sub_41ACA0,0x41ACA0,112,13,game,cdecl,,0,sub_41A3A0,todo
+sub_41CE70,0x41CE70,112,3,game,cdecl,,1,,todo
+sub_41D2C0,0x41D2C0,112,35,game,cdecl,"arg_0,arg_4",0,sub_43B790 sub_43B8A0 sub_439490 sub_43C940 esi sub_40F060,todo
+sub_41DAD0,0x41DAD0,112,24,game,stdcall,nIndex,0,sub_41D9C0 dword_5863CC ds,todo
+sub_41E610,0x41E610,112,32,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18",1,,todo
+sub_41E7B0,0x41E7B0,112,36,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_41EC70,0x41EC70,112,30,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",1,,todo
+sub_41ECE0,0x41ECE0,112,30,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",1,,todo
+sub_41F590,0x41F590,112,33,game,cdecl,arg_0,0,sub_415690 sub_43CB20 sub_41EF70 sub_41F0C0 dword sub_43CB30,todo
+sub_427D90,0x427D90,112,35,game,cdecl,arg_0,0,sub_426510,todo
+sub_429D40,0x429D40,112,21,game,cdecl,"arg_0,arg_4",1,,todo
+sub_437C90,0x437C90,112,33,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,dword,todo
+sub_438CD0,0x438CD0,112,15,game,cdecl,arg_0,1,,todo
+sub_438E10,0x438E10,112,15,game,cdecl,arg_0,1,,todo
+sub_438E80,0x438E80,112,15,game,cdecl,arg_0,1,,todo
+sub_438EF0,0x438EF0,112,15,game,cdecl,arg_0,1,,todo
+sub_438F60,0x438F60,112,16,game,cdecl,arg_0,1,,todo
+sub_4390A0,0x4390A0,112,16,game,cdecl,"arg_0,arg_4",1,,todo
+sub_43B920,0x43B920,112,36,game,cdecl,"arg_0,Stream",0,_malloc _fread,todo
+sub_43C1B0,0x43C1B0,112,41,game,cdecl,arg_0,0,sub_43AD90,todo
+sub_544FC0,0x544FC0,112,32,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_5460D0,0x5460D0,112,27,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546170,0x546170,112,39,game,cdecl,"arg_0,arg_4,arg_8",0,sub_548760 sub_5487A0 sub_5489C0,todo
+sub_546460,0x546460,112,37,game,cdecl,"arg_0,arg_4,arg_8",0,sub_547E40,todo
+sub_549200,0x549200,112,43,game,cdecl,"arg_0,arg_4",0,sub_548B60 sub_549980 sub_549150 sub_549270,todo
+sub_549A00,0x549A00,112,30,game,cdecl,"arg_0,arg_4,arg_8",0,sub_547D70,todo
+sub_54AC60,0x54AC60,112,30,game,cdecl,,0,dword sub_424BE0,todo
+sub_54B100,0x54B100,112,25,game,cdecl,,0,sub_546990 sub_439110 sub_41F630 sub_43B790 sub_419510 sub_415390,todo
+sub_54D8A0,0x54D8A0,112,24,game,cdecl,arg_0,0,sub_54BC00 sub_415390,todo
+sub_54E720,0x54E720,112,40,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54E950,0x54E950,112,30,game,cdecl,arg_0,1,,todo
+sub_54F150,0x54F150,112,39,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_54FAD0,0x54FAD0,112,40,game,cdecl,arg_0,0,sub_54BC00 sub_41FA30,todo
+sub_54FD60,0x54FD60,112,24,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550060,0x550060,112,43,game,cdecl,"arg_0,arg_4",0,sub_54BC00,todo
+sub_552ED0,0x552ED0,112,42,game,cdecl,arg_0,0,sub_54BC00 sub_428EA0,todo
+sub_552F40,0x552F40,112,41,game,cdecl,arg_0,0,sub_54BC00 sub_429E00,todo
+sub_553290,0x553290,112,29,game,cdecl,arg_0,1,,todo
+sub_553380,0x553380,112,31,game,cdecl,arg_0,1,,todo
+sub_554AD0,0x554AD0,112,45,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_56D0FA,0x56D0FA,113,34,game,stdcall,arg_0,0,__EH_prolog sub_414160,todo
+sub_56D39C,0x56D39C,119,8,game,stdcall,arg_0,0,sub_56D1E1,todo
+sub_401000,0x401000,128,39,game,cdecl,arg_0,1,,todo
+sub_405C50,0x405C50,128,24,game,cdecl,,0,sub_425CB0,todo
+sub_406990,0x406990,128,37,game,cdecl,,0,dword,todo
+sub_40F3B0,0x40F3B0,128,50,game,cdecl,,0,dword sub_40F430,todo
+sub_40F430,0x40F430,128,27,game,cdecl,,1,,todo
+sub_40FD00,0x40FD00,128,37,game,cdecl,,0,sub_40FE10 sub_413170 ds,todo
+sub_413820,0x413820,128,56,game,stdcall,arg_0,1,,todo
+sub_415FF0,0x415FF0,128,17,game,cdecl,,1,,todo
+sub_417FA0,0x417FA0,128,33,game,cdecl,,0,esi _sprintf sub_418020 sub_418050,todo
+sub_418420,0x418420,128,33,game,cdecl,,0,sub_424900,todo
+sub_4195D0,0x4195D0,128,39,game,cdecl,,0,sub_546B70 sub_546CC0,todo
+sub_419650,0x419650,128,27,game,cdecl,,0,eax sub_438180 sub_424B60 sub_439600 sub_435CE0 sub_40D920 sub_4280C0 sub_4060A0 sub_4195D0 sub_41D330,todo
+sub_41ADA0,0x41ADA0,128,42,game,cdecl,arg_0,0,_printf,todo
+sub_41BCF0,0x41BCF0,128,26,game,stdcall,"arg_0,arg_4,arg_8,arg_C",0,sub_41BEE0,todo
+sub_41C0E0,0x41C0E0,128,42,game,cdecl,,0,sub_405790 _sprintf _fopen _fread _fclose,todo
+sub_41C5A0,0x41C5A0,128,40,game,cdecl,,0,sub_546170,todo
+sub_425C00,0x425C00,128,17,game,cdecl,,1,,todo
+sub_4267E0,0x4267E0,128,27,game,cdecl,,0,sub_4191C0 sub_427BE0,todo
+sub_436CC0,0x436CC0,128,32,game,cdecl,arg_0,1,,todo
+sub_437AC0,0x437AC0,128,45,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_43B8A0,0x43B8A0,128,38,game,cdecl,,0,dword,todo
+sub_545E30,0x545E30,128,52,game,cdecl,,0,ebx sub_549A70,todo
+sub_546990,0x546990,128,35,game,cdecl,,0,sub_547E40 ds sub_545C00,todo
+sub_547D70,0x547D70,128,51,game,cdecl,"arg_0,arg_4,arg_8",0,sub_546E30 sub_546E10,todo
+sub_549AC0,0x549AC0,128,20,game,cdecl,"arg_0,arg_4",0,sub_547D70,todo
+sub_54B190,0x54B190,128,28,game,cdecl,,0,sub_414600 sub_419510 sub_54B9F0 sub_41AFC0,todo
+sub_54B970,0x54B970,128,40,game,stdcall,arg_0,0,ds,todo
+sub_54D180,0x54D180,128,25,game,cdecl,arg_0,0,funcs_54D1AB funcs_54D1B8,todo
+sub_54E320,0x54E320,128,49,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0 sub_546170 sub_546360 sub_546460,todo
+sub_54EED0,0x54EED0,128,46,game,cdecl,arg_0,0,sub_54BC00 sub_404D60,todo
+sub_54F0D0,0x54F0D0,128,46,game,cdecl,arg_0,0,sub_54BC00 sub_404D60,todo
+sub_54F1C0,0x54F1C0,128,46,game,cdecl,arg_0,0,sub_54BC00 sub_404D60,todo
+sub_553030,0x553030,128,46,game,cdecl,arg_0,0,sub_54BC00 sub_42A8E0,todo
+sub_553300,0x553300,128,35,game,cdecl,arg_0,1,,todo
+sub_553C10,0x553C10,128,33,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_554B40,0x554B40,128,52,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_554CD0,0x554CD0,128,44,game,cdecl,arg_0,0,sub_54BC00 sub_404D60,todo
+sub_554F30,0x554F30,128,35,game,cdecl,arg_0,1,,todo
+sub_554FC0,0x554FC0,128,31,game,cdecl,arg_0,0,sub_54BC00 sub_4284A0,todo
+sub_407140,0x407140,144,41,game,cdecl,,1,,todo
+sub_40FD80,0x40FD80,144,41,game,cdecl,,0,sub_40FE10 sub_410550 sub_410700 sub_411000 sub_4114F0 sub_411620,todo
+sub_40FF40,0x40FF40,144,44,game,cdecl,,0,sub_405790 __strdup sub_40FFD0 _free,todo
+sub_411620,0x411620,144,35,game,cdecl,,1,,todo
+sub_41C050,0x41C050,144,46,game,cdecl,,0,sub_405790 _sprintf _fopen _fwrite _fclose,todo
+sub_41CBE0,0x41CBE0,144,38,game,cdecl,,0,sub_405790 _sprintf _fopen _fwrite _fclose,todo
+sub_41CDD0,0x41CDD0,144,21,game,cdecl,,0,sub_414FB0 sub_41C620 sub_41C820,todo
+sub_41DF60,0x41DF60,144,21,game,cdecl,,0,sub_40F220 sub_545270 sub_41EDE0 sub_41EF30 sub_41EE80 sub_4195C0 dword sub_40FE10 sub_40FD00 ds,todo
+sub_424680,0x424680,144,51,game,cdecl,,0,sub_545F90 sub_405830 sub_405870,todo
+sub_425CB0,0x425CB0,144,30,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_425D40,todo
+sub_427E90,0x427E90,144,14,game,cdecl,,0,sub_425D40,todo
+sub_545EB0,0x545EB0,144,49,game,cdecl,,0,ebp,todo
+sub_546CC0,0x546CC0,144,37,game,cdecl,,0,sub_547E40 sub_545C00 ds,todo
+sub_547C50,0x547C50,144,56,game,cdecl,"arg_0,arg_4",0,sub_547B60,todo
+sub_5490C0,0x5490C0,144,52,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_54A1E0,0x54A1E0,144,28,game,cdecl,arg_0,1,,todo
+sub_54EE40,0x54EE40,144,53,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_550600,0x550600,144,46,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550690,0x550690,144,43,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550790,0x550790,144,44,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_550820,0x550820,144,47,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_554280,0x554280,144,49,game,cdecl,arg_0,0,sub_54BC00 sub_404C10 sub_54BBD0,todo
+sub_554530,0x554530,144,43,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_56D2CC,0x56D2CC,151,27,game,cdecl,,0,__EH_prolog _strlen sub_56D0FA __CxxThrowException,todo
+sub_56D1E1,0x56D1E1,154,32,game,stdcall,arg_0,0,__EH_prolog sub_414160,todo
+sub_401780,0x401780,160,41,game,cdecl,"arg_0,arg_4",0,sub_401820,todo
+sub_404CC0,0x404CC0,160,47,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_405B00,0x405B00,160,54,game,cdecl,"arg_0,arg_4,Type,lpValueName",0,sub_405960 ds _atof,todo
+sub_406A10,0x406A10,160,64,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_40D3B0,0x40D3B0,160,56,game,cdecl,"FileName,arg_4",0,_fopen _fread _malloc sub_40D300 _free _fclose,todo
+sub_40E9A0,0x40E9A0,160,65,game,cdecl,,0,dword sub_40E830,todo
+sub_4175F0,0x4175F0,160,34,game,cdecl,,0,sub_546170 sub_417260,todo
+sub_4185A0,0x4185A0,160,34,game,cdecl,,0,sub_545F90 sub_546000 sub_405870 sub_5460A0 sub_5460C0 sub_4184E0,todo
+sub_41CB00,0x41CB00,160,29,game,cdecl,,0,sub_4057C0 __ftol sub_545F90 sub_5460A0 sub_546000,todo
+sub_41E410,0x41E410,160,3,game,cdecl,,1,,todo
+sub_426740,0x426740,160,52,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_4266F0,todo
+sub_437290,0x437290,160,64,game,cdecl,"arg_0,arg_4",1,,todo
+sub_547B60,0x547B60,160,41,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_54A0E0,0x54A0E0,160,38,game,cdecl,,0,sub_40E630 sub_415390 sub_546170 sub_414FB0 sub_5464D0 sub_546CC0 sub_546990,todo
+sub_54A5A0,0x54A5A0,160,37,game,cdecl,,0,sub_415390 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0 sub_41F630,todo
+sub_54AD80,0x54AD80,160,35,game,cdecl,,0,sub_5536D0 sub_545030 sub_419510 sub_54D0D0 sub_54BA90 sub_54C4A0 sub_4268C0,todo
+sub_54B8A0,0x54B8A0,160,29,game,cdecl,,0,sub_41CDD0 sub_425BB0 sub_425C00 sub_40DD60 sub_40E0C0 sub_41A220,todo
+sub_54B9F0,0x54B9F0,160,34,game,stdcall,,0,edi __ftol,todo
+sub_54EBC0,0x54EBC0,160,54,game,cdecl,arg_0,0,sub_54BC00 sub_404D60,todo
+sub_54EF50,0x54EF50,160,56,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_54F2F0,0x54F2F0,160,63,game,cdecl,arg_0,0,sub_54BC00 sub_54BBD0,todo
+sub_54FC40,0x54FC40,160,48,game,cdecl,arg_0,1,,todo
+sub_554E60,0x554E60,160,39,game,cdecl,arg_0,1,,todo
+sub_558C90,0x558C90,160,48,game,cdecl,"Buffer,Stream",0,sub_41EF00 sub_415AF0,todo
+sub_56D5AC,0x56D5AC,163,11,game,stdcall,arg_0,0,sub_56D64F,todo
+sub_404240,0x404240,176,72,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_4042F0,todo
+sub_405FF0,0x405FF0,176,3,game,cdecl,,1,,todo
+sub_40D300,0x40D300,176,66,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_40F170,0x40F170,176,63,game,cdecl,arg_0,0,dword,todo
+sub_412C00,0x412C00,176,49,game,cdecl,"arg_4,arg_8",1,,todo
+sub_413A60,0x413A60,176,76,game,stdcall,arg_0,1,,todo
+sub_414600,0x414600,176,46,game,cdecl,"Format,ArgList",0,_vsprintf ds,todo
+sub_418050,0x418050,176,43,game,cdecl,,0,sub_408300 sub_40FE10 sub_40FE30 sub_410430 sub_424590 sub_438180 sub_4071D0 sub_410480 sub_437D00 sub_439600 sub_435CE0 sub_417750 sub_4170C0 sub_41DF60,todo
+sub_419460,0x419460,176,42,game,cdecl,,0,sub_54B9F0 sub_41EEA0 sub_41EE10,todo
+sub_419510,0x419510,176,57,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_41ACA0 sub_558820 sub_558880 _sprintf ds sub_41DF60,todo
+sub_41E680,0x41E680,176,21,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_428010,0x428010,176,60,game,cdecl,arg_0,1,,todo
+sub_42A830,0x42A830,176,57,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_428700,todo
+sub_439280,0x439280,176,51,game,cdecl,,0,dword,todo
+sub_43C100,0x43C100,176,61,game,cdecl,"arg_0,arg_4",1,,todo
+sub_5471F0,0x5471F0,176,54,game,cdecl,"arg_0,arg_4,arg_8",0,sub_41EF00 sub_548A20,todo
+sub_547750,0x547750,176,62,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_547710 ds sub_547800,todo
+sub_549150,0x549150,176,61,game,cdecl,"arg_0,arg_4",0,sub_547D70,todo
+sub_54B050,0x54B050,176,34,game,cdecl,,0,sub_54AFF0 sub_41CA10 sub_41C1E0 sub_415390,todo
+sub_54D0D0,0x54D0D0,176,50,game,cdecl,arg_0,0,sub_41EE60 sub_41EE40 sub_54CEF0 sub_54CFC0,todo
+sub_54DF30,0x54DF30,176,58,game,cdecl,arg_0,0,sub_54D560 sub_54DE00,todo
+sub_54EB10,0x54EB10,176,61,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_556340,0x556340,176,44,game,cdecl,,0,ds eax dword,todo
+sub_4058A0,0x4058A0,192,68,game,cdecl,"Buffer,arg_4,Type,lpValueName",0,sub_405960 ds _sprintf,todo
+sub_412CB0,0x412CB0,192,39,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_412D90,0x412D90,192,92,game,cdecl,"arg_0,arg_4",0,sub_412E50,todo
+sub_412E50,0x412E50,192,85,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",1,,todo
+sub_415280,0x415280,192,14,game,cdecl,,1,,todo
+sub_4184E0,0x4184E0,192,32,game,cdecl,arg_0,1,,todo
+sub_418C10,0x418C10,192,42,game,cdecl,,0,sub_40E610,todo
+sub_4191C0,0x4191C0,192,38,game,cdecl,,1,,todo
+sub_41A160,0x41A160,192,50,game,cdecl,arg_0,0,sub_546170 sub_415390,todo
+sub_428700,0x428700,192,67,game,cdecl,arg_0,0,__ftol,todo
+sub_429B70,0x429B70,192,52,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_427FF0,todo
+sub_42C790,0x42C790,192,53,game,cdecl,,0,sub_42C680,todo
+sub_438C10,0x438C10,192,30,game,cdecl,arg_0,1,,todo
+sub_546240,0x546240,192,67,game,cdecl,"arg_0,arg_4",0,sub_5489F0,todo
+sub_5498C0,0x5498C0,192,65,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_54D560,0x54D560,192,66,game,cdecl,arg_0,1,,todo
+sub_54DE00,0x54DE00,192,45,game,cdecl,"arg_0,arg_4",0,sub_41E1C0 sub_546CC0 sub_546B70,todo
+sub_402840,0x402840,208,75,game,stdcall,"arg_0,arg_4,arg_8",0,sub_401080,todo
+sub_4067B0,0x4067B0,208,85,game,cdecl,"Stream,ElementSize",0,sub_41EF00 sub_415A90,todo
+sub_4083A0,0x4083A0,208,56,game,cdecl,"arg_0,arg_4,arg_C,arg_10",0,__ftol,todo
+sub_40E4F0,0x40E4F0,208,71,game,cdecl,"arg_0,Str1",0,dword _strncmp ds,todo
+sub_40EF90,0x40EF90,208,74,game,stdcall,"arg_0,arg_4",0,__strnicmp sub_4199F0,todo
+sub_410480,0x410480,208,58,game,cdecl,"arg_0,arg_4,arg_8",0,__CIpow __ftol dword,todo
+sub_412640,0x412640,208,67,game,stdcall,"arg_0,arg_4",0,_sprintf _fwrite sub_412CB0,todo
+sub_412940,0x412940,208,61,game,cdecl,"arg_0,arg_4",1,,todo
+sub_4146B0,0x4146B0,208,59,game,cdecl,arg_0,0,sub_41ED90,todo
+sub_41DB40,0x41DB40,208,67,game,stdcall,"arg_0,arg_4",0,sub_41D9C0 dword_5863DC ds edi,todo
+sub_436770,0x436770,208,62,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_436740,todo
+sub_437E90,0x437E90,208,30,game,cdecl,,0,dword,todo
+sub_438D40,0x438D40,208,31,game,cdecl,arg_0,1,,todo
+sub_438FD0,0x438FD0,208,35,game,cdecl,"arg_0,arg_4",1,,todo
+sub_546830,0x546830,208,71,game,cdecl,lpFileName,0,sub_546900 ds edi,todo
+sub_54BAD0,0x54BAD0,208,36,game,cdecl,,0,sub_404DB0,todo
+sub_54CEF0,0x54CEF0,208,36,game,cdecl,arg_0,1,,todo
+sub_5541B0,0x5541B0,208,72,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_554BF0,0x554BF0,208,58,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_404DB0,0x404DB0,224,68,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,__ftol,todo
+sub_406C50,0x406C50,224,62,game,cdecl,,0,dword,todo
+sub_40E880,0x40E880,224,85,game,cdecl,,0,dword sub_40E7F0,todo
+sub_412F10,0x412F10,224,108,game,cdecl,"arg_0,arg_4",0,sub_412E50,todo
+sub_4135C0,0x4135C0,224,85,game,cdecl,,0,_free sub_413750,todo
+sub_417370,0x417370,224,56,game,cdecl,,0,sub_438180 sub_417260 sub_439600 sub_408300 sub_4071D0 sub_437D00,todo
+sub_418180,0x418180,224,52,game,cdecl,,0,sub_546170 sub_410480,todo
+sub_418260,0x418260,224,52,game,cdecl,,0,sub_546170 sub_410480,todo
+sub_418340,0x418340,224,52,game,cdecl,,0,sub_546170 sub_410480,todo
+sub_41ABC0,0x41ABC0,224,50,game,cdecl,,0,sub_4057C0 __ftol sub_419810,todo
+sub_41AE20,0x41AE20,224,72,game,cdecl,arg_0,1,,todo
+sub_41DC40,0x41DC40,224,68,game,cdecl,hInstance,0,ds sub_41DAD0,todo
+sub_41E990,0x41E990,224,67,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",1,,todo
+sub_545190,0x545190,224,75,game,cdecl,,0,sub_546CC0 sub_546A10 sub_546300 sub_5464D0 sub_545C00 ebp,todo
+sub_545270,0x545270,224,64,game,cdecl,,0,sub_545190 sub_547100 _free,todo
+sub_54ED60,0x54ED60,224,75,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_54EFF0,0x54EFF0,224,77,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_558DB0,0x558DB0,224,79,game,cdecl,Stream,0,sub_415AB0 sub_41EF00 sub_415A90,todo
+sub_40C250,0x40C250,240,68,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_413390,0x413390,240,91,game,cdecl,,0,_free sub_4135C0,todo
+sub_416EB0,0x416EB0,240,40,game,cdecl,,1,,todo
+sub_416FB0,0x416FB0,240,40,game,cdecl,,1,,todo
+sub_41BB90,0x41BB90,240,65,game,cdecl,"arg_0,arg_4",1,,todo
+sub_41CA10,0x41CA10,240,49,game,cdecl,arg_0,0,sub_41C9D0 sub_41C9F0 sub_41CD70,todo
+sub_41E870,0x41E870,240,64,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_424590,0x424590,240,78,game,cdecl,,0,sub_4057C0 __ftol,todo
+sub_436D40,0x436D40,240,65,game,cdecl,"arg_0,arg_4",1,,todo
+sub_4387E0,0x4387E0,240,52,game,cdecl,,1,,todo
+sub_547100,0x547100,240,82,game,cdecl,Block,0,_free ds,todo
+sub_54B210,0x54B210,240,59,game,cdecl,,0,sub_546A10 sub_414600 _sprintf sub_41F630 sub_439110 sub_419510 sub_415390 sub_43B790,todo
+sub_54B300,0x54B300,240,55,game,cdecl,,0,_sprintf sub_43B790 sub_43B8A0 sub_439490 esi sub_40F060 sub_40E630 sub_415390 sub_415340,todo
+sub_54FEF0,0x54FEF0,240,73,game,cdecl,arg_0,0,sub_54BC00,todo
+sub_406D30,0x406D30,256,83,game,cdecl,arg_0,0,sub_406E30 sub_41EF00,todo
+sub_40D130,0x40D130,256,98,game,cdecl,"arg_0,color",0,dword ds,todo
+sub_40E6F0,0x40E6F0,256,84,game,cdecl,"arg_0,arg_4",0,DirectInputCreateA sub_40E9A0 sub_40E880 ds sub_40E0A0 sub_419810,todo
+sub_410330,0x410330,256,78,game,cdecl,,0,sub_405720 sub_405800 sub_405870,todo
+sub_417A20,0x417A20,256,86,game,cdecl,,0,sub_546170 sub_417750,todo
+sub_417C50,0x417C50,256,86,game,cdecl,,0,sub_546170 sub_417750,todo
+sub_417D50,0x417D50,256,86,game,cdecl,,0,sub_546170 sub_417750,todo
+sub_41FA30,0x41FA30,256,79,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_42AB50,0x42AB50,256,89,game,cdecl,"arg_0,Stream,ElementSize",0,sub_41EF00 sub_415A90 sub_41F770 sub_41F8B0,todo
+sub_437F70,0x437F70,256,3,game,cdecl,,1,,todo
+sub_5464D0,0x5464D0,256,83,game,cdecl,,0,sub_547E80 sub_547D70 sub_547D20 sub_549A70 sub_545C00 ebp,todo
+sub_54EC60,0x54EC60,256,83,game,cdecl,arg_0,0,sub_54BC00 sub_404DB0,todo
+sub_406880,0x406880,272,96,game,cdecl,arg_0,0,sub_406990,todo
+sub_40CF10,0x40CF10,272,92,game,cdecl,"arg_0,name,arg_8,cy",0,ds dword sub_40D020,todo
+sub_40D020,0x40D020,272,87,game,cdecl,"arg_0,h,xSrc,ySrc,wSrc",0,dword ds,todo
+sub_40F060,0x40F060,272,101,game,cdecl,arg_0,0,dword ds edi,todo
+sub_40FE30,0x40FE30,272,78,game,cdecl,,0,sub_405790 __strdup sub_4057C0 __ftol sub_40FFD0 _free,todo
+sub_417260,0x417260,272,62,game,cdecl,,1,,todo
+sub_4196D0,0x4196D0,272,56,game,cdecl,,0,sub_40F060 sub_415340 sub_545C00 funcs_41973E funcs_41974A sub_414FB0 sub_415390,todo
+sub_41D9C0,0x41D9C0,272,81,game,cdecl,,0,sub_41D980 ds edi,todo
+sub_4255B0,0x4255B0,272,83,game,cdecl,arg_0,0,sub_415690 _fopen _fread sub_41EE40 _fclose,todo
+sub_429C30,0x429C30,272,76,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_427FF0,todo
+sub_42C680,0x42C680,272,86,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_438070,0x438070,272,75,game,cdecl,,0,sub_438180 sub_408300 sub_4071D0 sub_439600 sub_410480 sub_42C790 sub_41BF30 dword sub_41A5E0 sub_424BE0,todo
+sub_43B790,0x43B790,272,85,game,cdecl,arg_0,0,dword sub_415690 _malloc sub_40D3B0 _fopen _fread _fclose sub_43B080 _free,todo
+sub_545030,0x545030,272,54,game,cdecl,,0,sub_545270 sub_546EA0 sub_548650 sub_548CF0 sub_545F90 sub_546000 sub_545140,todo
+sub_5475B0,0x5475B0,272,93,game,cdecl,arg_0,0,ebp ds sub_546E30 sub_546E10,todo
+sub_548650,0x548650,272,89,game,cdecl,"arg_0,arg_4",0,_malloc sub_547CE0 sub_547450 sub_547D70 sub_547D20,todo
+sub_54CFC0,0x54CFC0,272,82,game,cdecl,,0,sub_54BFC0 sub_41E1B0,todo
+sub_56CF87,0x56CF87,281,1,game,cdecl,,1,,todo
+sub_4010F0,0x4010F0,288,73,game,cdecl,"arg_0,arg_4",1,,todo
+sub_413B20,0x413B20,288,89,game,stdcall,arg_0,0,sub_56D0A0 sub_413C40,todo
+sub_413F10,0x413F10,288,124,game,stdcall,"arg_0,arg_8",0,sub_56D0A0 sub_413C40,todo
+sub_415D40,0x415D40,288,52,game,cdecl,,1,,todo
+sub_418AA0,0x418AA0,288,52,game,cdecl,,0,sub_40E4F0,todo
+sub_4280C0,0x4280C0,288,79,game,cdecl,,0,ebx edi _rand sub_428D60 sub_427FB0 sub_4284A0,todo
+sub_428D80,0x428D80,288,79,game,cdecl,"arg_0,arg_4,arg_A",1,,todo
+sub_439160,0x439160,288,84,game,cdecl,,0,sub_43B8A0 sub_40C250 dword,todo
+sub_43AC00,0x43AC00,288,79,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,_atexit sub_43A810,todo
+sub_546A30,0x546A30,288,93,game,cdecl,"arg_0,arg_4,arg_8",0,nullsub_2 sub_415690 ds sub_5487A0 sub_5489C0,todo
+sub_548CF0,0x548CF0,288,96,game,cdecl,"arg_0,arg_4",0,_malloc sub_547CE0 sub_547450 sub_547D70 sub_547D20,todo
+sub_553F70,0x553F70,288,88,game,cdecl,arg_0,0,sub_553F10,todo
+sub_554090,0x554090,288,88,game,cdecl,arg_0,0,sub_553F10,todo
+sub_5563F0,0x5563F0,288,104,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_567EA2,0x567EA2,296,28,game,cdecl,,0,eax,todo
+sub_409510,0x409510,304,85,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_410ED0,0x410ED0,304,105,game,cdecl,,0,dword _free,todo
+sub_4114F0,0x4114F0,304,76,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_4057C0 __ftol,todo
+sub_414030,0x414030,304,104,game,cdecl,"arg_4,arg_8",0,sub_414160 sub_56D0A0 sub_413F10,todo
+sub_417B20,0x417B20,304,99,game,cdecl,,0,sub_546170 sub_417750,todo
+sub_41A220,0x41A220,304,72,game,cdecl,,1,,todo
+sub_41BDB0,0x41BDB0,304,113,game,stdcall,"arg_0,arg_4,arg_8",1,,todo
+sub_42A700,0x42A700,304,87,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_428700 _rand,todo
+sub_437330,0x437330,304,93,game,cdecl,arg_0,0,sub_437290,todo
+sub_548B60,0x548B60,304,119,game,cdecl,"arg_0,arg_4",1,,todo
+sub_54B460,0x54B460,304,75,game,cdecl,,0,sub_41A160 sub_436840 sub_4368D0,todo
+sub_558E90,0x558E90,304,71,game,cdecl,,0,sub_415690 _fopen _fread sub_41F8B0,todo
+sub_413C40,0x413C40,320,98,game,stdcall,arg_0,1,,todo
+sub_41F630,0x41F630,320,53,game,cdecl,arg_0,0,sub_41F600 sub_41F590,todo
+sub_41F770,0x41F770,320,116,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_547470,0x547470,320,105,game,cdecl,"arg_0,arg_4",0,sub_546E10 _malloc,todo
+sub_547A20,0x547A20,320,99,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_5479E0,todo
+sub_548A20,0x548A20,320,115,game,cdecl,"arg_0,arg_4",0,sub_548C90 sub_548B60,todo
+sub_416D50,0x416D50,336,49,game,cdecl,,1,,todo
+sub_417E50,0x417E50,336,88,game,cdecl,,0,sub_546170 sub_408300 sub_40FE10 sub_40FD80 sub_410430 sub_424590 sub_438180 sub_4071D0 sub_410480 sub_437D00 sub_439600 sub_435CE0 sub_4170A0 ds sub_40FE30 sub_41DF60,todo
+sub_41EF70,0x41EF70,336,105,game,cdecl,"lpMultiByteStr,arg_4,arg_8",0,ds sub_414600 dword,todo
+sub_427C40,0x427C40,336,103,game,cdecl,,0,sub_425CB0 sub_427D90 sub_419280 sub_426890 sub_426BF0 sub_4277B0,todo
+sub_42A8E0,0x42A8E0,336,72,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_428700,todo
+sub_4368D0,0x4368D0,336,100,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_436550,todo
+sub_4377C0,0x4377C0,336,137,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_437910,0x437910,336,137,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_437B40,0x437B40,336,105,game,cdecl,Stream,0,sub_437E90 sub_415AB0 sub_41EF00 sub_415AF0 sub_415A90,todo
+sub_546B70,0x546B70,336,83,game,cdecl,arg_0,0,sub_546CC0 nullsub_2 _sprintf sub_415690 ds sub_5487A0 sub_5489C0,todo
+sub_416080,0x416080,352,60,game,cdecl,,1,,todo
+sub_418D80,0x418D80,352,122,game,cdecl,arg_0,0,sub_4368D0 sub_436770 __ftol sub_424710 sub_436510,todo
+sub_41A480,0x41A480,352,76,game,cdecl,,0,__ftol sub_424BB0,todo
+sub_41E4B0,0x41E4B0,352,97,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_439330,0x439330,352,115,game,cdecl,arg_0,0,dword,todo
+sub_4065D0,0x4065D0,368,112,game,cdecl,"arg_0,arg_4,hWnd,arg_C,wParam,lpRect",0,esi sub_41D330 ds,todo
+sub_410550,0x410550,368,121,game,cdecl,,0,DirectDrawCreate __CxxThrowException dword sub_4106C0 nullsub_2,todo
+sub_413DA0,0x413DA0,368,130,game,stdcall,,0,sub_413F10 sub_414030 sub_406740,todo
+sub_414460,0x414460,368,130,game,stdcall,,0,sub_413F10 sub_414030 sub_406740,todo
+sub_415070,0x415070,368,24,game,cdecl,,0,sub_414FE0,todo
+sub_415E70,0x415E70,368,61,game,cdecl,,1,,todo
+sub_419A60,0x419A60,368,114,game,cdecl,arg_0,0,_sprintf sub_405800,todo
+sub_41B8A0,0x41B8A0,368,116,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",0,sub_41EF00 sub_41BEE0,todo
+sub_41E020,0x41E020,368,103,game,cdecl,,1,,todo
+sub_439490,0x439490,368,119,game,cdecl,,0,dword sub_439160,todo
+sub_554310,0x554310,368,124,game,cdecl,arg_0,0,sub_54BC00 sub_42C4A0 sub_5541B0,todo
+sub_412FF0,0x412FF0,384,90,game,cdecl,"arg_0,arg_4",0,sub_412E50,todo
+sub_4161F0,0x4161F0,384,70,game,cdecl,,1,,todo
+sub_4187F0,0x4187F0,384,76,game,cdecl,,0,sub_5460C0 sub_546170 sub_5460A0 sub_405870 sub_4184E0,todo
+sub_41AFC0,0x41AFC0,384,96,game,cdecl,,0,sub_415390 sub_43C220 _rand,todo
+sub_41BA10,0x41BA10,384,121,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_41F8B0,0x41F8B0,384,149,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_4015F0,0x4015F0,400,158,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18",0,sub_401430,todo
+sub_419280,0x419280,400,74,game,cdecl,,0,sub_4191C0 sub_418EE0 sub_425C00 sub_425BB0 sub_545EB0 sub_418D80 sub_4170E0 sub_546170 sub_424680 sub_4170C0,todo
+sub_41C820,0x41C820,400,85,game,cdecl,,1,,todo
+sub_437D00,0x437D00,400,133,game,cdecl,,0,dword sub_437C90 sub_406A10 sub_408470,todo
+sub_43C7B0,0x43C7B0,400,117,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_43B990,todo
+sub_43C960,0x43C960,400,96,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18",0,sub_41ED90,todo
+sub_54A410,0x54A410,400,100,game,cdecl,,0,sub_546170 sub_436740 sub_415390 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0 sub_43C940,todo
+sub_56D413,0x56D413,409,3,game,cdecl,,0,_atexit,todo
+sub_405960,0x405960,416,136,game,cdecl,"arg_0,arg_4,samDesired",0,__alloca_probe _strtok ds _sprintf,todo
+sub_406AB0,0x406AB0,416,143,game,cdecl,arg_0,0,sub_406C50 sub_406A10,todo
+sub_41EA70,0x41EA70,416,112,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_437620,0x437620,416,143,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_4377C0 sub_437910,todo
+sub_549F40,0x549F40,416,92,game,cdecl,,0,sub_415390 sub_549BD0 sub_414FB0 sub_4155E0 sub_549C00 sub_546CC0 sub_546990 sub_546300 sub_5464D0,todo
+sub_54A270,0x54A270,416,107,game,cdecl,,0,sub_41CCC0 sub_546170 sub_415390 sub_54A1E0 sub_41CC70 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0,todo
+sub_418640,0x418640,432,106,game,cdecl,,0,sub_546170 sub_545F90 sub_405870 sub_546000,todo
+sub_5472A0,0x5472A0,432,130,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,ds nullsub_2,todo
+sub_401430,0x401430,448,164,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",0,sub_4010F0 sub_401210,todo
+sub_4138A0,0x4138A0,448,96,game,cdecl,"arg_0,arg_4,arg_8,arg_C",1,,todo
+sub_41DDA0,0x41DDA0,448,154,game,stdcall,"hWnd,Msg,wParam,lParam",0,sub_4065D0 _sprintf _fopen _fclose sub_40CAB0 sub_414600 ds sub_41DF60 sub_40F170,todo
+sub_437460,0x437460,448,170,game,cdecl,"arg_0,arg_4",0,sub_437290 sub_437620,todo
+sub_4388D0,0x4388D0,448,149,game,cdecl,"arg_0,arg_4",1,,todo
+sub_40C340,0x40C340,464,124,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,__ftol,todo
+sub_40C510,0x40C510,464,143,game,cdecl,"arg_0,arg_4,arg_8",0,__ftol,todo
+sub_40DB90,0x40DB90,464,121,game,cdecl,arg_0,0,sub_436740 sub_436550 _sprintf sub_427E90,todo
+sub_4370C0,0x4370C0,464,118,game,cdecl,,1,,todo
+sub_54A650,0x54A650,464,122,game,cdecl,,0,sub_546170 sub_415390 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0,todo
+sub_54AE20,0x54AE20,464,119,game,cdecl,,0,sub_5536D0 _sprintf sub_41F630 sub_41E190 sub_54D0D0 nullsub_2 sub_546300 sub_54ACD0 sub_419510 sub_54BA90 sub_41CBA0 sub_4268C0 sub_415390,todo
+sub_40AD30,0x40AD30,480,129,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_409510 __ftol,todo
+sub_419810,0x419810,480,89,game,cdecl,,0,sub_40ECD0 sub_419BD0 sub_419A60 sub_40F290,todo
+sub_41C640,0x41C640,480,109,game,cdecl,,0,sub_545F90 sub_5460A0 sub_546000,todo
+sub_426510,0x426510,480,142,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",0,sub_41ED90,todo
+sub_42C4A0,0x42C4A0,480,128,game,cdecl,arg_0,0,sub_41BEE0,todo
+sub_436A80,0x436A80,480,148,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_40C510 sub_435D10,todo
+sub_545C00,0x545C00,480,107,game,cdecl,,0,sub_5458D0 sub_5476C0,todo
+sub_412A10,0x412A10,496,154,game,cdecl,"arg_0,arg_4",1,,todo
+sub_415B40,0x415B40,496,80,game,cdecl,,1,,todo
+sub_424710,0x424710,496,141,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_41ED90 __ftol,todo
+sub_436550,0x436550,496,157,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",0,sub_40C510 sub_435D10,todo
+sub_439F20,0x439F20,496,139,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,_atexit sub_439BC0,todo
+sub_54E4D0,0x54E4D0,496,151,game,cdecl,arg_0,0,sub_54BC00 sub_54BC30 __ftol,todo
+sub_5533F0,0x5533F0,496,169,game,cdecl,,0,sub_54BC00 sub_553170 __ftol sub_54BC30 sub_54BFC0,todo
+sub_40D970,0x40D970,512,164,game,cdecl,arg_0,0,sub_546600 sub_436C60 sub_43C960 sub_4368D0 sub_546990,todo
+sub_43A610,0x43A610,512,144,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,_atexit sub_43A110 sub_439BC0,todo
+sub_41A920,0x41A920,528,125,game,cdecl,"arg_0,arg_4,arg_8",0,__ftol sub_402960,todo
+sub_546620,0x546620,528,119,game,cdecl,"arg_0,arg_4,arg_8",0,sub_5487A0 _sprintf sub_415690 sub_546830 ds sub_5489C0,todo
+sub_54D620,0x54D620,528,130,game,cdecl,arg_0,0,sub_54BC00 sub_414600 sub_41CD70 sub_415390,todo
+sub_401210,0x401210,544,173,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",1,,todo
+sub_413170,0x413170,544,91,game,cdecl,,0,_free sub_413390,todo
+sub_43CB40,0x43CB40,544,157,game,cdecl,arg_0,0,sub_4057C0 __ftol _sprintf sub_546A30 sub_415690 sub_40CF10 sub_439330 sub_439490 dword sub_546B50 sub_545C00 edi,todo
+sub_5487A0,0x5487A0,544,179,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,sub_547DF0,todo
+sub_412710,0x412710,560,213,game,stdcall,"arg_0,arg_4",0,_sprintf _fwrite sub_412D70 sub_412D90 sub_412F10 sub_412FF0,todo
+sub_419BD0,0x419BD0,560,185,game,cdecl,arg_0,0,_sprintf sub_405790 _sscanf _strncpy,todo
+sub_424900,0x424900,560,140,game,cdecl,"arg_0,arg_4,arg_C,arg_10,arg_14",0,__ftol sub_41ED90,todo
+sub_4284D0,0x4284D0,560,161,game,cdecl,,0,sub_414FB0 _rand sub_4281E0,todo
+sub_41E1C0,0x41E1C0,576,117,game,cdecl,arg_0,0,sub_402910 sub_402960 sub_424B90 sub_424BB0 sub_41A440 sub_439110 sub_41BCF0 sub_438180 sub_5460D0,todo
+sub_42BF40,0x42BF40,576,184,game,cdecl,arg_0,0,__ftol sub_556510 sub_41FB30,todo
+sub_402DD0,0x402DD0,592,195,game,cdecl,"arg_0,arg_4,arg_8",1,,todo
+sub_40C000,0x40C000,592,163,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,__ftol,todo
+sub_415390,0x415390,592,85,game,cdecl,arg_0,0,sub_545DE0,todo
+sub_4054C0,0x4054C0,608,138,game,cdecl,arg_0,0,__ftol,todo
+sub_546EA0,0x546EA0,608,162,game,cdecl,arg_0,0,ds sub_4057C0 __ftol sub_546E50 sub_547470,todo
+sub_548E10,0x548E10,608,190,game,cdecl,arg_0,0,sub_547D70 sub_5478C0 sub_547800 sub_549070 sub_548C90 sub_549150 sub_547890 sub_547DF0 sub_5490C0 sub_547900 sub_549200 sub_547D20,todo
+sub_54B590,0x54B590,608,160,game,cdecl,,0,sub_40C6E0 sub_40E0C0 sub_419E00 sub_41A220 sub_427C40 sub_40DD60 sub_41E020 sub_414FB0 sub_545F90 sub_546170 sub_545EB0 sub_40DB70 sub_425BB0 sub_425C00 sub_54C4A0 sub_4287C0 sub_54BAD0 sub_4267E0 sub_545E30,todo
+sub_405D60,0x405D60,640,189,game,cdecl,,0,sub_436740 sub_436890 sub_425BB0 sub_425C00,todo
+sub_409290,0x409290,640,161,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_409510 __ftol,todo
+sub_40AAB0,0x40AAB0,640,154,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,__ftol,todo
+sub_40ECD0,0x40ECD0,640,67,game,cdecl,arg_0,0,dword,todo
+sub_43AD90,0x43AD90,640,198,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,_malloc,todo
+sub_40EA40,0x40EA40,656,207,game,stdcall,arg_0,0,dword _sprintf _strncpy,todo
+sub_428210,0x428210,656,201,game,cdecl,"arg_0,arg_4",1,,todo
+sub_436E30,0x436E30,656,186,game,cdecl,,0,__alloca_probe sub_4370C0 sub_437460 sub_437330 sub_437A60 sub_437290,todo
+sub_40DD60,0x40DD60,688,164,game,cdecl,arg_0,0,sub_436A50 _sprintf sub_427E00 sub_427E40 sub_4368D0,todo
+sub_416770,0x416770,720,127,game,cdecl,,1,,todo
+sub_417750,0x417750,720,218,game,cdecl,,0,sub_4134F0 sub_4136C0 sub_4136D0 sub_4137B0 sub_4137D0,todo
+sub_418EE0,0x418EE0,736,250,game,cdecl,arg_0,0,sub_40E630 sub_40E690 sub_546170 sub_4199F0 sub_418C10 sub_419A60 sub_418AA0 sub_4170E0 sub_417150 ecx,todo
+sub_42C180,0x42C180,736,235,game,cdecl,,0,sub_415AB0 sub_41EF00 sub_415AD0 sub_41B8A0 sub_41BD70,todo
+sub_4051D0,0x4051D0,752,182,game,cdecl,,0,sub_404E90 sub_404C10 __ftol sub_404D60,todo
+sub_416A50,0x416A50,752,128,game,cdecl,,1,,todo
+sub_4268C0,0x4268C0,752,141,game,cdecl,arg_0,0,sub_426890 nullsub_2 sub_426870,todo
+sub_549C50,0x549C50,752,177,game,cdecl,,0,sub_546170 sub_415390 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0,todo
+sub_406E40,0x406E40,768,230,game,cdecl,arg_0,0,sub_407140,todo
+sub_414160,0x414160,768,207,game,stdcall,"arg_0,arg_4,arg_8",0,sub_56D2CC _memcpy sub_413F10 sub_56D0A0 sub_413C40,todo
+sub_412320,0x412320,800,272,game,stdcall,Block,0,_sprintf _fwrite sub_412C00 sub_413570 __CxxThrowException sub_413700 dword nullsub_2,todo
+sub_5458D0,0x5458D0,816,254,game,cdecl,,0,sub_547C00 sub_5499A0 sub_549A00 sub_549AC0 sub_5499D0 sub_549A70 sub_544FC0 __ftol,todo
+sub_54A8A0,0x54A8A0,816,240,game,cdecl,,0,sub_415390 sub_41C180 sub_546170 sub_54A870 sub_41CC70 sub_414FB0 sub_546CC0 sub_546990 sub_5464D0 sub_41CDB0 sub_54A840 sub_41C620 sub_41C820 sub_41CBE0 sub_43C940,todo
+sub_404E90,0x404E90,832,274,game,cdecl,"arg_0,arg_4,arg_8",0,__ftol,todo
+sub_41A5E0,0x41A5E0,832,198,game,cdecl,,0,sub_436A50 sub_4368D0 sub_4146B0 nullsub_2 sub_41A480 sub_408320 sub_41B8A0 sub_41BD70 sub_40DB70 sub_41A920 sub_401780 sub_4060C0 sub_42BF40 sub_555140 sub_436190 sub_42C8C0 _rand nullsub_1 sub_405C50 sub_41B140,todo
+sub_403EE0,0x403EE0,864,222,game,cdecl,,0,sub_404240 sub_4046E0 __ftol,todo
+sub_40FFD0,0x40FFD0,864,312,game,cdecl,"String2,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_405720 __strcmpi sub_40FE10 sub_4134C0 sub_410550 sub_4136C0 sub_4137B0 sub_4136D0 sub_410700 sub_411000 sub_410ED0 sub_413820 sub_413510 sub_4106C0 sub_4137D0 sub_4114F0 sub_411620,todo
+sub_419E00,0x419E00,864,210,game,cdecl,arg_0,0,sub_415390 sub_4256C0,todo
+sub_439BC0,0x439BC0,864,277,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,__ftol,todo
+sub_436190,0x436190,896,235,game,cdecl,,0,sub_422740 sub_41FB30,todo
+sub_54BC30,0x54BC30,912,286,game,cdecl,arg_0,1,,todo
+sub_5545C0,0x5545C0,912,296,game,cdecl,,0,sub_54BC00 __ftol sub_54BC30 sub_428D80,todo
+sub_408EE0,0x408EE0,944,234,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,__ftol,todo
+sub_558880,0x558880,944,283,game,cdecl,ElementSize,0,sub_545190 sub_41EEE0 _sprintf sub_415690 _fopen sub_415AB0 sub_558C90 sub_558D70 sub_42AA60 sub_42C180 sub_42AC50 sub_42AB10 sub_558DB0 sub_437B40 sub_437D00 sub_545350 sub_415B10 sub_558D30 sub_42AB50 sub_42AAC0 sub_4067B0 _fclose sub_4071D0 sub_41E1C0 nullsub_2,todo
+sub_41C1E0,0x41C1E0,960,14,game,cdecl,,0,sub_41C1A0 sub_41C0E0,todo
+sub_5501D0,0x5501D0,960,341,game,cdecl,,1,,todo
+sub_40C6E0,0x40C6E0,976,283,game,cdecl,,0,__ftol,todo
+sub_40D4C0,0x40D4C0,976,325,game,cdecl,"arg_0,arg_4",0,sub_546990 sub_40D890 sub_546620 sub_40D450 sub_546960 _strncpy,todo
+sub_416380,0x416380,992,172,game,cdecl,,1,,todo
+sub_41CEE0,0x41CEE0,992,263,game,cdecl,arg_0,0,ds __allmul __alldiv,todo
+sub_4042F0,0x4042F0,1008,312,game,cdecl,,1,,todo
+sub_43A810,0x43A810,1008,305,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,__ftol,todo
+sub_4036D0,0x4036D0,1024,317,game,cdecl,,1,,todo
+sub_415690,0x415690,1024,396,game,cdecl,"arg_0,arg_4",0,ds _strrchr __access sub_405790 _sprintf,todo
+sub_403AD0,0x403AD0,1040,316,game,cdecl,,1,,todo
+sub_40E0C0,0x40E0C0,1072,298,game,cdecl,"arg_0,arg_54",1,,todo
+sub_4277B0,0x4277B0,1072,304,game,cdecl,,0,sub_436A20 sub_436C60,todo
+sub_54BFC0,0x54BFC0,1072,289,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10",0,sub_54BC00 sub_41AE20 sub_54BC30,todo
+sub_435D10,0x435D10,1104,311,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14,arg_18,arg_1C",0,sub_41ED90,todo
+sub_40CAB0,0x40CAB0,1120,352,game,cdecl,,0,dword _fopen _fwrite _fclose,todo
+sub_558FF0,0x558FF0,1129,308,game,cdecl,,1,,todo
+sub_402960,0x402960,1136,243,game,cdecl,,0,sub_41E4B0 sub_41E680 sub_41E610 sub_402DD0,todo
+sub_411000,0x411000,1136,340,game,cdecl,,0,dword __CxxThrowException _fwrite sub_4114A0 nullsub_2,todo
+sub_5509F0,0x5509F0,1136,142,game,cdecl,"arg_4,arg_8",0,sub_414600 sub_5509A0,todo
+sub_549270,0x549270,1184,333,game,cdecl,"arg_0,arg_4,arg_8",0,sub_549830 sub_549710 sub_547750 sub_5498C0 sub_5479B0 sub_547900 sub_5490C0 sub_5478C0 sub_5497B0 sub_547950 nullsub_2 sub_547970 sub_547840 sub_549880 sub_549760 sub_5497F0,todo
+sub_4060C0,0x4060C0,1216,335,game,cdecl,,0,__alloca_probe sub_41E990 sub_41FB30,todo
+sub_4046E0,0x4046E0,1232,375,game,cdecl,,1,,todo
+sub_41F0C0,0x41F0C0,1232,420,game,cdecl,,0,dword sub_414600 ds sub_40F060,todo
+sub_4256C0,0x4256C0,1264,323,game,cdecl,arg_0,0,__ftol,todo
+sub_408470,0x408470,1280,387,game,cdecl,"arg_0,arg_4",0,__ftol,todo
+sub_43A110,0x43A110,1280,396,game,cdecl,"arg_0,arg_4,arg_8,arg_C",0,__ftol,todo
+sub_408970,0x408970,1392,415,game,cdecl,"arg_0,arg_4,arg_8",0,__ftol,todo
+sub_545350,0x545350,1408,449,game,cdecl,"ElementSize,Stream,arg_8",0,sub_415AB0 _malloc sub_415A90 ds nullsub_2 sub_41EF00 sub_5465D0 sub_415AD0 sub_5472A0 sub_5471F0 sub_415B10,todo
+sub_43C220,0x43C220,1424,429,game,cdecl,arg_0,0,sub_40D2C0 sub_415690 _fopen sub_43AD50 sub_43B920 sub_43C1B0 _malloc _fgetpos _fread _free _fsetpos sub_43C100 _fclose dword sub_40D130 sub_43B080 sub_40D230 sub_406740,todo
+sub_4287C0,0x4287C0,1440,447,game,cdecl,,0,dword_5FF034 _rand sub_428010,todo
+sub_411D60,0x411D60,1472,528,game,stdcall,,0,_fwrite __CxxThrowException sub_412A10 dword sub_413D80 sub_413A60 sub_413390 nullsub_2 sub_40FBE0,todo
+sub_439600,0x439600,1472,546,game,cdecl,,0,dword,todo
+sub_559459,0x559459,1517,411,game,cdecl,,1,,todo
+sub_41D340,0x41D340,1600,1,game,cdecl,,1,,todo
+sub_438180,0x438180,1632,480,game,cdecl,,0,sub_4387E0 sub_4388D0 sub_438A90 sub_438AC0 sub_438B80 sub_438B00 sub_438B40 sub_438BB0 sub_438C10 sub_438CD0 sub_4390A0 sub_438FD0 sub_438D40 sub_438E10 sub_438E80 sub_438EF0 sub_438F60,todo
+sub_403020,0x403020,1712,407,game,cdecl,,0,sub_4036D0 sub_403AD0 __ftol,todo
+sub_4116B0,0x4116B0,1712,11,game,stdcall,"arg_0,arg_4,arg_8,arg_C",0,Callback,todo
+sub_40F4F0,0x40F4F0,1776,615,game,cdecl,,0,ds _isalnum _fopen sub_40FBE0 sub_40FD00 __CxxThrowException _fwrite DirectDrawEnumerateExA DirectDrawEnumerateA sub_413D80 sub_410550 sub_410700 sub_411000 sub_40FE10 sub_40FC50 dword,todo
+sub_43B080,0x43B080,1808,573,game,cdecl,,0,dword sub_43B010 sub_43B030 sub_43B060,todo
+sub_41B140,0x41B140,1840,466,game,cdecl,,0,sub_546170 sub_436A50 sub_4368D0 sub_43B990 sub_436550 _sprintf sub_43C7B0,todo
+sub_547EC0,0x547EC0,1856,590,game,cdecl,"arg_0,arg_4",0,sub_547C50 sub_547D70 sub_547750 sub_547DF0 _rand sub_547A20 sub_5479B0 sub_547900 sub_5478C0 sub_547950 sub_547840 sub_547890 sub_547800 sub_547990 ds,todo
+sub_425D40,0x425D40,1904,562,game,cdecl,,0,__CIpow sub_40C510 sub_41ED90 __ftol,todo
+sub_43B990,0x43B990,1904,531,game,cdecl,,0,ecx dword,todo
+sub_410700,0x410700,2000,603,game,cdecl,,0,dword __CxxThrowException sub_41DB40 sub_41DAD0 ds _malloc sub_4138A0 sub_410ED0 sub_413B20 nullsub_2,todo
+sub_414780,0x414780,2096,567,game,cdecl,,0,sub_40C340 sub_41ED90 sub_439F20,todo
+sub_40AF10,0x40AF10,2112,599,game,cdecl,arg_0,0,sub_409510 __ftol,todo
+sub_431950,0x431950,2192,640,game,cdecl,,0,sub_401080 sub_439F20 sub_41ED90 __ftol ecx dword,todo
+sub_40B750,0x40B750,2224,619,game,cdecl,arg_0,0,sub_409510 __ftol,todo
+sub_55A6D0,0x55A6D0,2250,504,game,cdecl,"var_s0,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_55B874,0x55B874,2250,504,game,cdecl,"var_s0,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_55AF9A,0x55AF9A,2266,512,game,cdecl,"var_s0,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_55C13E,0x55C13E,2266,512,game,cdecl,"var_s0,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_55CA18,0x55CA18,2302,524,game,cdecl,"var_s0,var_s1,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_429E00,0x429E00,2304,569,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_427FF0 _rand,todo
+sub_55D316,0x55D316,2314,524,game,cdecl,"var_s0,var_s1,arg_0,arg_4,arg_8",0,sub_559459,todo
+sub_424BE0,0x424BE0,2320,726,game,cdecl,,0,ecx dword,todo
+sub_409640,0x409640,2544,695,game,cdecl,,0,sub_409510 __ftol,todo
+sub_54C4A0,0x54C4A0,2640,749,game,cdecl,,0,sub_54C440 sub_41ADA0 sub_546240 sub_429DB0 sub_41FA30 sub_54BBD0 sub_54D180 sub_403EE0 sub_403020 sub_54BC30 sub_4051D0,todo
+sub_40A030,0x40A030,2688,722,game,cdecl,,0,sub_409510 __ftol,todo
+sub_426BF0,0x426BF0,3008,789,game,cdecl,,0,sub_4264B0 sub_426BB0 sub_426890 nullsub_2 sub_426740 sub_425CB0 sub_425D40 sub_436C60,todo
+sub_559A46,0x559A46,3210,461,game,cdecl,,1,,todo
+sub_55DC20,0x55DC20,3222,792,game,cdecl,"arg_0,arg_4,arg_8",0,sub_559A46,todo
+sub_55F55C,0x55F55C,3222,792,game,cdecl,"arg_0,arg_4,arg_8",0,sub_559A46,todo
+sub_55E8B6,0x55E8B6,3238,800,game,cdecl,"arg_0,arg_4,arg_8",0,sub_559A46,todo
+sub_5601F2,0x5601F2,3246,800,game,cdecl,"arg_0,arg_4,arg_8",0,sub_559A46,todo
+sub_428EA0,0x428EA0,3280,833,game,cdecl,"arg_0,arg_4,arg_8,arg_C,arg_10,arg_14",0,sub_428700 _rand sub_427FF0,todo
+sub_401820,0x401820,4080,1081,game,cdecl,"arg_0,arg_4",0,sub_41E990 sub_401080 eax dword sub_439F20,todo
+sub_407240,0x407240,4288,1369,game,cdecl,,0,dword dword_57037C sub_40C000 funcs_42EBE7 dword_570374 dword_570378 sub_436CC0 sub_436D40 sub_436E30 sub_4083A0 sub_437AC0 nullsub_2,todo
+sub_555140,0x555140,4560,1225,game,cdecl,,0,sub_41EC70 sub_41E820 sub_401080 sub_439F20 sub_41ED90 __ftol ecx dword,todo
+sub_434AD0,0x434AD0,4576,1345,game,cdecl,,0,sub_401000 __ftol off_570360 sub_40C510 sub_41ED90 ecx dword,todo
+sub_42AC50,0x42AC50,4848,1532,game,cdecl,"Buffer,Stream",0,sub_415AB0 sub_41EF00 __ftol sub_415AF0,todo
+sub_5625F0,0x5625F0,4956,4,game,cdecl,,0,__cfltcvt_init_0 __ms_p5_mp_test_fdiv __setdefaultprecision,todo
+sub_560EA0,0x560EA0,5968,258,game,cdecl,"arg_0,arg_4,arg_8",0,sub_558FF0,todo
+sub_567FDB,0x567FDB,6445,2,game,cdecl,,0,ds,todo
+sub_445BF0,0x445BF0,7040,1902,game,cdecl,,0,sub_447770 sub_43CD60 __ftol,todo
+sub_4C9CF0,0x4C9CF0,7040,1902,game,cdecl,,0,sub_4CB870 sub_4C0EC0 __ftol,todo
+sub_550E60,0x550E60,7248,1829,game,cdecl,"arg_0,arg_4,arg_8",0,sub_54BBD0 sub_41AF40 sub_414FB0 sub_54D560 sub_404D60 __ftol sub_404C50 sub_404BB0 sub_404C10 sub_404CC0 sub_54DAE0 sub_4054C0 sub_404C90 sub_546600,todo
+sub_422740,0x422740,7712,2131,game,cdecl,,0,sub_41ECE0 sub_402840 sub_401080 ecx dword __ftol sub_41ED90 sub_439F20,todo
+sub_556510,0x556510,8928,2508,game,cdecl,,0,sub_41E730 sub_402840 sub_41E7B0 sub_401080 ecx dword __ftol sub_41ED90 sub_43A610 sub_439F20,todo
+sub_4321E0,0x4321E0,10480,2980,game,cdecl,,0,sub_401080 __ftol off_570360 sub_40C510 sub_41ED90 sub_43AC00 edx dword ecx sub_41EC10 sub_401000 sub_4015F0,todo
+sub_41FB30,0x41FB30,11280,3158,game,cdecl,,0,sub_41E990 sub_402840 sub_41EA70 sub_41E960 sub_41C000 sub_41BDB0 sub_41BA10 __ftol sub_401080 ecx dword sub_41E790 sub_41ED90 sub_43A610 sub_439F20,todo
+sub_442BD0,0x442BD0,12320,3198,game,cdecl,,0,sub_560EA0 sub_55B874 sub_55C13E sub_55F55C sub_5601F2 sub_55D316 __ftol sub_43CD60 sub_445BF0,todo
+sub_4C6CD0,0x4C6CD0,12320,3198,game,cdecl,,0,sub_560EA0 sub_55A6D0 sub_55AF9A sub_55DC20 sub_55E8B6 sub_55CA18 __ftol sub_4C0EC0 sub_4C9CF0,todo
+sub_569961,0x569961,13862,19,game,cdecl,"arg_0,arg_4",0,___strgtold12 sub_56991E,todo
+sub_56394C,0x56394C,17664,3,game,cdecl,,0,_flsall,todo
+sub_42C8C0,0x42C8C0,20624,5816,game,cdecl,,0,sub_431950 dword_5FF038 sub_401000 off_570360 sub_40C510 __ftol sub_41ED90 ecx dword sub_401080 sub_43AC00 edx funcs_42EBE7 sub_41ECE0 sub_4015F0 sub_41EC70 esi,todo
+sub_4C0EC0,0x4C0EC0,24080,6677,game,cdecl,,0,__ftol,todo
+sub_43CD60,0x43CD60,24176,6705,game,cdecl,,0,__ftol,todo
+sub_447770,0x447770,497488,108856,game,cdecl,,0,__alloca_probe __ftol sub_43CD60,todo
+sub_4CB870,0x4CB870,497488,108856,game,cdecl,,0,__alloca_probe __ftol sub_4C0EC0,todo

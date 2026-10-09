@@ -1,0 +1,22 @@
+/* sub_43B010 @ 0043b010   29 bytes */
+
+int sub_43B010(uint param_1)
+
+{
+  int iVar1;
+  uint uVar2;
+  int iVar3;
+  
+  iVar1 = 0;
+  uVar2 = 1;
+  iVar3 = 0x20;
+  do {
+    if ((param_1 & uVar2) != 0) {
+      iVar1 = iVar1 + 1;
+    }
+    uVar2 = uVar2 << 1;
+    iVar3 = iVar3 + -1;
+  } while (iVar3 != 0);
+  return iVar1;
+}
+

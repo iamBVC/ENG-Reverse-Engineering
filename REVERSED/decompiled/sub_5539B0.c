@@ -1,0 +1,16 @@
+/* sub_5539B0 @ 005539b0   46 bytes */
+
+void sub_5539B0(undefined4 param_1,undefined4 param_2)
+
+{
+  undefined4 uVar1;
+  undefined4 *puVar2;
+  
+  uVar1 = sub_54BC00(param_1);
+  if (DAT_006d9e34 != 0) {
+    puVar2 = (undefined4 *)sub_5509F0(param_1,DAT_006d9e34,param_2);
+    *puVar2 = uVar1;
+  }
+  return;
+}
+
