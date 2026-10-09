@@ -113,7 +113,7 @@ WH_EXPORT int wh_sub_426860(void) { return sub_426860(); }
 
 /* sub_406E30 @ 00406e30   11 bytes */
 
-void sub_406E30(void)
+int sub_406E30(void)
 
 {
   DAT_00581158 = 0;

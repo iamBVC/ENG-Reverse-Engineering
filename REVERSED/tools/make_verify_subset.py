@@ -16,6 +16,7 @@ the MAP loader.
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 import re
 from pathlib import Path
@@ -49,24 +50,32 @@ WRAPPERS = {
                   "{ sub_42AC50((uint *)world, (undefined4)(size_t)stream); }",
 }
 
-# Hand fixes applied to decompiled bodies.  Each is a decompiler artefact, and the
-# same kinds of fix are what the ~200-function backlog needs.
+# Hand fixes applied to decompiled bodies that are specific to *this* subset.
+# The general ones - including the switch/case and the two restored `__ftol` operands
+# for sub_42AC50 - live in src_generated/bulk_patches.csv and are applied here too
+# (see load_bulk_patches): the harness is supposed to verify the *bulk* implementation,
+# and while the two tables were separate this side drifted - the generated
+# ghidra_prototypes.h declared `int sub_406E30()` (the bulk patches its `void` return
+# type) against a `void` definition here, C2371, until the shared table was applied.
 BODY_PATCHES = {
     "sub_42AC50": [
-        # Ghidra reuses one stack slot for a pointer and for the u16 it switches on
-        ("switch(local_c) {", "switch((unsigned int)local_c) {"),
-        ("case (uint *)0x", "case 0x"),
-        # it kept `call __ftol` but lost the x87 operand feeding it; the structure it
-        # produced matches the listing exactly (first conversion on pos_z, second on
-        # pos_x), so the operands are restored:
-        #     cell = (int)(pos_x - 0.5) - grid_width * (int)(pos_z + 0.5)
-        ("iVar9 = __ftol();", "iVar9 = (int)(*(float *)&local_18 + 0.5f);"),
-        ("iVar10 = __ftol();", "iVar10 = (int)(*(float *)&local_1c - 0.5f);"),
-        # the other conversions belong to the greyscale colour path, which the driver
-        # disables (0x6D7C61 set); they only need to link
+        # the conversions the greyscale colour path needs (the driver disables that path,
+        # 0x6D7C61 set); they only have to link, so they go to a stub
         ("__ftol()", "groove_ftol()"),
     ],
 }
+
+
+def load_bulk_patches() -> dict[str, list[tuple[str, str]]]:
+    """(find, replace) rows per function, from the recorded table."""
+    out: dict[str, list[tuple[str, str]]] = {}
+    path = ROOT / "src_generated" / "bulk_patches.csv"
+    if not path.exists():
+        return out
+    with path.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            out.setdefault(row["function"], []).append((row["find"], row["replace"]))
+    return out
 
 # Progress markers for the MAP loader, so a fault can be attributed to a load stage
 # instead of guessed at.
@@ -140,7 +149,7 @@ def main():
             continue
         parts.append(NL + "/* ==== " + name + " ==== */" + NL)
         body = make_bulk.normalize(path.read_text(encoding="utf-8", errors="replace"))
-        for old, new in patches_for(name):
+        for old, new in load_bulk_patches().get(name, []) + patches_for(name):
             if old not in body:
                 print("  note: pattern not found in " + name + ": " + repr(old[:40]))
             body = body.replace(old, new)

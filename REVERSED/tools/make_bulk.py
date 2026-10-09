@@ -92,6 +92,28 @@ def normalize(body: str) -> str:
     """
     body = body.replace(".s.LowPart", ".u.LowPart").replace(".s.HighPart", ".u.HighPart")
 
+    # `__fastcall` / `__stdcall` on a *generated* body is an error generator:
+    #   * a prototype with an empty parameter list is rejected for them (C2709), so
+    #     make_bulk emitted no prototype at all;
+    #   * then a call that appears *before* the definition made MSVC invent an
+    #     implicit `int name()` declaration (cdecl), which the definition contradicts
+    #     - C2373 "redefinition; different type modifiers", measured on 9 functions
+    #     (e.g. `sub_40E080()` called at chunk_002 line 250, defined `__fastcall` at
+    #     271).
+    # Dropping the keyword makes both the caller and the callee cdecl, which is the
+    # same approximation the shim already makes for `__thiscall`, and it is
+    # self-consistent inside a rebuild: the decompiled call sites do not set up
+    # registers for these arguments anyway.  The hand-ported track in src/ keeps the
+    # real keyword, because there it buys byte-exactness.
+    body = re.sub(r"\b__(?:fastcall|stdcall)\s*", "", body)
+
+    # A label has to be followed by a *statement*: Ghidra writes labels at the end of
+    # a block (`LAB_004054a3:` on the line before `}`), and C rejects that - MSVC
+    # reports it as C2143 "missing ';' before '}'", which points at the brace rather
+    # than at the label.  A null statement after every label is harmless when the
+    # label is followed by real code, and fixes it when it is not (2 functions).
+    body = re.sub(r"^((?:LAB|Catch|Unwind)_[0-9a-fA-F]+):[ \t]*$", r"\1: ;", body, flags=re.M)
+
     # writes of a 3-byte field must become a statement, not an lvalue
     body = FIELD_WRITE_RE.sub(lambda m: f"{m.group(1)}G_WR3({m.group(2)}, {m.group(3)}, {m.group(4)});",
                               body)
@@ -324,15 +346,45 @@ def main() -> int:
                 referenced.setdefault(a, set()).add(sym)
 
     # ---- how each data symbol is used, so the definition has the right type --
+    # Three different questions, three different pieces of evidence:
+    #   * a *unary* dereference        -> the datum holds an address
+    #   * `(*DAT_x)(...)`              -> the datum holds a *function* address
+    #   * `DAT_x[...]` / `(&DAT_x)[i]` -> the datum is an array
+    #
+    # The unary `*` test has to tell `*DAT_x` from `a * DAT_x`.  The old lookbehind
+    # only inspected the character immediately before the `*` - which is a *space*
+    # in `a * DAT_x`, so every global used as a multiplier was declared
+    # `unsigned int *` and then failed C2296/C2297/C2440 at the multiplication
+    # (23 errors, e.g. `uVar2 = DAT_00583378 * DAT_00583374;`).  Requiring the
+    # preceding *token* to be a delimiter is what makes the `*` unary.
+    DEREF_RE = re.compile(r"(?:[\n\(\[,;={?:&|+\-*/%!<>~])\s*\*\s*([A-Za-z_][A-Za-z0-9_]*)\b")
+    CALLPTR_RE = re.compile(r"\(\s*\*\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\(")
+    ARRAY_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)[ \t]*\[")
+    # `*(&DAT_x)[i]` - the element is dereferenced, so the datum is an array *of
+    # pointers*.  The bare `(&DAT_x)[i]` shape must NOT count as array evidence:
+    # that is how the decompiler writes a lookup into a table of scalars
+    # (`(&DAT_00574318)[uVar8 & 0xfff] * local_20`), and treating it as a pointer
+    # turned 4 errors into 45 (measured).
+    ARRAY_REF_RE = re.compile(r"\*\s*\(\s*&\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\[")
+
     pointer_syms: set[str] = set()
     array_syms: set[str] = set()
+    funcptr_syms: set[str] = set()
+    # ... and of the function pointers, the ones the Win32 API owns: they are filled
+    # by `GetProcAddress` and compared against `(FARPROC)0x0`, which is `__stdcall`,
+    # so they must be `FARPROC` - the rest are `code *` (cdecl, `int (*)()`), because
+    # they are assigned the address of an internal label (`DAT_0058372c =
+    # &LAB_00415010;`).  Declaring the internal ones `FARPROC` fails at the
+    # assignment (C2440, 15 errors, measured).
+    win32ptr_syms: set[str] = set()
     for body in bodies.values():
-        # a *unary* dereference means the datum holds an address; `a * DAT_x` is
-        # a multiplication and must not be mistaken for one
-        for m in re.finditer(r"(?<![\w\)\]])\*[ \t]*([A-Za-z_][A-Za-z0-9_]*)\b", body):
-            pointer_syms.add(m.group(1))
-        for m in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)[ \t]*\[", body):
-            array_syms.add(m.group(1))
+        pointer_syms.update(DEREF_RE.findall(body))
+        funcptr_syms.update(CALLPTR_RE.findall(body))
+        array_syms.update(ARRAY_RE.findall(body))
+        array_syms.update(ARRAY_REF_RE.findall(body))
+        for line in body.splitlines():
+            if "FARPROC" in line or "GetProcAddress" in line:
+                win32ptr_syms.update(SYMBOL_RE.findall(line))
 
     # ---- emit globals -----------------------------------------------------
     # Definitions go in the .c, declarations and aliases in the .h.  Splitting
@@ -377,7 +429,11 @@ def main() -> int:
                 if IDENT_RE.match(other):
                     decls.append(f"#define {other} {canonical}")
             continue
-        if canonical in pointer_syms:
+        if canonical in funcptr_syms:
+            # the code calls through it - `(*DAT_x)(...)` - so it holds a function
+            # address; which flavour depends on who fills it in (see above).
+            ctype = "FARPROC" if canonical in win32ptr_syms else "code *"
+        elif canonical in pointer_syms:
             # the decompiler dereferences it, so the datum holds an address
             ctype = "unsigned int *"
         elif canonical in array_syms:
@@ -521,16 +577,9 @@ def main() -> int:
             # an unknown Ghidra type (unkbyte10, ...): fall back to int, which is
             # always assignment-compatible in these expressions
             rtype = "int"
-        if "__fastcall" in s or "__stdcall" in s:
-            # For these conventions an empty parameter list is NOT "unspecified
-            # arguments" (MSVC reports C2709 against the definition), and keeping the
-            # real parameter list turns every differing call site into C2197/C2198.
-            # So declare nothing at all: the definition is then the only prototype,
-            # which is correct for calls after it.  Calls that appear earlier get C's
-            # implicit declaration and pass arguments on the stack instead of in
-            # registers - a wrong ABI for those few calls, and the same kind of
-            # approximation as the `code()` return type above.
-            continue
+        # `__fastcall`/`__stdcall` definitions are cdecl by the time they reach here
+        # (normalize() strips the keyword), so the loose prototype really is
+        # "unspecified arguments" for them as well.
         loose[n] = f"{rtype} {n}()" if rtype else f"int {n}()"
     protos = loose
 

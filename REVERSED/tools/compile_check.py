@@ -45,8 +45,11 @@ def write_batch(chunks: list[Path]) -> Path:
         f'cd /d "{BUILD}"\r\n'
         # /MD so the DLL build and the Python driver share one CRT: a FILE* only
         # crosses the boundary if both sides use the same runtime
-        # /Gy gives every function its own COMDAT so the DLL link can drop the
-        # functions the harness does not call (and with them their imports)
+        # (An earlier comment here claimed /Gy lets the DLL link drop the functions
+        # the harness does not call.  Measured: it does not - a two-function test
+        # with /Gy + /OPT:REF keeps the unreferenced one and fails on its undefined
+        # symbol.  What makes the bulk linkable is regenerating harness/import_stubs.c
+        # from the link log, see build_dlls.bat bulk.)
         f'cl /nologo /c /TC /W0 /GS- /MD /I"{ROOT}\\include" /I"{OUT}" '
         + cl_list + ' > "_bulk_compile.log" 2>&1\r\n'
         "exit /b %errorlevel%\r\n",

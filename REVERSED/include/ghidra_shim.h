@@ -133,6 +133,35 @@ typedef long long          longlong;
  * void, so the looser type is harmless. */
 typedef int                code();
 
+/* The binary's own `FILE`.  `<stdio.h>` cannot supply it: the installed CRT declares
+ * `FILE` as an opaque `struct { void *_Placeholder; }`, so the member accesses inside
+ * `sub_5628EB` (the body of `fclose`, 0x5628EB) do not compile against it - and
+ * defining `_CRT_INTERNAL_NONSTDC_NAMES` does not bring `_file`/`_tmpfname` back in
+ * this SDK release either (measured: `_file` and `_tmpfname` are still not members).
+ *
+ * So the struct below is the *binary's* layout (MSVC 6), taken from the code itself:
+ *     8b 46 0c a8 40      mov eax,[esi+0Ch]; test al,40h     -> _flag  at 0x0C
+ *     ff 76 10            push dword ptr [esi+10h]          -> _file  at 0x10
+ * (sub_5628EB offsets +10 and +38/42, read out of groove.exe). */
+typedef struct groove_FILE {
+    char *_ptr;         /* +0x00 */
+    int   _cnt;         /* +0x04 */
+    char *_base;        /* +0x08 */
+    int   _flag;        /* +0x0C */
+    int   _file;        /* +0x10 */
+    int   _charbuf;     /* +0x14 */
+    int   _bufsiz;      /* +0x18 */
+    char *_tmpfname;    /* +0x1C */
+} groove_FILE;
+
+/* ... and the layout is asserted, so a later edit cannot silently shift a field and
+ * have the decompiled code read the wrong slot (negative array size = error). */
+typedef char groove_FILE_layout_check[
+    (offsetof(groove_FILE, _ptr) == 0x00 && offsetof(groove_FILE, _cnt) == 0x04 &&
+     offsetof(groove_FILE, _base) == 0x08 && offsetof(groove_FILE, _flag) == 0x0C &&
+     offsetof(groove_FILE, _file) == 0x10 && offsetof(groove_FILE, _bufsiz) == 0x18 &&
+     offsetof(groove_FILE, _tmpfname) == 0x1C) ? 1 : -1];
+
 typedef int                bool32;
 
 /* ---- CONCATxy(high, low) ------------------------------------------------- */

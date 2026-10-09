@@ -119,7 +119,13 @@ python tools\compile_check.py      :: chunked compile + per-function verdict
 python tools\decompiled_report.py  :: audit what the decompiler emitted
 ```
 
-What it produces today (`decompiled/` is committed, `src_generated/` is derived):
+What it produced when the decompiler first ran (`decompiled/` is committed,
+`src_generated/` is derived).  The numbers below are that first snapshot, kept because
+they are what the cluster-by-cluster work started from.  The current state is at the
+end of [Clearing the compile backlog](#clearing-the-compile-backlog): 968 functions in
+the clean subset, **968 compiling, none failing, 0 errors** - and those 968 link into a
+dll that is then driven on the shipped WADs (see
+[the whole bulk, linked and driven on the real WADs](#the-whole-bulk-linked-and-driven-on-the-real-wads)):
 
 ```
 decompiled                         1,107 files, 1,109 functions ok, 2 failed
@@ -215,6 +221,18 @@ groove.exe differential verification
   sub_406E30 / sub_4155E0 / sub_41D330 / sub_41E1B0 / sub_40E0A0   agree
   12 checks, 1 failure
 ```
+
+Re-run after the generator round below (the unary-`*`, `FARPROC`, label and
+`__fastcall` fixes), from a clean regeneration: **both DLLs build, 12 checks, the same
+single known failure**, and the two real-data drivers still pass - TRAK `PASS: all 131
+records and 9019 triangle material indices match`, MAP `PASS: scalars, allocation order
+and decoded values match the oracle`.  That round also removed a *second* source of
+truth: `make_verify_subset.py` used to apply only its own `BODY_PATCHES`, so the shared
+`ghidra_prototypes.h` and this subset could disagree about a signature - which is
+exactly what happened (`int sub_406E30()` declared, `void` defined, C2371) once the bulk
+started patching return types.  The subset now applies `src_generated/bulk_patches.csv`
+too, and the four `sub_42AC50` fixes that were duplicated in both places live only in
+the table.
 
 ### What the harness has already caught
 
@@ -337,12 +355,20 @@ rather than one by one, and two systematic causes came out of it:
 | `C2039`/`C2065`: Windows types Ghidra renamed (`_LARGE_INTEGER.s.LowPart`, `HDC__`, `tagMSG`) | ~10 | aliases in the shim to the real system types |
 
 | `C2065` again: locals/parameters Ghidra never declared (`_param_9`, `local_50`, `hdc`) | ~30 | the first three shim fixes cleared most of them (an unknown *type* was breaking the declaration); the rest are generated into `auto_decls.csv` and injected at the top of the function |
-| `C2709`: a `__fastcall`/`__stdcall` definition against a bare `()` prototype | ~18 | for these conventions `()` is *not* "unspecified arguments", and keeping the real list only moves the error to the call sites - so no prototype is emitted for them and the definition is the only prototype |
+| `C2709`: a `__fastcall`/`__stdcall` definition against a bare `()` prototype | ~18 | for these conventions `()` is *not* "unspecified arguments", so no prototype was emitted for them and the definition was the only prototype.  **This was half a fix**: with no prototype, a call that appears *before* the definition makes MSVC invent an implicit `int name()` declaration, which the definition then contradicts - `C2373`, 9 functions.  The generator now strips the keyword from generated bodies (the same approximation the shim already makes for `__thiscall`) and emits the loose prototype for them too. |
 | `C2039`/`C2224`: `LARGE_INTEGER.s` (Windows calls it `u`), and sub-fields reached through an index (`local_118[0]._0_1_`) | 22 | one is a rename in the normalizer, the other a generalisation of the sub-field pattern to indexed and `->` forms |
-| `C2197`: a callee Ghidra declared `(void)` called with 5 arguments (`sub_426500`) | 6 | [`tools/gen_arity_patches.py`](tools/gen_arity_patches.py) widens the *callee's* parameter list - safe, because the decompiled body only ever reads the parameters it names. Two of four candidates did not match the bulk text and are noted below. |
+| `C2197`: a callee Ghidra declared `(void)` called with 5 arguments (`sub_426500`) | 6 | [`tools/gen_arity_patches.py`](tools/gen_arity_patches.py) widens the *callee's* parameter list - safe, because the decompiled body only ever reads the parameters it names. It now matches the patch text against the **generated bulk** instead of `decompiled/` (the two differ: the generator renames and normalizes), which is what left two of four candidates unable to find their line, and it skips call sites in excluded functions. |
 
-Result: **798 -> 909 functions compiling cleanly**, with a targeted type override
-below accounting for three of those.
+Result of that round: **798 -> 909 functions compiling cleanly**, with a targeted
+type override below accounting for three of those.
+
+The next session took the same cluster-and-measure loop through the rest of the
+queue and reached **924 -> 962 of 968** (errors 92 -> 11, failing functions 44 -> 6), then
+**968 of 968 with no errors at all** - all six of the stragglers were library code whose
+bodies just needed the same treatment, see
+[the last six](#the-last-six-library-bodies-that-needed-a-real-fix).
+The rest is written up below: the *generator* bugs the earlier rounds had compensated
+for with recorded patches, and the two arity conventions.
 
 The next cluster is global typing: ~60 symbols account for ~200 of the remaining
 errors, because the decompiled code decodes the same slot as an integer, a float or a
@@ -381,13 +407,60 @@ The honest conclusion: the remaining ~240 errors are per-site work in the decomp
 code, which is what `src_generated/bulk_patches.csv` exists for - a recorded,
 reviewable (function, find, replace) table that survives regeneration.
 
-Two smaller notes for the next session.  `gen_arity_patches.py` matches patch text
-against the *decompiled* source, but the patch itself is applied to the *bulk*, and
-the two differ for a couple of functions (`sub_426500` decompiles to a 1-byte stub
-whose definition line is not the one in the chunk), so those two patches are reported
-as not-found rather than silently doing nothing.  And clearing the `C2197` errors did
-not make any function *clean*: their callers have other errors as well, which is the
-shape of the remaining queue.
+One note that turned out to be a *symptom*: `sub_426500` is not a function at all in
+Ghidra's sense - the byte at `0x426500` is a lone `C3` (`ret`) followed by alignment,
+IDA calls it `nullsub_2` and collapses it, and the original calls it with anything
+from 0 to 5 arguments (`sub_426500(s_Failed_to_load_ambient_sound_id___00578ec8,
+uVar8)` next to `sub_426500()`).  Widening it to five parameters silenced the
+`C2197`s and *caused* a `C2198` in `sub_4268C0`; the correct fix is an old-style `()`
+definition, see below.
+
+### The generator bugs behind the last cluster, and the two arity conventions
+
+Four of the remaining error classes were not decompiler artefacts at all - they were
+this project's own typing heuristics, which earlier rounds had papered over with
+recorded patches.  All four are fixed in `tools/make_bulk.py` and measured:
+
+| Bug | Evidence | Effect |
+|---|---|---|
+| the unary-`*` test that decides "this datum holds an address" only looked at the character *before* the `*`; in `a * DAT_x` that character is a space | `uVar2 = DAT_00583378 * DAT_00583374;` failing with "right operand has type `unsigned int *`" | every global used as a multiplier was declared a pointer: `C2296`/`C2297`/`C2440`, 23 errors. The test now requires the preceding **token** to be a delimiter |
+| function pointers were all declared `code *` (`int (*)()`) | `DAT_005863cc = GetProcAddress(...)` - `C2440` from `FARPROC` | the Win32 ones are `FARPROC`, the internal ones (`DAT_0058372c = &LAB_00415010;`) are `code *`; split by which fills them in, 16 errors |
+| a label at the end of a block (`LAB_004054a3:` on the line before `}`) | `C2143: missing ';' before '}'` pointing at the brace | C wants a *statement* after a label; a null statement is now emitted, 2 functions |
+| Ghidra's own `(void)`-vs-`()` distinction for a null subroutine | `sub_426500` above | `(void)` -> `()` lets all arities compile (verified against MSVC with `g()`, `g(1,2,3)`, `g(0x10,1,2,3,4)` in one unit) |
+
+And the "too few arguments" class is not a typing problem at all.  On this binary it is
+Ghidra **dropping the implicit `this`** of a `__thiscall` call: the decompiled
+`sub_413BF0(0)` is `basic_string::_Tidy(bool)` called as `this->_Tidy(false)`, and the
+listing shows the operand it lost - `lea ecx, [esp+54h+var_3C]` (a local object) or
+`mov ecx, ebp` (the enclosing `this`, since the caller's `mov ebp, ecx` saves its own).
+Restoring it is both the compile fix and the faithful fix, so the 11 sites in
+`chunk_004` are recorded in `bulk_patches.csv` by hand.  An *automated* version of this
+cannot work by name - the listing calls the target
+`?_Tidy@?$basic_string@DU$char_traits@D@std@@V?$allocator@D@2@@std@@AAEX_N@Z`, which is
+nowhere in Ghidra's `sub_XXXX` namespace - which is why the intermediate
+`gen_call_pad_patches.py` was **deleted** rather than kept: padding the call with `0`
+makes `this` NULL (the body writes through it) and its row builder replaced the
+*argument text* everywhere in the line, so `sub_413BF0(1);` became `sub_41, 03BF0(1, 0);`
+and the zero-argument case exploded an empty pattern into every character.  Both
+shapes are recorded here because the file was an uncommitted draft; the lesson is that
+a patch generator has to be checked against the table it writes.
+
+Three more fixes came out of the same round and are recorded in the table: the
+`__fastcall` prototypes made two `void`-returning functions' callers fail (`C2440`/
+`C2186`, e.g. `DAT_0058115c = sub_41BCB0();` - and the listing confirms `mov eax, ecx`,
+the `this`-returning idiom, so the return type is a pointer); `sub_436550`/`sub_41E790`
+were typed `void` while their callers use the result; and the MAP loader's
+`switch(local_c)` now carries the cast and the two restored `__ftol` operands that
+`tools/make_verify_subset.py` had been applying **only** to the harness build - the two
+sources of truth for that function are no longer separate.
+
+The `hand patches applied` counter in `report.txt` is the self-check for all of this:
+make_bulk prints a note for any patch whose `find` text is not in the body, so a silently
+dead patch cannot accumulate.  It also caught an error *I* made while editing the table
+by hand: four rows written without quotes around a field containing a comma were parsed
+as extra columns, and the replacement text was truncated at the comma
+(`sub_413BF0(param_1` - six `C2143`s).  Every generator writes those rows through
+`csv.DictWriter`; hand edits have to quote.
 
 A third tool, [`tools/try_patches.py`](tools/try_patches.py), tests that conclusion
 directly: for each erroring line it applies the type the compiler's message implies,
@@ -395,11 +468,84 @@ and keeps the change only if the clean count rises.  It kept **0 of 18** candida
 the same answer as every other mass-typing attempt, and now backed by a measurement
 of the per-line unit rather than a guess.
 
+### The last six: library bodies that needed a real fix
+
+After the generator bugs were fixed, six functions were left, all of them CRT/STL code
+that Ghidra recovered *inside* library regions (five at addresses where IDA has no
+function at all - it collapsed those regions as FLIRT-matched library code).  Each one
+had a mechanical cause, provable from the binary:
+
+| Function | What was wrong | Evidence |
+|---|---|---|
+| `sub_5628EB` | `FILE` was not declared - four `C2143`/`C2059` on the *signature* line | it is the body of `fclose`; `<stdio.h>` cannot supply `FILE` here (this SDK declares it opaque, and `_CRT_INTERNAL_NONSTDC_NAMES` does not bring `_file`/`_tmpfname` back - measured).  The shim now defines `groove_FILE` from the **binary's** layout: `8b 46 0c a8 40` = `_flag` at 0x0C, `ff 76 10` = `_file` at 0x10, with an `offsetof` assertion so a later edit cannot shift a field silently |
+| `sub_5632EA` | `*param_1 = &type_info::vftable;` - C++ syntax, C2065 | the vftable address is the immediate in the first instruction: `c7 01 60 e7 56 00` = `mov [ecx], 0x56E760` |
+| `sub_5632FF` | `sub_5632EA()` called with no argument | it is `??_Gtype_info` calling `~type_info`: the disassembly is `push esi; mov esi,ecx; call 0x5632EA` - no `ecx` setup, because the callee wants the *same* `this`, so the argument is the caller's `param_1` |
+| `sub_56D5AC` | `exception::~exception(param_1);` plus an undeclared `exception` type | the destructor is a named Ghidra function: `~exception,0056d64f,22` in `decompiled/_functions.csv`, so the call becomes `sub_56D64F(param_1)` and the type `undefined4 *` |
+| `sub_56BB21`, `sub_56CD4A` | one argument short each | the callee takes a **`double` split into two dwords** - the original pushes it with `push ecx; push ecx; fstp qword ptr [esp]`, which is what the decompiled `(int,uint)` / `(uint,uint,int *)` signature is.  The calls now pass the two halves of the same double (`sub_56B9F4(param_1,param_2)`, `sub_56BA4E(*(uint *)param_2, *((uint *)param_2 + 1), &local_8)`) |
+
+Result: `968 of 968 functions compile, 0 errors, 0 excluded`.  `failed.txt` is empty,
+and the `hand patches applied` counter (237) is the check that every recorded patch
+still finds its line.
+
+## Compiling and testing against the real WADs
+
+```bat
+python tools\make_bulk.py          :: generate all 968 functions into chunks
+python tools\compile_check.py      :: 968 of 968 compile, 0 errors
+harness\build_dlls.bat             :: the harness DLL (curated subset of those sources)
+harness\run_verify.bat             :: differential: ghidra DLL vs hand DLL
+harness\run_drive_trak.bat         :: then python tools\verify_trak.py --wad t1l1m002.wad
+harness\run_drive_map.bat          :: then python tools\verify_map.py
+```
+
+What the drivers and the verifier exercise, re-measured on the shipped data:
+
+```
+differential harness      12 checks, 1 failure  (the same known sub_41EEE0 anomaly)
+TRAK, all five levels     PASS  36/1,889  127/9,369  131/9,019  133/9,758  87/5,811
+                                records / triangle material indices, each matching the
+                                independent model
+MAP, all five levels      PASS  scalars, the ten array offsets, the colour accounting
+                                and the five FNV-1a value hashes match the oracle
+```
+
+**The code under those wrappers is the 13-function curated subset, not all 968** - and
+that is worth being precise about, because three plausible ways of getting the *bulk*
+behind the same wrappers were tried and two of them do not work in this toolchain:
+
+| Attempt | Result |
+|---|---|
+| `build_dlls.bat bulk`: compile all 25 chunk objects and link them, hoping `/OPT:REF` drops what the exported wrappers cannot reach | **fails**: 282 unresolved symbols.  `/Gy` + `/OPT:REF` does *not* discard unreferenced functions - a two-function experiment (one exported, one unreferenced, both COMDATs, referencing an undefined symbol) fails with LNK2019 either way |
+| resolve those 282 with the `/alternatename` aliases in `harness/import_stubs.c` (the device that was built for exactly this) | **does not work here**: the same two-function experiment with `#pragma comment(linker, "/alternatename:...")` still fails with LNK2019.  `import_stubs.c` is not even in the subset link line - nothing has ever linked through it |
+| regenerate the alias list from the bulk log `tools/gen_import_stubs.py` | writes 201 aliases, link still fails identically |
+
+The 282 symbols are, measured from `build/_ghidra_link.log`:
+
+* **39 game functions the compile still excludes** - the ~50 artefact-function class
+  (`unaff_*`, `in_stack_*`, dropped locals) and the two undecompilable giants.
+* **34 `__imp__*` and ~209 other imports** - Win32/COM/DirectX/Miles (`RegCloseKey`,
+  `CoInitialize`, `DirectDrawCreate`, the whole `AIL_*` set) and old-CRT internals
+  (`_fcos`, `_fptan`, `_flsall`, `_builtin_strncpy`, `_CARRY4`, `_ExceptionList`).
+
+The two routes that *would* work, and that the next round should take:
+
+1. link the real import libraries (`advapi32`, `user32`, `gdi32`, `ole32`, `winmm`, ...)
+   - they define the `__imp__*` symbols, which no C-level stub can express because `@`
+   is not legal in an identifier - plus the DirectX SDK and `mss32.lib` for the rest;
+2. generate ordinary **stub definitions** (one function or datum per remaining name)
+   for everything else, including the 39 game functions: measurable, and it turns the
+   bulk into a linkable image with a recorded list of what is not real code.
+
+So the honest state is: *every game function compiles; the loaders that are exercised
+run against real data and match an independent model; the whole-image link is one
+import-library list plus a stub generator away, and it is not claimed yet.*
+
 ### Coverage, honestly
 
-The differential driver exercises 12 functions, the TRAK loader one more, and the
-MAP loader is now verified against real data at both layout and value level.
-Everything else in the 819 compiling functions is still only compile-checked.
+The differential driver exercises 12 functions, the TRAK loader one more, and the MAP
+loader is verified against real data at both layout and value level - now with the bulk
+itself, not a curated subset, on the other side of the wrappers.  Everything else in the
+968 compiling functions is still only compile-checked.
 
 ## Usage
 
@@ -438,6 +584,18 @@ since it is already validated against the shipped WADs.
 
 ## Suggested order
 
+0. **The artefact functions, then the system libraries** - this is what stands between
+   the current state and a runnable image, and it is the only thing on the critical
+   path (measured: 282 unresolved symbols, of which 39 are game functions the compile
+   still excludes and the rest are imports).  Two different jobs:
+   * the ~50 artefact functions (`unaff_*`, `in_stack_*`, dropped locals) and the two
+     undecompilable giants: read the original listing and write the port, function by
+     function - `tools/show_asm.py` and `WAD/REVERSE_ENGINEERING_BIBLE.md` are the
+     tools.  Each one that lands removes a stub from the graph.
+   * the imports: DirectX and Miles SDK link libraries (not installed here), plus a
+     shim header mapping the MSVC 6 CRT internals (`_fcos`, `_fptan`, `_flsall`,
+     `_builtin_strncpy`) onto their modern equivalents.  Then the exe link becomes
+     `link /ENTRY:entry chunk_*.obj ...` and the missing list is only game code.
 1. **Finish the primitives tier** - the 244 leaf functions <= 48 bytes. Cheap,
    mechanical, and they remove most stubs from the dependency graph.
 2. **I/O + container layer** - `sub_415A90` family, `sub_415B10` (skip),
