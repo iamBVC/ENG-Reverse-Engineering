@@ -38,6 +38,13 @@ rem artefact functions, the two undecompilable giants, the CRT/STL internals) is
 rem resolved by harness\import_stubs.c, regenerated from the link log by
 rem tools\gen_import_stubs.py - so a test that reaches one of those will fault, which
 rem is why the drivers only exercise the loaders and the allocators.
+rem System import libraries for the bulk image.  These are what resolves the
+rem `__imp__*` symbols - an import-address entry cannot be expressed as a C symbol
+rem (`@` is not legal in an identifier), so the library is the only route.  ddraw.lib
+rem ships with the Windows SDK; DirectInput and Miles (mss32) do not, so those stay
+rem stubs.
+set "SYSLIBS=User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.Lib ComCtl32.Lib Version.lib ddraw.lib"
+
 set "MODE=subset"
 if /i "%~1"=="bulk" set "MODE=bulk"
 
@@ -57,15 +64,16 @@ rem to fail and to write the list into build\_ghidra_link.log; that is the input
 rem generator.
 cl /nologo /c /TC /W0 /GS- /MD /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
    "%ROOT%\src_generated\chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
+   "%ROOT%\src_generated\link_stubs.c" "%ROOT%\harness\crt_aliases.c" ^
    "%ROOT%\harness\wrappers_bulk.c" "%ROOT%\harness\getters_ghidra.c"
 if errorlevel 1 ( popd & exit /b 1 )
 rem import_stubs.obj is deliberately *not* linked: measured, its /alternatename
 rem aliases resolve nothing in this toolchain (see README).  Nothing depended on it -
 rem the subset link never included it either.
 link /nologo /DLL /OPT:REF /OUT:"%ROOT%\build\groove_ghidra.dll" ^
-     chunk_*.obj ghidra_globals.obj wrappers_bulk.obj getters_ghidra.obj ^
-     > "_ghidra_link.log" 2>&1
-if errorlevel 1 ( echo [!] bulk link failed - see build\_ghidra_link.log for the ~282 symbols & echo     the bulk references but does not define: the artefact functions, DirectX/Miles, and & echo     MSVC 6 CRT internals.  Resolving them needs import libraries plus real stub & echo     definitions - see the README section on compiling and testing against the WADs. & echo     The compile itself succeeded; the objects are in build\chunk_*.obj & popd & exit /b 1 )
+     chunk_*.obj ghidra_globals.obj link_stubs.obj crt_aliases.obj ^
+     wrappers_bulk.obj getters_ghidra.obj %SYSLIBS% > "_bulk_link.log" 2>&1
+if errorlevel 1 ( echo [!] bulk link incomplete - see build\_bulk_link.log.  Regenerate the & echo     missing definitions with tools\gen_link_stubs.py and build again; the list of what & echo     is still a stub is written to src_generated\link_stubs.csv.  The compile itself & echo     succeeded: the objects are in build\chunk_*.obj & popd & exit /b 1 )
 goto build_hand
 
 :build_subset

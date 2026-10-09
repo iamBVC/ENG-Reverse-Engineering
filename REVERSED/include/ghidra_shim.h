@@ -133,6 +133,32 @@ typedef long long          longlong;
  * void, so the looser type is harmless. */
 typedef int                code();
 
+/* ---- the CRT names the decompiled code uses ----------------------------
+ * Ghidra spells the runtime's own functions the MSVC 6 way (`_malloc`, `_strlen`,
+ * `_fcos`, `__ftol`, ...).  They are declared here so a call site cannot create an
+ * implicit `int name()` declaration first - that is C2371 against the real definition
+ * in harness/crt_aliases.c.  Declarations only: the definitions live in that file,
+ * and the ones with an x87 convention are written in __asm there. */
+void  *_malloc(size_t n);
+void   _free(void *p);
+void  *operator_new(unsigned int n);
+void  *_memset(void *d, int c, size_t n);
+void  *_memcpy(void *d, const void *s, size_t n);
+void  *_memmove(void *d, const void *s, size_t n);
+size_t _strlen(const char *s);
+int    _strcmp(const char *a, const char *b);
+int    _strncmp(const char *a, const char *b, size_t n);
+char  *_strncpy(char *d, const char *s, size_t n);
+int    _strcmpi(const char *a, const char *b);
+char  *_strrchr(const char *s, int c);
+double _fcos(double x);
+double _fsin(double x);
+/* Both of these are called with *and* without an argument in the decompiled source
+ * (Ghidra lost the x87 operand at most sites), so the argument list is left
+ * unspecified: `f()` accepts any arity, verified. */
+int    __ftol();            /* operand in ST(0), result in EAX */
+float10 __frnd();           /* rounds its operand and leaves it on the FPU stack */
+
 /* The binary's own `FILE`.  `<stdio.h>` cannot supply it: the installed CRT declares
  * `FILE` as an opaque `struct { void *_Placeholder; }`, so the member accesses inside
  * `sub_5628EB` (the body of `fclose`, 0x5628EB) do not compile against it - and
