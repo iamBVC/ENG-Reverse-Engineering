@@ -40,3 +40,5 @@ HRESULT groove_DirectInputCreateA(HINSTANCE instance, DWORD version, void **obje
         return HRESULT_FROM_WIN32(GetLastError());
     return create(instance, version, (LPDIRECTINPUTA *)object, (LPUNKNOWN)outer);
 }
+
+const void *groove_KeyboardDataFormat(void) { return &c_dfDIKeyboard; }

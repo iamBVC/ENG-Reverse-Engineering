@@ -90,7 +90,7 @@ int main(void)
 }
 '''
 
-def main(source_text=SOURCE, name="hardware_test"):
+def main(source_text=SOURCE, name="hardware_test", bulk=True):
     build = ROOT / "build"
     source = build / f"{name}.c"
     source.write_text(source_text, encoding="utf-8")
@@ -99,12 +99,13 @@ def main(source_text=SOURCE, name="hardware_test"):
     vcvars = next(p / "VC/Auxiliary/Build/vcvars32.bat" for p in candidates
                   if (p / "VC/Auxiliary/Build/vcvars32.bat").exists())
     batch = build / f"{name}.bat"
+    objects = ('chunk_*.obj ghidra_globals.obj link_stubs.obj crt_aliases.obj '
+               'io_substitutes.obj directdraw_imports.obj ') if bulk else ''
     batch.write_text(f'@echo off\ncall "{vcvars}" >nul\n'
         f'cl /nologo /TC /W3 /MD /GS- /I"{ROOT / "include"}" /I"{ROOT / "src_generated"}" '
-        f'{name}.c /Fe:{name}.exe /link chunk_*.obj ghidra_globals.obj '
-        'link_stubs.obj crt_aliases.obj io_substitutes.obj directdraw_imports.obj '
+        f'{name}.c /Fe:{name}.exe /link {objects}'
         'Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.lib OleAut32.lib '
-        'WinMM.lib Shell32.lib ComCtl32.lib Version.lib ddraw.lib\n'
+        'WinMM.lib Shell32.lib ComCtl32.lib Version.lib ddraw.lib dinput8.lib dxguid.lib\n'
         f'if errorlevel 1 exit /b 1\n{name}.exe\nexit /b %errorlevel%\n', encoding="ascii")
     return subprocess.run(["cmd", "/c", str(batch)], cwd=build).returncode
 

@@ -51,13 +51,13 @@ rem The CRT import libraries are named for the same reason: an exe pulls the run
 rem own startup helpers, and those reference the undecorated names (`_memcpy`, `_cos`)
 rem and their IAT entries (`__imp__malloc`) - measured as 16 unresolved symbols when the
 rem CRT libs were left to the defaults.
-set "SYSLIBS=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib ucrt.lib msvcrt.lib libvcruntime.lib"
+set "SYSLIBS=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib dinput8.lib dxguid.lib ucrt.lib msvcrt.lib libvcruntime.lib"
 
 rem The exe is built against the *static* CRT instead: with the DLL CRT its own runtime
 rem helpers come from objects that expect the static implementations, and 14 of them
 rem (`_memcpy`, `_cos`, `__imp__malloc`, ...) stay unresolved (measured).  /MT is fine for
 rem a single-image rebuild - nothing crosses a runtime boundary there.
-set "SYSLIBS_EXE=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib libcmt.lib libucrt.lib libvcruntime.lib"
+set "SYSLIBS_EXE=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib dinput8.lib dxguid.lib libcmt.lib libucrt.lib libvcruntime.lib"
 
 set "MODE=subset"
 if /i "%~1"=="bulk" set "MODE=bulk"

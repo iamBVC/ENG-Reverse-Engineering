@@ -38,6 +38,7 @@
 #include <objbase.h>
 HRESULT groove_DirectDrawCreate(GUID *guid, void **object, void *outer);
 HRESULT groove_DirectInputCreateA(HINSTANCE instance, DWORD version, void **object, void *outer);
+const void *groove_KeyboardDataFormat(void);
 HRESULT groove_DirectDrawEnumerateA(BOOL (WINAPI *callback)(GUID *, LPSTR, LPSTR, LPVOID), void *context);
 HRESULT groove_DirectDrawEnumerateExA(BOOL (WINAPI *callback)(GUID *, LPSTR, LPSTR, LPVOID, HMONITOR), void *context, DWORD flags);
 #ifndef __cplusplus

@@ -56,7 +56,176 @@ functions.
 
 ## Current status
 
+### Music filenames and asset lookup checkpoint (2026-10-12)
+
+The desktop trace passes sound initialization, then faults in `sub_415690`
+reading directory address `1`. Assembly confirms `sub_546A30` must pass a null
+directory and its incoming filename; the export called the resolver without
+arguments. Its AAL file-loading call also lost the resolved path and flags.
+Both calls now carry their original arguments. The two startup stream records
+and handle slots use contiguous storage.
+
+The recovered resolver preserves executable-directory, HDPath, CDPath and
+CD-ROM A-Z lookup order, using the existing portable registry defaults. It
+constructs bounded paths directly rather than relying on independent globals
+being adjacent. The WAD and intro-directory literals now include their complete
+original strings instead of a single exported byte.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and EXE/DLL linking succeeds. Mocked lookup tests cover priority, separators,
+missing files and oversized paths. A generated music-loader fixture checks
+filename/path arguments, both channels and load flags, missing paths, disabled
+audio and occupied channels. Real audio playback remains stubbed; desktop
+execution beyond this startup fault and gameplay remain unverified.
+
+### Sound startup arguments checkpoint (2026-10-12)
+
+The desktop trace passes input and graphics preference setup, then faults in
+`sub_546EA0` writing to `0x2B110 + 0x100`. Original assembly shows `0x2B110`
+is the PCM byte rate in a local driver descriptor; the sound object comes from
+argument 1. Its constructor configuration comes from argument 2, not the local
+`0x100004` format flags. Both incorrect argument substitutions are repaired.
+
+The driver descriptor is now one initialized 36-byte buffer. A recovered
+`sub_545030` preserves its 32-byte settings record and both 16-byte pool records,
+including low-word volume arguments. Sound preference reads use explicit float
+argument types and numeric defaults instead of discarded x87 results. Volume
+and sound flag globals retain their original DWORD widths.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and EXE/DLL linking succeeds. A fixture exercises both generated routines with
+mocked AAL calls and constructors, checking the allocated object, full PCM and
+settings records, pool sizes, volume defaults, already-initialized handling and
+audio startup/device failure paths. The AAL imports remain stubs; real audio
+playback and desktop progression beyond this fault are not yet verified.
+
+### Graphics preference records checkpoint (2026-10-12)
+
+The desktop trace now reaches `[input] bindings ready` and `[main] F`, then
+faults in `sub_410430`. Its preset lookup used independently emitted globals
+for a packed 24-byte descriptor and incorrectly scaled a 28-byte preset offset
+through a DWORD pointer. The preceding `sub_411620` also copied renderer caps
+and formats into undersized separate globals and scaled source byte offsets.
+
+Explicit `record:<byte-size>` overrides now preserve packed byte/DWORD aliases
+in shared aligned storage. Initialized preference descriptors and both five-row
+preset tables retain the original bytes and relocate their two data pointers.
+The selected 28-byte preferences, 28-byte device caps and five 32-byte format
+records use contiguous storage; the gamma and display-size DWORD globals retain
+their full width. Both routines now use byte arithmetic for original offsets.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and EXE/DLL linking succeeds. An oracle fixture reads the original executable
+and verifies all ten presets, both descriptor pointers, packed member aliases,
+full-width metadata and six renderer record copies. Existing surface/gamma,
+texture/viewport, input settings and binding fixtures pass. Desktop execution
+beyond this startup step and full gameplay still require user verification.
+
+### Input settings persistence checkpoint (2026-10-12)
+
+The next desktop trace reports an execute violation outside the executable,
+with a damaged stack after graphics setup. Inspection confirms stack-buffer
+overflows in `sub_419A60`: the decompiler split a single payload into independent
+locals, including a 48-byte keyboard buffer written with 56 bytes of bindings
+plus terminators. `sub_419BD0` also relied on separate adjacent locals for a
+terminated parse field and on decompiled legacy CRT internals.
+
+Both routines now have recovered C bodies with a contiguous payload and
+terminated parse fields using the system CRT. They preserve the original
+keyboard/joystick registry names and field positions (56 binding characters,
+48 joystick axis characters, then two option characters). Input options use
+byte offsets into the allocated records instead of DWORD-scaled arithmetic.
+Keyboard names are bounded to the 16-byte callback buffer; truncated settings
+are handled without reading beyond their string. Initialization logs now mark
+binding setup entry and completion.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and the EXE/DLLs link. Private registry mocks verify both payload formats,
+save/load round trips, metadata byte offsets, missing/truncated data, invalid
+option fallback and rejection of oversized joystick bindings. The binding
+initialization/rebinding fixture still passes. No validation test modifies
+the user's registry. Confirmation of this desktop crash fix and full gameplay
+still requires another run of the updated executable.
+
+### Input binding table checkpoint (2026-10-12)
+
+The latest desktop trace faulted in `sub_419810` while reading a null joystick
+list head. Assembly and the rebuild map identify `sub_40E0A0` as the preceding
+corruption: its original 256-DWORD keyboard clear was applied to a standalone
+four-byte rebuilt global, overwriting the initialized list. The 15-DWORD input
+state clear had the same layout problem.
+
+The generator now supports explicit `dwords:<byte-size>` table overrides with
+scalar aliases at the original offsets. Both state tables and the four
+14-DWORD binding tables use this layout. The six special-key constants are
+initialized from the original executable via `dwords:<byte-size>:file`.
+Binding initialization, loading, rebinding and classification loops now use
+relocated table limits instead of absolute original-image addresses.
+
+Validation: all 1,132 included functions compile with zero reported errors;
+the rebuilt EXE and DLLs link successfully. A focused fixture verifies both
+complete state clears preserve the empty list, all 14 keyboard/joystick
+defaults, special-key classification and swapping an existing binding. The
+keyboard setup and texture/viewport fixtures also pass. Registry persistence,
+connected joystick behavior and full gameplay remain unverified.
+
 ### Continuation checkpoint (2026-10-12)
+
+**Fifth desktop trace:** surface creation succeeds, but texture enumeration calls
+the `LAB_00412710` stub and viewport setup rejects its descriptor (`80070057`).
+The later access violation resolves to `sub_40E9A0+0x50`, with a null input
+interface. The 200-byte input-state clear was writing through a four-byte datum
+and could overwrite that interface. Input-state storage is now 200 bytes, and
+the other startup clear initializes the rebuilt globals explicitly instead of
+walking across unrelated global addresses.
+
+`src_recovered/sub_412710.c` restores the original texture-format callback and
+its four selection slots. Its callback context and the 44-byte viewport packet
+now have contiguous storage; their COM calls retain the verified argument counts.
+The keyboard creation/query sequence uses its actual returned interface rather
+than a GUID address as `this`. Keyboard setup uses the SDK's `c_dfDIKeyboard`
+with `dinput8.lib`/`dxguid.lib`, and its product-name callback at 0x40E960 is
+restored with a 16-byte output buffer. Joystick callback recovery remains open.
+
+`test_texture_viewport.py` passes format selection and viewport contents;
+`test_input_table.py` passes clear bounds, interface lifetime calls, keyboard
+format and product-name callback checks with COM mocks. The real API smoke test
+still passes. All **1,132 included functions compile**, and the exe links. These
+checks do not establish full gameplay or keyboard interaction in a running game.
+The incoming log is preserved as `build/hardware_user_trace_before_input_fix.log`.
+
+**Fourth desktop trace:** adapter creation succeeds and the selector reaches
+`setup mode 640x480 bpp=32`. Gamma-ramp storage was only two bytes, despite
+`GetGammaRamp` writing three channels of 256 16-bit values. It is now one
+1,536-byte block, with the fallback channel writes at offsets 0/512/1024.
+Monitor-info calls retain an explicit stdcall signature, and the fallback
+work-area RECT is contiguous. Surface-setup probes identify the intervening
+steps in the next desktop trace.
+
+The executable now logs an unhandled exception's code, address, module base,
+RVA, access target and x86 registers before termination. The crash filter was
+tested with an isolated failing child (`python tools\test_crash_logging.py`).
+`python tools\trace_report.py` resolves those desktop records against the
+matching rebuild's map without starting the game or overwriting its log.
+The surface fixture passes all three gamma channels for both API-success and
+fallback cases. All 1,130 functions compile and the exe links; actual desktop
+rendering remains to be retested. The incoming log is preserved in
+`build/hardware_user_trace_before_gamma_fix.log`.
+
+**Third desktop trace:** the run ends at `ddraw=1`, before device selection
+returns. Inspection found `sub_405720` formatting a 38-character GUID plus its
+terminator into a one-byte global (`DAT_0057ee44`). That datum now has 48 bytes
+of storage. Four calls to the member-style list iterators `sub_413510` and
+`sub_413820` in `sub_40FFD0` also omitted their object argument; each now receives
+the current node and saved starting node, matching the original ECX/stack setup.
+
+`python tools\test_device_selection.py` compiles the generated selector and its
+actual formatting/comparison/iterator helpers, with mocked graphics creation.
+It passes GUID matching, adapter fallback, format/mode fallback, and exhausted
+lists. Hardware enumeration/interface and surface-setup tests still pass, all
+1,130 included functions compile, and the executable links. Adapter/mode probes
+now identify the next selection step reached by a desktop run. The incoming log
+is preserved as `build/hardware_user_trace_before_selection_fix.log`.
 
 **Second desktop trace:** depth and display enumeration both return success,
 both HAL adapters enter the list, and main reports `ddraw=1`. The next trace

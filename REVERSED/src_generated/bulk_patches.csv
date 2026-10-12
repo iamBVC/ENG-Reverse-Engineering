@@ -71,7 +71,6 @@ sub_439280,void sub_439280(,int sub_439280(
 sub_439330,void sub_439330(,int sub_439330(
 sub_43AD50,void sub_43AD50(,int sub_43AD50(
 sub_43C1B0,void sub_43C1B0(,int sub_43C1B0(
-sub_545030,void sub_545030(,int sub_545030(
 sub_545270,void sub_545270(,int sub_545270(
 sub_5458D0,void sub_5458D0(,int sub_5458D0(
 sub_545C00,void sub_545C00(,int sub_545C00(
@@ -270,13 +269,8 @@ sub_4114F0,"sub_4057C0(s_ScreenH_0057175c,0x43f00000,0);","sub_4057C0(s_ScreenH_
 sub_4114F0,"sub_4057C0(s_SoftwareScreenBPP_00571748,0x41800000,0);","sub_4057C0(s_SoftwareScreenBPP_00571748,0x41800000);"
 sub_4114F0,"sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000,0);","sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000);"
 sub_4114F0,"sub_4057C0(s_SoftwareScreenH_00571728,0x43480000,0);","sub_4057C0(s_SoftwareScreenH_00571728,0x43480000);"
-sub_415690,"pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0,0);","pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0);"
-sub_415690,"pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0,0);","pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0);"
 sub_4170E0,"sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0,0);","sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0);"
 sub_4196D0,"sub_40F060(PTR_DAT_005724dc + 0x18,PTR_DAT_005724dc + 0x118);",sub_40F060(PTR_DAT_005724dc + 0x18);
-sub_419A60,"sub_405800(local_104,local_170,0);","sub_405800(local_104,local_170);"
-sub_419BD0,"pcVar5 = (char *)sub_405790(local_104,0,0);","pcVar5 = (char *)sub_405790(local_104,0);"
-sub_419BD0,"iVar1 = sub_405790(local_104,0,0);","iVar1 = sub_405790(local_104,0);"
 sub_41ABC0,"sub_4057C0(s_MusicVolume_00571f48,0x41200000,0);","sub_4057C0(s_MusicVolume_00571f48,0x41200000);"
 sub_41ABC0,"sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000,0);","sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000);"
 sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0,0);","uVar1 = sub_405790(s_HDPath_00571d94,0);"
@@ -348,8 +342,6 @@ sub_41C050,"sub_562717(local_200,s__sking_d_ksv_005724c0,uVar1,iVar3);","sub_562
     fprintf(stderr, ""[save] path -> %.120s\n"", local_200); fflush(stderr);"
 sub_41C050,"iVar2 = sub_562AEE(local_200,&DAT_00570350);","iVar2 = sub_562AEE(local_200,&DAT_00570350);
     fprintf(stderr, ""[save] fopen -> %p\n"", (void *)iVar2); fflush(stderr);"
-sub_415690,"pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0);","pcVar2 = (char *)sub_405790(s_HDPath_00571d94,groove_default_path);"
-sub_415690,"pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0);","pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,groove_default_path);"
 sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
 sub_41C0E0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
 sub_41CBE0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
@@ -497,8 +489,6 @@ sub_418C10,  if (*(int *)(DAT_00582260 + 0x70) != 0) {,  if (*(int *)((DAT_00582
 sub_418C10,"    sub_40E610(*(undefined4 *)(*(int *)(DAT_00582260 + 0x70) + 0x1c),&DAT_00583a70);","    sub_40E610(*(undefined4 *)(*(int *)((DAT_00582260[0]) + 0x70) + 0x1c),&DAT_00583a70);"
 sub_4191C0,  bVar4 = *(int *)(DAT_00582260 + 0x70) != 0;,  bVar4 = *(int *)((DAT_00582260[0]) + 0x70) != 0;
 sub_419810,      for (piVar2 = DAT_00582260; (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {,      for (piVar2 = (DAT_00582260[0]); (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {
-sub_419A60,  piVar1 = DAT_00582260;,  piVar1 = (DAT_00582260[0]);
-sub_419BD0,        piVar3 = DAT_00582260;,        piVar3 = (DAT_00582260[0]);
 sub_419E00,    piVar4 = DAT_00582260;,    piVar4 = (DAT_00582260[0]);
 sub_4256C0,  if ((param_1 != 0) || (DAT_00582260 == &DAT_00582264)) {,  if ((param_1 != 0) || ((DAT_00582260[0]) == &DAT_00582260[1])) {
 sub_4116D0,"  int *local_2c;
@@ -631,3 +621,143 @@ sub_410700,(**(code **)*DAT_00582cdc),(**(groove_com3 **)*DAT_00582cdc)
 sub_410700,(**(code **)(*DAT_00582cec + 0xc)),(**(groove_com3 **)(*DAT_00582cec + 0xc))
 sub_4106C0,(**(code **)(*DAT_00582cd0 + 8)),(**(groove_com1 **)(*DAT_00582cd0 + 8))
 sub_4106C0,(**(code **)(*DAT_00582ccc + 8)),(**(groove_com1 **)(*DAT_00582ccc + 8))
+sub_40FFD0,sub_413820(piVar9),"sub_413820(piVar10,piVar9)"
+sub_40FFD0,sub_413820(local_c),"sub_413820(piVar8,local_c)"
+sub_40FFD0,sub_413510(local_8),"sub_413510(piVar7,local_8)"
+sub_40FFD0,sub_413510(piVar6),"sub_413510(piVar5,piVar6)"
+sub_40FF40,  uVar1 = sub_40FFD0,"  fprintf(stderr, ""[select] preferences read, selecting display\n""); fflush(stderr);
+  uVar1 = sub_40FFD0"
+sub_40FFD0,    cVar2 = sub_410550(piVar5);,"    fprintf(stderr, ""[select] create adapter=%p\n"", (void *)piVar5); fflush(stderr);
+    cVar2 = sub_410550(piVar5);
+    fprintf(stderr, ""[select] adapter created=%d\n"", (int)cVar2); fflush(stderr);"
+sub_40FFD0,"              cVar2 = sub_410700(piVar8,piVar10,piVar5,piVar7);","              fprintf(stderr, ""[select] setup mode %dx%d bpp=%d\n"", piVar10[3], piVar10[4], piVar8[3]); fflush(stderr);
+              cVar2 = sub_410700(piVar8,piVar10,piVar5,piVar7);
+              fprintf(stderr, ""[select] surfaces created=%d\n"", (int)cVar2); fflush(stderr);"
+sub_410700,(&DAT_00582cf0)[iVar2],((unsigned short *)DAT_00582cf0)[iVar2]
+sub_410700,(&DAT_00582ef0)[iVar2],((unsigned short *)DAT_00582cf0)[256 + iVar2]
+sub_410700,(&DAT_005830f0)[iVar2],((unsigned short *)DAT_00582cf0)[512 + iVar2]
+sub_41DB40,"(*DAT_005863dc)(param_1,param_2)","((BOOL (WINAPI *)(HMONITOR,LPMONITORINFO))DAT_005863dc)((HMONITOR)param_1,(LPMONITORINFO)param_2)"
+sub_41DB40,"  uint local_10;
+  uint local_c;
+  uint local_8;
+  uint local_4;",  uint work_area[4];
+sub_41DB40,local_10,work_area[0]
+sub_41DB40,local_c,work_area[1]
+sub_41DB40,local_8,work_area[2]
+sub_41DB40,local_4,work_area[3]
+sub_410700,  local_cc.length = 0x2c;,"  fprintf(stderr, ""[graphics] cooperative level set\n""); fflush(stderr);
+  local_cc.length = 0x2c;"
+sub_410700,"  SetWindowPlacement(DAT_005855d0,&local_cc);","  fprintf(stderr, ""[graphics] monitor queried\n""); fflush(stderr);
+  SetWindowPlacement(DAT_005855d0,&local_cc);"
+sub_410700,  surface_desc[0] = 0x7c;,"  fprintf(stderr, ""[graphics] display mode set\n""); fflush(stderr);
+  surface_desc[0] = 0x7c;"
+sub_410700,  driver_caps[0] = 100;,"  fprintf(stderr, ""[graphics] primary surface created\n""); fflush(stderr);
+  driver_caps[0] = 100;"
+sub_410700,    if (*(char *)(param_3 + 0x16) !=,"    fprintf(stderr, ""[graphics] surfaces ready, gamma=%d\n"", *(unsigned char *)(param_3 + 0x16)); fflush(stderr);
+    if (*(char *)(param_3 + 0x16) !="
+sub_412710,int sub_412710(,int __stdcall sub_412710(
+sub_411000,"  undefined1 local_a8 [8];
+  int local_a0;",  unsigned int texture_context[3] = {0};
+sub_411000,local_a0,texture_context[2]
+sub_411000,local_a8,texture_context
+sub_411000,&LAB_00412710,sub_412710
+sub_411000,"  undefined4 local_98;
+  undefined4 local_94;
+  undefined4 local_90;
+  undefined4 local_8c;
+  undefined4 local_88;
+  undefined4 local_84;
+  undefined4 local_80;
+  undefined4 local_7c;
+  undefined4 local_78;
+  undefined4 local_74;
+  undefined4 local_70;",  undefined4 viewport[11] = {0};
+sub_411000,local_98,viewport[0]
+sub_411000,local_94,viewport[1]
+sub_411000,local_90,viewport[2]
+sub_411000,local_8c,viewport[3]
+sub_411000,local_88,viewport[4]
+sub_411000,local_84,viewport[5]
+sub_411000,local_80,viewport[6]
+sub_411000,local_7c,viewport[7]
+sub_411000,local_78,viewport[8]
+sub_411000,local_74,viewport[9]
+sub_411000,local_70,viewport[10]
+sub_411000,(**(code **)(*DAT_00582cd0 + 0x20)),(**(groove_com5 **)(*DAT_00582cd0 + 0x20))
+sub_411000,(**(code **)(*DAT_00582cd4 + 0x20)),(**(groove_com3 **)(*DAT_00582cd4 + 0x20))
+sub_411000,(**(code **)(*DAT_00582cd0 + 0x18)),(**(groove_com3 **)(*DAT_00582cd0 + 0x18))
+sub_411000,(**(code **)(*DAT_00582cd4 + 0x14)),(**(groove_com2 **)(*DAT_00582cd4 + 0x14))
+sub_411000,(**(code **)(*DAT_00582cd4 + 0x30)),(**(groove_com2 **)(*DAT_00582cd4 + 0x30))
+sub_411000,(**(code **)(*DAT_00582cd8 + 0x44)),(**(groove_com2 **)(*DAT_00582cd8 + 0x44))
+sub_40E6F0,"  puVar6 = &DAT_00582a70;
+  for (iVar3 = 0x38; iVar3 != 0; iVar3 = iVar3 + -1) {
+    *puVar6 = 0;
+    puVar6 = puVar6 + 1;
+  }","  /* Independent rebuilt globals cannot be cleared by walking across their addresses. */
+  DAT_00582a70 = 0;
+  DAT_00582a74 = 0;
+  DAT_00582a7c = 0;
+  DAT_00582a80 = 0;
+  puVar6 = (undefined4 *)DAT_00582a88;
+  for (iVar3 = 0x32; iVar3 != 0; --iVar3) puVar6[iVar3 - 1] = 0;"
+sub_40E9A0,(**(code **)(*DAT_00582a74 + 0x10)),(**(groove_com5 **)(*DAT_00582a74 + 0x10))
+sub_40E960,int sub_40E960(,int __stdcall sub_40E960(
+sub_40E880,  piVar7 = (int *)&DAT_0056e6bc;,"  piVar7 = *(int **)local_4;
+  puVar8 = (undefined4 *)piVar7;"
+sub_40E880,(**(code **)(*DAT_00582a74 + 0xc)),(**(groove_com4 **)(*DAT_00582a74 + 0xc))
+sub_40E880,(**(code **)*puVar8),(**(groove_com3 **)*puVar8)
+sub_40E880,(**(code **)(*piVar7 + 8)),(**(groove_com1 **)(*piVar7 + 8))
+sub_40E880,(**(code **)(*DAT_00582a80 + 8)),(**(groove_com1 **)(*DAT_00582a80 + 8))
+sub_40E880,"(**(code **)(*DAT_00582a80 + 0x2c))(DAT_00582a80,&DAT_0056e72c,puVar8,0)","(**(groove_com2 **)(*DAT_00582a80 + 0x2c))(DAT_00582a80,groove_KeyboardDataFormat())"
+sub_40E880,(**(code **)(*piVar7 + 0x10)),(**(groove_com5 **)(*piVar7 + 0x10))
+sub_40E880,&LAB_0040e960,sub_40E960
+sub_40E7F0,(**(code **)(*DAT_00582a80 + 0x34)),(**(groove_com3 **)(*DAT_00582a80 + 0x34))
+sub_40E7F0,(**(code **)(*DAT_00582a80 + 0x1c)),(**(groove_com1 **)(*DAT_00582a80 + 0x1c))
+sub_40E880,  undefined1 local_4 [4];,  int *keyboard_device = 0;
+sub_40E880,*(int **)local_4,keyboard_device
+sub_40E880,"DAT_00582a74,&DAT_0056e61c,local_4,0","DAT_00582a74,&DAT_0056e61c,&keyboard_device,0"
+sub_419810,(int)piVar2 < 0x572100,piVar2 < &DAT_005720e8 + 6
+sub_419E00,(int)piVar2 < 0x572100,piVar2 < &DAT_005720e8 + 6
+sub_419E00,(int)piVar4 < 0x584790,piVar4 < &DAT_00584758 + 14
+sub_4199F0,(int)piVar3 < 0x584790,piVar3 < &DAT_00584758 + 14
+sub_40E6F0,    sub_419810();,"    fprintf(stderr, ""[input] bindings begin\n""); fflush(stderr);
+    sub_419810();
+    fprintf(stderr, ""[input] bindings ready\n""); fflush(stderr);"
+sub_410430,*(int *)(&DAT_00573d74 + uVar1 * 0x18),*(int *)((char *)&DAT_00573d74 + uVar1 * 0x18)
+sub_410430,((&PTR_DAT_00573d68)[uVar1 * 6] +,((char *)((&PTR_DAT_00573d68)[uVar1 * 6]) +
+sub_411620,(DAT_00583420 +,((char *)DAT_00583420 +
+sub_411620,(DAT_00583424 +,((char *)DAT_00583424 +
+sub_411620,(DAT_0058342c +,((char *)DAT_0058342c +
+sub_546EA0,DAT_006d9490 = iStack_8;,DAT_006d9490 = param_1;
+sub_546EA0,*(undefined4 *)(iStack_8 + 0x100),*(undefined4 *)(param_1 + 0x100)
+sub_546EA0,"sub_547470(DAT_006d9490,uStack_4);","sub_547470(DAT_006d9490,param_2);"
+sub_546EA0,"  undefined1 auStack_24 [4];
+  undefined4 uStack_20;
+  undefined4 uStack_1c;
+  undefined4 uStack_18;
+  undefined4 uStack_14;
+  undefined2 uStack_10;
+  undefined2 uStack_e;
+  undefined4 uStack_c;
+  int iStack_8;
+  undefined4 uStack_4;",  unsigned int driver[9] = {0};
+sub_546EA0,_AAL_InitDriver_4(auStack_24);,_AAL_InitDriver_4(driver);
+sub_546EA0,uStack_20,driver[1]
+sub_546EA0,uStack_1c,driver[2]
+sub_546EA0,uStack_18,driver[3]
+sub_546EA0,uStack_14,driver[4]
+sub_546EA0,uStack_10,((unsigned short *)driver)[10]
+sub_546EA0,uStack_e,((unsigned short *)driver)[11]
+sub_546EA0,uStack_c,driver[6]
+sub_546EA0,iStack_8,driver[7]
+sub_546EA0,uStack_4,driver[8]
+sub_546EA0,"    sub_4057C0(s_SoundDevice_00578ebc,0,0);
+    DAT_005834d8 = __ftol();","    DAT_005834d8 = (int)((float10 (__cdecl *)(undefined4, float))sub_4057C0)((undefined4)s_SoundDevice_00578ebc, 0.0f);"
+sub_546EA0,"    sub_4057C0(s_SoundVolume_00571f30,0x42fe0000,0);
+    _DAT_005834e0 = __ftol();","    _DAT_005834e0 = (int)((float10 (__cdecl *)(undefined4, float))sub_4057C0)((undefined4)s_SoundVolume_00571f30, 127.0f);"
+sub_546EA0,"    sub_4057C0(s_MusicVolume_00571f48,0x42c00000,0);
+    _DAT_005834ec = __ftol();","    _DAT_005834ec = (int)((float10 (__cdecl *)(undefined4, float))sub_4057C0)((undefined4)s_MusicVolume_00571f48, 96.0f);"
+sub_546EA0,"    sub_4057C0(s_SpeakerMode_00571f3c,0x40800000,0);
+    DAT_005834f0 = __ftol();","    DAT_005834f0 = (int)((float10 (__cdecl *)(undefined4, float))sub_4057C0)((undefined4)s_SpeakerMode_00571f3c, 4.0f);"
+sub_546A30,iStack_14 = sub_415690();,"iStack_14 = sub_415690(0,(char *)param_1);"
+sub_546A30,iVar1 = _AAL_LoadFile_8();,"iVar1 = _AAL_LoadFile_8(iStack_14,pcStack_10);"

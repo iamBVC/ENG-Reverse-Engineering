@@ -9,9 +9,28 @@ SOURCE = r'''
 #include <string.h>
 #define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
 static void *draw_methods[22], *surface_methods[32];
+static void *gamma_methods[4];
+static struct { void **methods; } gamma;
 static struct { void **methods; } draw;
 static struct surface { void **methods; int kind; } surfaces[4], back;
 static int created, attached, modes, flip, depth;
+static int gamma_failure, gamma_calls;
+
+static int WINAPI query_gamma(UINT_PTR self, UINT_PTR iid, UINT_PTR output)
+{
+    REQUIRE(self == (UINT_PTR)&surfaces[0] && iid != 0);
+    gamma.methods = gamma_methods; *(void **)output = &gamma; return 0;
+}
+static int WINAPI gamma_ramp(UINT_PTR self, UINT_PTR flags, UINT_PTR output)
+{
+    unsigned short *ramp = (unsigned short *)output;
+    int i;
+    REQUIRE(self == (UINT_PTR)&gamma && flags == 0 && output == (UINT_PTR)DAT_00582cf0);
+    REQUIRE(sizeof DAT_00582cf0 == 1536);
+    ++gamma_calls;
+    for (i = 0; i < 768; ++i) ramp[i] = (unsigned short)(i * 13);
+    return gamma_failure;
+}
 
 static int WINAPI cooperative(UINT_PTR self, UINT_PTR window, UINT_PTR flags)
 {
@@ -59,21 +78,29 @@ static int WINAPI pixel_format(UINT_PTR self, UINT_PTR output)
     unsigned int format[8] = {32, 0x40, 0, 16, 0xf800, 0x7e0, 0x1f, 0};
     memcpy((void *)output, format, sizeof format); return 0;
 }
-static void run_case(int use_flip, int use_depth)
+static void run_case(int use_flip, int use_depth, int use_gamma, int fail_gamma)
 {
     unsigned int format[15] = {0}, mode[36] = {0}, adapter[10] = {0};
     unsigned char device[216] = {0};
     int i;
     flip = use_flip; depth = use_depth; created = attached = modes = 0;
+    gamma_calls = 0; gamma_failure = fail_gamma;
     format[3] = 16; format[4] = 32; format[5] = 0x400; format[7] = 16;
     mode[3] = 640; mode[4] = 480;
     mode[23] = 32; mode[24] = 0x40; mode[26] = 16;
     mode[27] = 0xf800; mode[28] = 0x7e0; mode[29] = 0x1f;
     device[0x10] = (unsigned char)flip; device[0x15] = (unsigned char)depth;
+    *((unsigned char *)adapter + 0x16) = (unsigned char)use_gamma;
     DAT_00582ccc = (unsigned int *)&draw;
     REQUIRE(sub_410700((int)format, (int)mode, (int)adapter, (int)device) == 1);
     REQUIRE(modes == 1 && created == 1 + flip + depth && attached == depth);
     for (i = 0; i < created; ++i) REQUIRE(surfaces[i].methods == surface_methods);
+    REQUIRE(gamma_calls == use_gamma);
+    if (use_gamma) {
+        unsigned short *ramp = (unsigned short *)DAT_00582cf0;
+        for (i = 0; i < 768; ++i)
+            REQUIRE(ramp[i] == (unsigned short)(fail_gamma ? (i % 256) * 257 : i * 13));
+    }
 }
 int main(void)
 {
@@ -83,8 +110,11 @@ int main(void)
     draw_methods[20] = cooperative; draw_methods[21] = display_mode; draw_methods[6] = create_surface;
     surface_methods[5] = caps; surface_methods[12] = get_back;
     surface_methods[3] = attach; surface_methods[21] = pixel_format;
-    run_case(0, 0); run_case(0, 1); run_case(1, 0); run_case(1, 1);
-    puts("surface setup: comparison, mode arguments, primary/depth descriptors and output bounds passed");
+    surface_methods[0] = query_gamma; gamma_methods[3] = gamma_ramp;
+    run_case(0, 0, 0, 0); run_case(0, 1, 0, 0);
+    run_case(1, 0, 0, 0); run_case(1, 1, 0, 0);
+    run_case(1, 1, 1, 0); run_case(1, 1, 1, 1);
+    puts("surface setup: descriptors, output bounds and all three gamma channels passed");
     return 0;
 }
 '''

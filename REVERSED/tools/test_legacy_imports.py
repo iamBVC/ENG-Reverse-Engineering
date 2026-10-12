@@ -54,7 +54,7 @@ def main():
     batch = build / "run.bat"
     batch.write_text(f'@echo off\ncall "{vcvars}" >nul\n'
                      f'cl /nologo /TC /W3 /MT imports.c "{ROOT / "harness/directdraw_imports.c"}" '
-                     '/Fe:imports.exe /link ddraw.lib\n'
+                     '/Fe:imports.exe /link ddraw.lib dinput8.lib dxguid.lib\n'
                      'if errorlevel 1 exit /b 1\nimports.exe\nexit /b %errorlevel%\n', encoding="ascii")
     return subprocess.run(["cmd", "/c", str(batch)], cwd=build).returncode
 

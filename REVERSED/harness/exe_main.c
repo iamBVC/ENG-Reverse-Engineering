@@ -32,6 +32,25 @@ extern int sub_41D350(int hInstance, int hPrevInstance, char *lpCmdLine);
 extern void (*const groove_crt_initialisers[])(void);
 extern const unsigned int groove_crt_initialiser_count;
 
+static LONG WINAPI report_unhandled_exception(EXCEPTION_POINTERS *failure)
+{
+    EXCEPTION_RECORD *record = failure->ExceptionRecord;
+    CONTEXT *context = failure->ContextRecord;
+    UINT_PTR base = (UINT_PTR)GetModuleHandleA(NULL);
+    UINT_PTR address = (UINT_PTR)record->ExceptionAddress;
+    fprintf(stderr, "[crash] code=%08lx address=%p module=%p rva=%08lx\n",
+            record->ExceptionCode, (void *)address, (void *)base,
+            (unsigned long)(address - base));
+    if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2)
+        fprintf(stderr, "[crash] access=%lu target=%p\n",
+                (unsigned long)record->ExceptionInformation[0],
+                (void *)record->ExceptionInformation[1]);
+    fprintf(stderr, "[crash] eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
+            context->Eip, context->Eax, context->Ecx, context->Edx, context->Esp, context->Ebp);
+    fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 /* Run from the executable's own directory, whatever folder it is launched from: the game
  * opens its assets by relative name ("111.cor", "Wads\..."), so this is what makes the
  * rebuild work from anywhere instead of only from the folder it was installed into. */
@@ -60,6 +79,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
     if (freopen("groove_trace.log", "w", stderr) == NULL) {
         /* no log available - carry on, the trace is a diagnostic, not a requirement */
     }
+    SetUnhandledExceptionFilter(report_unhandled_exception);
     /* The module handle comes first: tools/crash_report.py needs it to turn a fault
        address into a function name, and a fault inside the initialisers would otherwise
        happen before anything logged it. */

@@ -451,7 +451,56 @@ def main() -> int:
 
     defs: list[str] = []
     decls: list[str] = []
+    # Confirmed DWORD tables retain scalar lvalues at every original offset.
+    # Separate linker globals cannot support rep stosd or pointer iteration.
+    table_ranges = []
+    for name, kind in type_overrides.items():
+        if kind.startswith(("dwords:", "record:")):
+            start = int(name.rsplit("_", 1)[1], 16)
+            parts = kind.split(":")
+            size = int(parts[1], 16)
+            if size <= 0 or size % 4:
+                raise ValueError(f"Invalid DWORD table size: {name}={kind}")
+            table_ranges.append((start, start + size, name))
+    for start, end, name in table_ranges:
+        kind = type_overrides[name]
+        parts = kind.split(":")
+        size = end - start
+        storage = name + "_storage"
+        if len(parts) > 2 and parts[2] == "file":
+            entries = []
+            for offset, value in enumerate(struct.unpack(f"<{size // 4}I", exe.read(start, size))):
+                datum = data.get(start + offset * 4)
+                target = next((r for r in table_ranges if r[0] <= value < r[1]), None)
+                if target and ((datum and datum[2] == "pointer") or
+                           type_overrides.get(f"DAT_{start + offset * 4:08x}") == "pointer"):
+                    entries.append(f"(int)((unsigned char *){target[2]}_storage + {value - target[0]})")
+                else:
+                    entries.append(f"0x{value:08x}")
+            values = ",".join(entries)
+        else:
+            values = "0"
+        defs.append(f"int {storage}[{size // 4}] = {{{values}}};")
+        decls.append(f"extern int {storage}[{size // 4}];")
     for a in sorted(referenced):
+        table = next((r for r in table_ranges if r[0] <= a < r[1]), None)
+        if table:
+            start, end, name = table
+            record = type_overrides[name].startswith("record:")
+            if (a - start) % 4 and not record:
+                raise ValueError(f"Unaligned symbol inside DWORD table: {a:08x}")
+            canonical = data.get(a, (f"DAT_{a:08X}",))[0]
+            for alias in sorted(referenced[a] | {canonical}):
+                if IDENT_RE.match(alias):
+                    if record:
+                        _, width, dtype = data.get(a, (canonical, 4, "undefined4"))
+                        ctype = "unsigned int *" if dtype == "pointer" else (
+                            "int" if alias.startswith("_DAT_") or width >= 4 else
+                            "unsigned short" if width == 2 else "unsigned char")
+                        decls.append(f"#define {alias} (*({ctype} *)((unsigned char *){name}_storage + {a - start}))")
+                    else:
+                        decls.append(f"#define {alias} ({name}_storage[{(a - start) // 4}])")
+            continue
         canonical, size, _dt = data.get(a, (f"DAT_{a:08X}", 4, "undefined"))
         if canonical.startswith(("flt_", "dbl_")):
             continue                                   # emitted as constants below
@@ -766,7 +815,7 @@ def main() -> int:
         s = sig.strip()
         # These entries are invoked by Windows/DirectDraw, not by loose
         # decompiler calls. Their x86 callee cleanup and parameter count are ABI.
-        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640"}:
+        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640", "sub_412710", "sub_40E960"}:
             loose[n] = s
             continue
         if "::" in s or "@" in s:
