@@ -12,3 +12,5 @@ DAT_00571710,string:0x8
 DAT_00570300,string:0x8
 DAT_0057ddc4,array:0x800
 DAT_0057ee74,array:0x800
+DAT_0056e70c,array:0x10
+DAT_0057cd78,array:0x168

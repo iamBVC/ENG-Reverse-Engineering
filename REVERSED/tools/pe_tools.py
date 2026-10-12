@@ -87,8 +87,25 @@ class PE:
         return s.rawptr + (va - self.image_base - s.vaddr)
 
     def read(self, va: int, size: int) -> bytes:
-        off = self.va_to_offset(va)
-        return self.data[off:off + size]
+        """Bytes of the *loaded image* at `va` - zeros past a section's raw data.
+
+        A section's virtual size can be much larger than its raw size, and the
+        loader zero-fills everything past the raw data.  Reading the file bytes
+        there instead returns whatever section *follows* in the file: `.data`
+        covers 0x570000-0x6DB935 virtually but only 0x570000-0x57E000 in the
+        file, so the old behaviour gave `DAT_00583410` (at 0x583410) the value
+        0x37CF37BC - a pair out of `.reloc` - and the teardown whose empty-list
+        test is `head != &DAT_00583414` dereferenced it (measured: the access
+        violation in sub_40FD00 called from the DirectDraw init).
+        """
+        sec = self.section_for_rva(va - self.image_base)
+        if sec is None:
+            raise ValueError(f"VA 0x{va:X} is not inside any section")
+        off = sec.rawptr + (va - self.image_base - sec.vaddr)
+        raw_end = sec.rawptr + sec.rawsize
+        if sec.rawsize == 0 or off >= raw_end:
+            return b"\0" * size                       # zero-filled tail
+        return self.data[off:min(off + size, raw_end)].ljust(size, b"\0")
 
     # -- relocations --------------------------------------------------------
     def _parse_relocs(self) -> set[int]:

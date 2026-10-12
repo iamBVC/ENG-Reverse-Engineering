@@ -357,3 +357,35 @@ sub_41C0E0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPa
 sub_41CBE0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
 sub_41D350,"fprintf(stderr, ""[main] A\n""); fflush(stderr);","fprintf(stderr, ""[main] A\n""); fflush(stderr);
     fprintf(stderr, ""[main] cVar3=%d\n"", (int)cVar3); fflush(stderr);"
+sub_556340,  (**(code **)(*piVar3 + 8))(piVar3);,"  piVar3 = (int *)local_4;   /* PATCH: the interface DirectDrawCreateEx returned.  Ghidra
+       kept the address of the out-parameter slot (`piVar3 = &local_4`), so its own COM
+       idiom read a function pointer 8 bytes into the *object* and passed the stack address
+       as `this` - the segfault once the IID was right.  The original loads the interface
+       and pushes it: mov eax,[esp+8+var_4] / push eax / mov edx,[eax] / call [edx+8]. */
+  (**(code **)(*piVar3 + 8))(piVar3);"
+sub_41D350,        cVar3 = sub_41DC40(param_1);,"        cVar3 = sub_41DC40(param_1);
+        fprintf(stderr, ""[main] window=%d\n"", (int)cVar3); fflush(stderr);"
+sub_41D350,          cVar3 = sub_40F4F0();,"          cVar3 = sub_40F4F0();
+          fprintf(stderr, ""[main] ddraw=%d\n"", (int)cVar3); fflush(stderr);"
+sub_41D350,            cVar3 = sub_40FF40();,"            cVar3 = sub_40FF40();
+            fprintf(stderr, ""[main] after-40FF40=%d\n"", (int)cVar3); fflush(stderr);"
+sub_568953,"    if (param_1 == *puVar1) {
+      _DAT_006da364 = *(undefined4 *)(iVar2 * 8 + 0x57cd7c);
+      return;
+    }
+    puVar1 = puVar1 + 2;
+    iVar2 = iVar2 + 1;
+  } while ((int)puVar1 < 0x57cee0);","    /* PATCH: the 8-byte key->value table at 0x57CD78 in the original (start
+       DAT_0057cd78, sized 0x168 by type_overrides.csv).  The value read and the end
+       of the walk were both the *original's* absolute addresses; a rebuild places the
+       table elsewhere, so the walk ran ~770 KB past its end into unmapped memory
+       (measured: the access violation after [main] D).  Read the value through the
+       pointer the loop already holds, and the end through the symbol that follows the
+       table - the generator emits both at their real addresses. */
+    if (param_1 == *puVar1) {
+      _DAT_006da364 = puVar1[1];
+      return;
+    }
+    puVar1 = puVar1 + 2;
+    iVar2 = iVar2 + 1;
+  } while ((int)puVar1 < (int)&DAT_0057cee0);"

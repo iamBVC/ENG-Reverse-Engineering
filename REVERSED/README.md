@@ -829,6 +829,119 @@ call.  If it prints, the loader returned and the fault is in the message-box pat
 not, the fault is inside the loader - which the original survives (it checks the result),
 so it would be a rebuild-side bug in that function.
 
+### The next three: an IID sized one byte, a dropped COM argument, a missing WndProc
+
+With that cluster fixed the exe ran `A -> B` and stopped: no `[main] C`, no dialog - a fault
+between B and C.  `C` is printed right after `cVar3 = sub_556340();`, and `sub_556340` is the
+**DirectDraw probe**: `LoadLibraryA("DDRAW.DLL")`, `GetProcAddress(...,"DirectDrawCreateEx")`,
+then `CreateEx(0, &ppDD, &DAT_0056e70c, 0)`.  Three separate defects lived in that one function.
+
+**1. `DAT_0056e70c` was one byte wide.**  Ghidra's symbol table records the access it saw, and
+it saw one: `unsigned char DAT_0056e70c = 0xC0;`.  The bytes at 0x56E70C are
+`c0 5e e6 15 9c 3b d2 11 b9 2f 00 60 97 97 ea 5b` - **IID_IDirectDraw7**
+(`{15E65EC0-3B9C-11D2-B92F-00609797EA5B}`), with IID_IDirectDraw4 (`9C59509A-...`) immediately
+after it.  A one-byte IID cannot match, so `DirectDrawCreateEx` fails with an
+interface-not-supported HRESULT **on every machine, display or not**, the probe returns 0, and
+the game takes its "cannot start" branch.  Same recorded-override class as the registry buffer
+and the `fopen` mode strings: `DAT_0056e70c,array:0x10` in `type_overrides.csv`, and the
+generator reads the real 16 bytes out of `groove.exe`.  The scan is cheap for the rest of the
+table - of 882 one-byte data symbols, 270 have their address taken, and the real GUIDs sit in
+the contiguous IID block 0x56E5CC-0x56E72C.
+
+**2. Ghidra dropped the COM `this`.**  With the IID right `CreateEx` succeeded, and the next
+line faulted:
+
+```c
+piVar3 = &local_4;
+iVar2 = (*pFVar1)(0,piVar3,&DAT_0056e70c,0);
+(**(code **)(*piVar3 + 8))(piVar3);       /* Ghidra: reads 8 bytes into the object */
+```
+
+`piVar3` holds the *address of the out-parameter slot*, so Ghidra's own COM idiom read a
+function pointer 8 bytes into the object and pushed a stack address as `this`.  The listing is
+unambiguous - `mov eax,[esp+8+var_4] / push eax / mov edx,[eax] / call [edx+8]` loads the
+interface and pushes *that*.  One recorded row in `bulk_patches.csv` reassigns
+`piVar3 = (int *)local_4;` before the call and leaves the idiom correct.
+
+Checked first: 31 sites in the bulk have this `(**(code **)(*V + n))(V)` shape with a *local*
+`V`.  Only this one puts a slot address in `V`; the other 30 load a real object pointer
+(`piVar2 = *(int **)(...)`), where the idiom is right.  The shape is not the signal - what the
+variable holds is.
+
+**3. The window procedure is not in the build.**  With both fixed the trace runs
+`A -> B -> C -> D -> E` and the log names the next defect itself: `[stub] LAB_0041dda0`,
+printed *during* `sub_41DC40`, because the window class is registered with
+`local_28.lpfnWndProc = (WNDPROC)&LAB_0041dda0;`.  A `LAB_<addr>` code label became a no-op
+stub, so the rebuild installs an empty WndProc - no `WM_NCCREATE`/`WM_CREATE` handling, no
+`DefWindowProc`.
+
+Why there is no body: **IDA has a function at 0x41DDA0 (185 listing lines, a full WndProc with a
+message switch), Ghidra does not.**  Ghidra's nearest functions are `sub_41DD80` (17 bytes) and
+`sub_41DF60`; the whole 0x41DD91-0x41DF60 range is one gap in its function list, and
+`tools/ghidra_decompile.bat` exports *Ghidra's* list, so a merged region is silently absent.
+Measured size of the class: **438 of the 1,212 IDA entries have no `decompiled/sub_<addr>.c`**,
+and **83 `LAB_<addr>` labels are used as function pointers** in the bulk - every one of them a
+callback in the same position as this WndProc.
+
+That fix belongs in the export step: an address the code *passes as a function pointer* is
+provably a function entry, so create it in the analysis, decompile it, and let `make_bulk` alias
+the label to the function.  Hand-porting 185 asm lines is a fallback for `sub_41DDA0` alone; it
+does not generalise to the other 82.
+
+**4. A table walked past its end.**  Next was `sub_568953`, and the log pointed at it: an
+8-byte-per-entry key->value table (45 entries: `(1,22) (2,2) (3,2) (4,24) ...`) scanned from
+`&DAT_0057cd78` to a *literal* `0x57CEE0`.  Both the value read (`0x57CD7C + i*8`) and the end
+of the walk were the **original's** addresses; the rebuild places the table at 0x4C0608, so the
+walk ran ~770 KB past its end into unmapped memory - the access violation the trace died on.
+Two recorded decisions: `DAT_0057cd78,array:0x168` (45 entries, so the walk reads real keys and
+`DAT_0057cee0` lands immediately after them) and a `bulk_patches.csv` row that takes the value
+from the pointer the loop already holds and ends at `&DAT_0057cee0`.  The class is bigger than
+the one site: **125 hex literals in the bulk are original-image addresses**, ~25 of them loop
+bounds of this shape (`} while ((int)X < 0x572100);`), the rest mostly the known SEH scope-table
+scaffolding.
+
+**5. The generator read file bytes past a section's raw data.**  `.data` covers
+0x570000-0x6DB935 *virtually* but only 0x570000-0x57E000 in the file; the rest is zero-filled by
+the loader.  `pe_tools.read()` worked out the file offset without checking the section's raw
+size, so a datum in that tail was initialised from whatever section *follows* in the file:
+`DAT_00583410` (0x583410, which the listing declares `dd ?`) got `0x37CF37BC` - a pair out of
+`.reloc`.  **147 of the 311 data symbols with a recorded initial value are in that tail**, so
+all of them were wrong.  `read()` now returns zeros past the raw data, which is what the loader
+does.
+
+**A crash is a name now, not an address.**  `harness\build_dlls.bat` links the exe with a MAP
+file, and `python tools\crash_report.py` runs it under gdb, subtracts the module handle the
+trace logs as `hInst=` and resolves every frame through that map (it also says when a frame's
+offset is too large to trust).  The map parser accepted only *uppercase* hex addresses while the
+linker writes them lowercase as often as not, which silently dropped ~80% of the symbols and
+made every resolution look coarse - fixed; the backtrace now reads:
+
+```
+#0  _sub_40FD00+0x2C     #1  _sub_40F4F0+0x2DF    #2  _sub_41D350+0x29A
+#3  _WinMain@16         #4  ?__scrt_common_main_seh@@YAHXZ
+```
+
+A first reading of an earlier, half-resolved crash blamed the 2001 CRT's C++/SEH unwind bodies
+(`sub_567BA4`, called from `sub_5679F3`) and proposed extending `crt_bodies.txt`.  **That was
+wrong** - the coarse resolution had hid the real function - and it is worth recording because the
+wrong fix looked reasonable.  The faults so far are in *game* code: `sub_556340`, `sub_568953`,
+`sub_40FD00`.
+
+**Where it stands.**  The trace reaches `[main] E` and dies inside the DirectDraw init: the
+list-teardown `sub_40FD00` dereferences a head that nothing populated.  The original does call
+that same teardown at startup - measured under gdb, its head holds a *heap* node (0x2A119E0) -
+so the divergence is upstream of the teardown, in whatever fills that list.  Two things remain
+open: the WndProc is still a stub (`[stub] LAB_0041dda0`), and **gdb runs of the original are not
+a faithful oracle** - with faults passed through it exits normally within ~15 s, after a
+*handled* access violation inside Miles (`aal!_AAL_CloseFilterProvider@4` calling
+`FreeLibrary(0xbaadf00d)`), so the interactive run is the reference, not a debugged one.
+
+**Run the three steps in order.**  `python tools\make_bulk.py` rewrites
+`clean_subset.c`/`bulk_all.c`, but the chunk files the compiler consumes are written by
+`python tools\compile_check.py`, and `harness\build_dlls.bat` only splits *those*.  Skipping
+`compile_check.py` builds stale code: measured - after the `piVar3` row, `clean_subset.c` had the
+patch, `build\exe_chunks\*.c` did not, and the exe crashed exactly as before.
+
 ### Editing the patch table: never by hand
 
 This round cost three rounds of confusion to a single field.  A replacement text containing

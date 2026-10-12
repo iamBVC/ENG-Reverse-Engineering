@@ -144,7 +144,11 @@ cl /nologo /c /TC /W0 /GS- /MT /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
    "%ROOT%\src_generated\link_stubs.c" "%ROOT%\harness\crt_aliases.c" ^
    "%ROOT%\harness\exe_main.c" /Fo"exe_obj\\"
 if errorlevel 1 ( popd & exit /b 1 )
+rem /MAP so a crash can be resolved to a function: gdb reports the faulting address, and
+rem this file turns it into a name (the image is relocated, so subtract the module handle
+rem the trace logs as `hInst=`).  Without it a fault is just a number.
 link /nologo /SUBSYSTEM:WINDOWS /OUT:"%ROOT%\build\groove_rebuild.exe" ^
+     /MAP:"%ROOT%\build\groove_rebuild.map" ^
      "exe_obj\*.obj" %SYSLIBS_EXE% > "_exe_link.log" 2>&1
 rem Not fatal: the exe is documented as one library-set short (14 runtime entry points),
 rem and the DLL above - the tested artifact - is already built.  Warn and carry on.
