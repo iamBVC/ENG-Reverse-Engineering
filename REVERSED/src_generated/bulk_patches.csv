@@ -440,3 +440,79 @@ sub_40E080,  param_1[1] = 0;,"  param_1[1] = 0;
 sub_4116D0,  piVar1 = local_20 + 1;,"  /* probe: the insert path - local_20 is the node it is about to link */
   fprintf(stderr, ""[insert] local_20=%p piVar3=%p head=%p sent=%p | "", (void *)local_20, (void *)piVar3, (void *)DAT_00583410, (void *)&DAT_00583410[1]); fflush(stderr);
   piVar1 = local_20 + 1;"
+sub_405960,  char *pcVar8;,"  char *pcVar8;
+  HKEY keys[2];
+  keys[0] = param_1;"
+sub_405960,(&param_1)[uVar3],keys[uVar3]
+sub_405960,(PHKEY)(&param_1 + uVar4),&keys[uVar4]
+sub_405960,        sub_562717();,"        sub_562717(Buffer,""[08x%x]"",(unsigned int)param_1);"
+sub_40F4F0,= DAT_00583410;,= (*(int **)DAT_00583410);
+sub_40F4F0,if (DAT_00583410 !=,if ((*(int **)DAT_00583410) !=
+sub_40F4F0,return DAT_00583410 !=,return (*(int **)DAT_00583410) !=
+sub_40FD00,= DAT_00583410;,= (*(int **)DAT_00583410);
+sub_40FD00,if (DAT_00583410 !=,if ((*(int **)DAT_00583410) !=
+sub_40FD00,"(void *)DAT_00583410,","(void *)(*(int **)DAT_00583410),"
+sub_40FFD0,= DAT_00583410;,= (*(int **)DAT_00583410);
+sub_4116D0,"(void *)DAT_00583410,","(void *)(*(int **)DAT_00583410),"
+sub_417750,= DAT_00583410;,= (*(int **)DAT_00583410);
+sub_41DC40,&LAB_0041dda0,&sub_41DDA0
+sub_40F4F0,"DirectDrawEnumerateA(&LAB_004116b0,0)","groove_DirectDrawEnumerateA(sub_4116B0,0)"
+sub_40F4F0,"DirectDrawEnumerateExA(sub_4116D0,0,7)","groove_DirectDrawEnumerateExA(sub_4116D0,0,7)"
+sub_4116D0,sub_4116D0(undefined4,__stdcall sub_4116D0(undefined4
+sub_410550,DirectDrawCreate(,groove_DirectDrawCreate(
+sub_4116D0,DirectDrawCreate(,groove_DirectDrawCreate(
+sub_4116B0,BOOL sub_4116B0(,BOOL __stdcall sub_4116B0(
+sub_41DDA0,LRESULT sub_41DDA0(,LRESULT __stdcall sub_41DDA0(
+sub_4116D0,(**(code **)*local_1c),(**(groove_com3 **)*local_1c)
+sub_4116D0,(**(code **)(*local_2c + 0x2c)),(**(groove_com3 **)(*local_2c + 0x2c))
+sub_4116D0,(**(code **)(*local_28 + 0xc)),(**(groove_com3 **)(*local_28 + 0xc))
+sub_411D60,sub_411D60(int,__stdcall sub_411D60(int
+sub_4116D0,sub_413A60(&LAB_00413480),"sub_413A60((undefined4 *)(local_20 + 7),sub_413480)"
+sub_4116D0,(**(code **)(*local_1c + 8)),(**(groove_com1 **)(*local_1c + 8))
+sub_4116D0,(**(code **)(*local_2c + 8)),(**(groove_com1 **)(*local_2c + 8))
+sub_4116D0,(**(code **)(*local_28 + 8)),(**(groove_com1 **)(*local_28 + 8))
+sub_411D60,"sub_413260(param_3,param_1)","sub_413260((undefined4 *)param_4,param_3,(undefined4 *)param_1)"
+sub_411D60,(**(code **)(*(int *)param_6[1] + 0x28)),(**(groove_com4 **)(*(int *)param_6[1] + 0x28))
+sub_411D60,&LAB_00412640,sub_412640
+sub_411D60,(**(code **)(*(int *)*puVar8 + 0x20)),(**(groove_com5 **)(*(int *)*puVar8 + 0x20))
+sub_411D60,sub_413A60(&LAB_004136a0),"sub_413A60((undefined4 *)(local_24 + 0xb),sub_4136A0)"
+sub_411D60,sub_413A60(&LAB_00413790),"sub_413A60((undefined4 *)(piVar9 + 0xc),sub_413790)"
+sub_411D60,sub_413390();,sub_413390(piVar9);
+sub_412320,sub_412320(void,__stdcall sub_412320(void
+sub_412320,"sub_413700(local_138,iVar2)","sub_413700((undefined4 *)param_1,local_138,(undefined4 *)iVar2)"
+sub_412640,int sub_412640(,int __stdcall sub_412640(
+sub_411D60,"  cVar4 = sub_412A10(local_24 + 4,iVar5);","  cVar4 = sub_412A10(local_24 + 4,iVar5);
+  fprintf(stderr, ""[d3d] %s caps=%u flags=%08x device=%08x render=%08x z=%04x raster=%08x\n"", (char *)local_24[2], (unsigned char)cVar4, *(unsigned int *)(iVar5+4), *(unsigned int *)(iVar5+8), *(unsigned int *)(iVar5+0xf4), *(unsigned short *)(iVar5+0xf8), *(unsigned int *)(iVar5+0x68)); fflush(stderr);"
+sub_40E6F0,DirectInputCreateA(,groove_DirectInputCreateA(
+sub_40E630,    piVar1 = DAT_00582260;,    piVar1 = (DAT_00582260[0]);
+sub_40E690,  piVar1 = DAT_00582260;,  piVar1 = (DAT_00582260[0]);
+sub_40E6F0,  for (piVar2 = DAT_00582260; (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {,  for (piVar2 = (DAT_00582260[0]); (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {
+sub_40E6F0,"    for (iVar3 = 0; piVar2 = DAT_00582260, iVar3 != 0; iVar3 = iVar3 + -1) {","    for (iVar3 = 0; piVar2 = (DAT_00582260[0]), iVar3 != 0; iVar3 = iVar3 + -1) {"
+sub_40E9A0,"  if ((iVar3 != 0) || (piVar4 = DAT_00582260, DAT_00582260 == (int *)&DAT_00582264)) {","  if ((iVar3 != 0) || (piVar4 = (DAT_00582260[0]), (DAT_00582260[0]) == (int *)&DAT_00582260[1])) {"
+sub_40F060,  piVar2 = DAT_00582260;,  piVar2 = (DAT_00582260[0]);
+sub_40F170,    piVar2 = DAT_00582260;,    piVar2 = (DAT_00582260[0]);
+sub_40F3B0,  piVar1 = DAT_00582260;,  piVar1 = (DAT_00582260[0]);
+sub_418C10,  iVar1 = DAT_00582260;,  iVar1 = (DAT_00582260[0]);
+sub_418C10,  if (*(int *)(DAT_00582260 + 0x70) != 0) {,  if (*(int *)((DAT_00582260[0]) + 0x70) != 0) {
+sub_418C10,"    sub_40E610(*(undefined4 *)(*(int *)(DAT_00582260 + 0x70) + 0x1c),&DAT_00583a70);","    sub_40E610(*(undefined4 *)(*(int *)((DAT_00582260[0]) + 0x70) + 0x1c),&DAT_00583a70);"
+sub_4191C0,  bVar4 = *(int *)(DAT_00582260 + 0x70) != 0;,  bVar4 = *(int *)((DAT_00582260[0]) + 0x70) != 0;
+sub_419810,      for (piVar2 = DAT_00582260; (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {,      for (piVar2 = (DAT_00582260[0]); (*piVar2 != 0 || (piVar2[1] == 0)); piVar2 = (int *)*piVar2) {
+sub_419A60,  piVar1 = DAT_00582260;,  piVar1 = (DAT_00582260[0]);
+sub_419BD0,        piVar3 = DAT_00582260;,        piVar3 = (DAT_00582260[0]);
+sub_419E00,    piVar4 = DAT_00582260;,    piVar4 = (DAT_00582260[0]);
+sub_4256C0,  if ((param_1 != 0) || (DAT_00582260 == &DAT_00582264)) {,  if ((param_1 != 0) || ((DAT_00582260[0]) == &DAT_00582260[1])) {
+sub_4116D0,"  int *local_2c;
+  int *local_28;
+  undefined4 *local_24;
+  int *local_20;",  groove_ddraw_enum_context enum_context;
+sub_411D60,"  undefined4 *local_2c;
+  int local_28;
+  int *local_24;",  groove_d3d_enum_context enum_context;
+sub_412320,"sub_413570(local_138,*(undefined4 *)(iVar2 + 0x54),piVar6[2] + 0x38)","sub_413570((undefined4 *)param_1,local_138,*(undefined4 *)(iVar2 + 0x54),(undefined4 *)(piVar6[2] + 0x38))"
+sub_4116D0,local_2c,enum_context.draw
+sub_4116D0,local_28,enum_context.d3d
+sub_4116D0,local_24,enum_context.caps
+sub_4116D0,local_20,enum_context.record
+sub_411D60,local_2c,enum_context.parent
+sub_411D60,local_28,enum_context.caps
+sub_411D60,local_24,enum_context.record

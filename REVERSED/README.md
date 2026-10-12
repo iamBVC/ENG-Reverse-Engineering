@@ -56,6 +56,87 @@ functions.
 
 ## Current status
 
+### Continuation checkpoint (2026-10-12)
+
+**Later checkpoint:** the bulk now includes **1,130 functions**, all compiling
+with zero errors. Six assembly-recovered callbacks/comparators live in
+`src_recovered/`; `make_bulk.py` prefers those files over same-named Ghidra exports
+so another export cannot erase them. The window procedure at 0x41DDA0 is now real
+code, and Windows/DirectDraw/Direct3D callbacks keep their verified stdcall
+signatures. The relevant COM methods use fixed argument counts and stdcall.
+
+The DirectDraw list loads its stored head pointer, rather than treating the
+three-dword storage array as a node. The surface list has the corresponding fix,
+including byte-address arithmetic and the sentinel in the second dword. The
+module-path buffers passed to `GetModuleFileNameA(..., 260)` now have 260 bytes:
+a hardware watchpoint showed the old one-byte buffer corrupting the DirectDraw
+diagnostic stream. The DirectDraw4/Direct3D3 IIDs and the CoCreateInstance GUIDs
+also retain their full 16 bytes.
+
+DirectDraw creation/enumeration, DirectInput creation, and COM imports now call
+the real APIs instead of zero-returning stubs. The generated build script fails
+on an unsuccessful exe link, and the compile checker fails on compiler errors
+including shared-header errors.
+
+Validation commands (run after generation):
+
+```bat
+python tools\test_recovered_callbacks.py
+python tools\test_legacy_imports.py
+python tools\test_registry_handles.py
+```
+
+The recovered callback tests pass dispatch, capture naming, comparator ordering,
+and 20,000 calls through stdcall callback pointers. The real API smoke test
+creates/releases DirectDraw and DirectInput interfaces and invokes both forms
+of enumeration callbacks. The registry and existing MAP/TRAK tests also pass.
+
+**Runtime limit:** the rebuilt image creates its window and reaches device
+enumeration without the earlier crashes, but returns `ddraw=0`. In this execution
+session the callbacks expose RGB Emulation with an empty HAL descriptor. Running
+the original under gdb also supplies an empty HAL descriptor to `sub_412A10`.
+This does not establish equivalence of the full enumeration path or explain why
+the user's ordinary desktop run works; graphics checks have not been bypassed.
+The next runtime evidence needed is `build/run/groove_trace.log` from launching
+the rebuilt copy in the user's normal desktop session. Rendering, menus, audio,
+and gameplay remain unverified, and 48 artifact bodies plus further referenced
+stubs (including Miles audio and legacy exception handling) remain unresolved.
+
+The following paragraphs document the earlier checkpoint.
+
+The current generated output includes **1,124 functions**, all compile-checked
+successfully with x86 MSVC, and **48 excluded bodies**. The older counts below
+describe earlier snapshots. `harness\build_dlls.bat bulk` successfully links the
+rebuild executable and both verification DLLs. This remains a partial rebuild:
+linking with missing-function stubs does not establish gameplay equivalence.
+
+The registry helper `sub_405960` now uses two local `HKEY` slots, matching the
+assembly's local `hKey` array, rather than indexing beyond its `param_1` argument.
+The root argument stays intact while the slots alternate. Its dropped `_sprintf`
+call now receives the buffer, original `"[08x%x]"` format, and root value. These
+corrections are recorded in `src_generated/bulk_patches.csv`; the Ghidra export
+remains unchanged. `python tools\test_registry_handles.py` compiles the generated
+body against mocked registry calls and passes six cases: opening existing keys,
+creating keys for HKCU/HKLM/another root, creation failure, and an empty path.
+The test checks intermediate handle closure without modifying the registry.
+
+The build script's library assignments now occupy single lines: quoted caret
+continuations previously tried to execute `WinMM.lib` as a command. A fresh bulk
+build completes without those command errors. MAP and TRAK verification on
+`t1l1m001.wad` passes against the Python models (including MAP value hashes and
+all 127 TRAK records / 9,369 material indices).
+
+A debugger run of the rebuilt executable now passes the registry failure and
+reaches `[main] E`. It then attempts to free a static address during
+`sub_40FD00 -> sub_413170 -> sub_5628BC`. The trace shows the supposed node is
+the address of `DAT_00583410` itself. The next concrete repair is to reconcile
+that datum's array override with its pointer-valued uses: generated expressions
+such as `piVar1 = DAT_00583410` now decay to the array's address instead of loading
+the first stored pointer. Keep sentinel addresses (`&DAT_00583410[1]`) distinct
+from head-pointer loads, and verify the initializer and list insertion together.
+The window procedure at `LAB_0041dda0` also remains a stub. No successful menu,
+rendering, or gameplay run has been established by this checkpoint.
+
 ```
 functions in the listing : 1,214
   real game functions    : 1,153      <- the actual work surface

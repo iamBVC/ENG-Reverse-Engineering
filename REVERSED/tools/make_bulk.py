@@ -219,7 +219,10 @@ def addr_of(name: str) -> int | None:
 
 def main() -> int:
     OUT.mkdir(exist_ok=True)
-    files = sorted(p for p in DEC.glob("*.c"))   # note: real functions named _fread etc. exist
+    # Hand reconstructions override exports by name and survive a Ghidra re-export.
+    source_files = {p.name: p for p in DEC.glob("*.c")}
+    source_files.update({p.name: p for p in (ROOT / "src_recovered").glob("*.c")})
+    files = [source_files[name] for name in sorted(source_files)]
     if not files:
         print(f"no decompiled sources in {DEC}; run tools/ghidra_decompile.bat first")
         return 1
@@ -761,6 +764,11 @@ def main() -> int:
     loose: dict[str, str] = {}
     for n, sig in protos.items():
         s = sig.strip()
+        # These entries are invoked by Windows/DirectDraw, not by loose
+        # decompiler calls. Their x86 callee cleanup and parameter count are ABI.
+        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640"}:
+            loose[n] = s
+            continue
         if "::" in s or "@" in s:
             continue                       # not expressible in C
         m = re.match(r"^(.*?)\b" + re.escape(n) + r"\s*\(", s)

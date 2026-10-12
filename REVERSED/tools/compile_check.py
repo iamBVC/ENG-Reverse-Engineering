@@ -122,7 +122,10 @@ def main() -> int:
     print()
     print(f"functions compiled        : {len(names)}")
     print(f"  with a reported error   : {len(bad)}")
-    print(f"  compiling cleanly       : {len(names) - len(bad)}")
+    if proc.returncode == 0 and not errors:
+        print(f"  compiling cleanly       : {len(names)}")
+    else:
+        print("  compilation incomplete  : failed chunks or shared-header errors; see log")
     print("worst offenders:")
     for name, n in bad.most_common(10):
         print(f"   {name:<18} {n} error(s)")
@@ -143,7 +146,7 @@ def main() -> int:
     allbad = previously | set(bad)
     failed.write_text("\n".join(sorted(allbad)) + ("\n" if allbad else ""), encoding="utf-8")
     print(f"failures written to {failed}: {len(bad)} new, {len(allbad)} total excluded")
-    return 0
+    return 0 if proc.returncode == 0 and not errors else 1
 
 
 if __name__ == "__main__":

@@ -35,6 +35,11 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <objbase.h>
+HRESULT groove_DirectDrawCreate(GUID *guid, void **object, void *outer);
+HRESULT groove_DirectInputCreateA(HINSTANCE instance, DWORD version, void **object, void *outer);
+HRESULT groove_DirectDrawEnumerateA(BOOL (WINAPI *callback)(GUID *, LPSTR, LPSTR, LPVOID), void *context);
+HRESULT groove_DirectDrawEnumerateExA(BOOL (WINAPI *callback)(GUID *, LPSTR, LPSTR, LPVOID, HMONITOR), void *context, DWORD flags);
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
@@ -87,7 +92,6 @@ typedef HINSTANCE           HINSTANCE__;
 typedef struct tagMSG       tagMSG;
 typedef struct tagPOINT     tagPOINT;
 typedef struct tagRECT      tagRECT;
-typedef void                *LPUNKNOWN;
 
 /* Ghidra's packed-integer pseudo-types beyond the common ones. */
 typedef unsigned int        unkuint10;
@@ -136,6 +140,31 @@ typedef long long          longlong;
  * type returns void.  The value is discarded where the callee really returns
  * void, so the looser type is harmless. */
 typedef int                code();
+/* Fixed argument counts retain stdcall cleanup for the recovered COM sites. */
+typedef int __stdcall groove_com1(UINT_PTR);
+typedef int __stdcall groove_com3(UINT_PTR, UINT_PTR, UINT_PTR);
+typedef int __stdcall groove_com4(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
+typedef int __stdcall groove_com5(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
+
+/* The original passes addresses of adjacent stack slots as callback contexts.
+ * Separate C locals have no guaranteed adjacency, so keep those slots together.
+ */
+typedef struct groove_ddraw_enum_context {
+    int *draw;
+    int *d3d;
+    unsigned int *caps;
+    int *record;
+} groove_ddraw_enum_context;
+typedef struct groove_d3d_enum_context {
+    groove_ddraw_enum_context *parent;
+    int caps;
+    int *record;
+} groove_d3d_enum_context;
+typedef char groove_enum_context_layout[
+    (sizeof(void *) == 4 && sizeof(groove_ddraw_enum_context) == 16 &&
+     offsetof(groove_ddraw_enum_context, record) == 12 &&
+     sizeof(groove_d3d_enum_context) == 12 &&
+     offsetof(groove_d3d_enum_context, record) == 8) ? 1 : -1];
 
 /* ---- the CRT names the decompiled code uses ----------------------------
  * Ghidra spells the runtime's own functions the MSVC 6 way (`_malloc`, `_strlen`,
