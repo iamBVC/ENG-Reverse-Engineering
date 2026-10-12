@@ -355,3 +355,5 @@ sub_415690,"pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0);","pcVar2 = (char *
 sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
 sub_41C0E0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
 sub_41CBE0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
+sub_41D350,"fprintf(stderr, ""[main] A\n""); fflush(stderr);","fprintf(stderr, ""[main] A\n""); fflush(stderr);
+    fprintf(stderr, ""[main] cVar3=%d\n"", (int)cVar3); fflush(stderr);"

@@ -13,6 +13,7 @@ sub_562AEE       # _fopen   -> fopen
 sub_562B75       # _fwrite  -> fwrite
 sub_5628EB       # _fclose  -> fclose
 sub_562717       # _sprintf -> vsprintf (via a variadic wrapper)
+sub_56279D       # _strtok  -> strtok
 
 # Found the same way (IDA names the call site, the body is the 2001 CRT's):
 #   sub_562840  __alloca_probe - already a documented no-op in crt_aliases.c

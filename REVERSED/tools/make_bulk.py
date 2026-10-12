@@ -452,8 +452,27 @@ def main() -> int:
         canonical, size, _dt = data.get(a, (f"DAT_{a:08X}", 4, "undefined"))
         if canonical.startswith(("flt_", "dbl_")):
             continue                                   # emitted as constants below
+        # A `string:<hex>` override says "this datum is a NUL-terminated string of at most
+        # that many bytes": Ghidra's symbol table records the one-byte access it saw, so
+        # the mode string at 0x570350 is declared `'r'` while the file holds "rb" - passed
+        # to fopen, a one-byte mode is a truncation.  This is a *recorded* decision per
+        # symbol because a broad "looks printable" rule turned scalars into strings and cost
+        # 931 compile errors (measured); the bytes are the evidence, the override is the fix.
+        ov = type_overrides.get(canonical)
+        if ov is not None and ov.startswith("string:"):
+            try:
+                size = int(ov.split(":", 1)[1], 16)
+            except ValueError:
+                pass
+            _dt = "string"
+
         if _dt == "string":
-            # the real bytes are in the executable, so emit the actual literal
+            # The real bytes are in the executable, so emit the actual literal.  The second
+            # condition catches the strings Ghidra typed as one byte because it only saw a
+            # single-byte access: `DAT_00570350` is `'r'` while the file holds "rb" (passed
+            # to fopen as the mode), `DAT_00570300` is `'%'` while the file holds "%d".
+            # Reading the bytes *is* the evidence, and a truncated mode is a silent
+            # misbehaviour - in the save path it is what stops the run.
             try:
                 raw = exe.read(a, size)
             except ValueError:
@@ -466,6 +485,8 @@ def main() -> int:
                     decls.append(f"#define {other} {canonical}")
             continue
         override = type_overrides.get(canonical)
+        if override is not None and override.startswith("string:"):
+            override = None          # handled at the top of the iteration
         if override is not None and override.startswith("array:"):
             # `array:0x800` - "this datum is a buffer of that many bytes".  Ghidra's symbol
             # table records only the access it saw, so a 2 KB scratch buffer the code fills

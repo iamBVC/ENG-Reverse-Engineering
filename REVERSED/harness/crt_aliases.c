@@ -32,7 +32,9 @@
  * either).  A static recompilation should not need an installer at all, so the path-shaped
  * reads default to "." - the process working directory, which exe_main.c sets to the
  * executable's own folder.  Nothing machine-specific is required to run it. */
-char groove_default_path[] = ".";
+/* with the separator: the game builds paths as base + "\\king%d.ksv", so a bare "."
+ * produced ".king0.ksv" - a different file, which is why the save read returned NULL. */
+char groove_default_path[] = ".\\";
 
 /* ---- allocation ------------------------------------------------------- */
 void *_malloc(size_t n) { return malloc(n); }
@@ -92,6 +94,13 @@ int    sub_5628EB(void *stream) { return fclose((FILE *)stream); }
 /* The reversed `sprintf` body (IDA names the call `_sprintf`).  Same argument as above, and
  * the same fix - and it matters here because the format is "\\sking%d.ksv" with a string
  * straight out of the registry: the 2001 body walks that value itself. */
+/* The reversed `strtok` body.  IDA's callee list for the registry path (`sub_405960`, the
+ * key opener) is `__alloca_probe, _strtok, ds, _sprintf`, so this is the `_strtok` in
+ * question.  It walks the 2001 CRT's own tables (the ctype/locale pointers in its data),
+ * which in a rebuild are data slots holding the *original's* addresses - a stale pointer
+ * dereference.  Mapping it onto the modern CRT is the same fix as the FILE functions. */
+char  *sub_56279D(char *s, const char *delim) { return strtok(s, delim); }
+
 int    sub_562717(char *buf, const char *fmt, ...)
 {
     va_list ap;
