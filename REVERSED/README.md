@@ -158,7 +158,10 @@ gets a verdict; that is where the honest 901 comes from.
 
 Two caveats on those numbers.  The two decompiler *failures* are enormous
 function-shaped regions (150,625 bytes, with a 42 KB `alloca` in the prologue) -
-generated code that needs a different approach.  And IDA and Ghidra disagree about
+generated code that needs a different approach - REA's provider did produce bodies
+for both, see
+[the provider cross-check](#provider-cross-check-rea-over-the-same-ghidra-database).
+And IDA and Ghidra disagree about
 function boundaries: only 777 entry points line up, so the other 376 IDA
 functions are either inside a Ghidra function's body (Ghidra did not split where
 IDA did) or absent.  The code is decompiled either way; the *naming and
@@ -195,6 +198,70 @@ behavioural oracle for the loaders (feed it the shipped WADs and diff the output
    The 34 functions that install/restore exception frames (and the `Catch@...`
    handlers) therefore need a real `FS:[0]` accessor before their exception paths
    behave correctly.
+
+### Provider cross-check: REA over the same Ghidra database
+
+[REA](https://github.com/morluto/rea) 6.4.0 (MCP server + CLI) is set up against
+the local Ghidra 12.1.4.  Its Ghidra provider is the *same engine*
+`tools/ghidra_decompile.bat` already uses, so **the pseudocode is not new** -
+`decompiled/sub_404DB0.c` and REA's `FUN_00404db0` are identical character for
+character.  What is new is the analysis database's own symbol knowledge and a
+per-function call graph:
+
+* library identities Ghidra's function-ID resolved but the bulk export never
+  carried (`exception::~exception`, `operator_new`, `__ftol`,
+  `__abnormal_termination`, the STL `string too long` / `invalid string position`
+  throw sites);
+* callers, callees, incoming/outgoing references and referenced strings in one
+  call per function;
+* bodies for the three functions the bulk export produced no file for.
+
+**One session, many calls.**  An MCP session imports and analyses `groove.exe`
+once (~3 min) and then answers per-function calls in milliseconds.  The CLI
+starts a fresh session per invocation and re-analyses every time (~13 min,
+measured), so drive the MCP server, not `rea <command>`, for anything iterative:
+
+```bat
+node tools/rea_make_spec.mjs dossier > spec.json
+node tools/rea_mcp_call.mjs spec.json dossier_out.json
+```
+
+Ghidra needs `GHIDRA_INSTALL_DIR`, and `JAVA_HOME` must point at a 21+ JDK - the
+JDK first on this machine's `PATH` is 8, which Ghidra rejects.
+
+The first run covered the 36 game-function entries of
+[`src_generated/link_stubs.csv`](src_generated/link_stubs.csv); the per-symbol
+result is
+[`src_generated/rea_stub_evidence.csv`](src_generated/rea_stub_evidence.csv).  It
+corrects three of those entries:
+
+| Symbols | Was | Evidence | Is |
+|---|---|---|---|
+| `sub_563360`, `sub_567B34`, `sub_56C2B0`, `sub_56C543`, `sub_56CF8A`, `sub_56CF98`, `sub_56CFA7`, `sub_56D188` | 8 x "game function (body still excluded)" | none of the eight is a function in IDA's listing: each is an interior address of `sub_5625F0`, `sub_56394C`, `sub_569961`, `sub_56CF87`, `sub_56D16B` | a Ghidra/IDA **partition** difference, not eight missing bodies |
+| `sub_56D64F` | `kind=game`, 0 bytes | Ghidra function-ID: "Library Function - Single Match", symbol `exception::~exception` | library (C++ EH runtime) |
+| `sub_56D0A0`, `sub_56D2CC`, `sub_56C2B0` | game | `__CxxThrowException` around `std::string` throw texts; the `1#QNAN`/`1#INF` float-print family | library (STL / CRT) |
+
+`decompiled/rea/sub_447770.c` and `decompiled/rea/sub_4CB870.c` (~600 KB of
+pseudocode each) are the two bodies the bulk run never produced, and
+`decompiled/rea/sub_56D64F.c` is the third; all three carry a provenance header
+naming REA as the producer.  They sit in a subdirectory deliberately:
+`tools/make_bulk.py` globs `decompiled/*.c`, so the bulk pipeline's input stays
+exactly what `tools/ghidra_decompile.bat` wrote.  The giants are *not* compilable
+as they stand - the 42 KB `alloca` prologue and hundreds of "unreachable block"
+warnings are why they failed before - but the bodies now exist to work from.
+
+One measured limit: on those two giants the full `analyze_function` dossier
+exceeds REA's 10 MiB MCP stdio response budget, so only `batch_decompile`
+(pseudocode) covers them over MCP; the CLI's complete JSON output is the other
+way out.  Separately, `sub_41F0C0` turns out to be the DirectShow/DirectDraw
+stream setup - its referenced strings are the `pMMStream->SetState(...) failed
+with HRESULT` family - which is the path that cannot initialise on a machine with
+no real display.
+
+An IDA provider is also possible (REA adapts
+[mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp)), but what is
+installed here is IDA Free 8.2 and REA's adapter is verified against IDA 9.3, so
+the Ghidra provider is the one wired up.
 
 ## Verification layer (does it do the same thing?)
 
@@ -961,3 +1028,11 @@ plausible port and a correct one.
 * For Track A, install Visual C++ 6.0 in a VM, point `build.bat` at its
   `vcvars32.bat`, and add a source-permuter step (randomly permute the C until the
   bytes fall into place) to chase the last few bytes of the remaining `DIFF`s.
+* The REA bridge needs two env vars before any provider starts:
+  `GHIDRA_INSTALL_DIR` (here `D:\Programmi\Ghidra\ghidra_12.1.4_PUBLIC`) and
+  `JAVA_HOME` pointed at a 21+ JDK.  The `java`/`javac` first on `PATH` are JDK 8,
+  and REA correctly refuses that pair - a stale `JAVA_HOME` looks like a broken
+  Ghidra install.
+* REA is registered with the app in `~/.lmstudio/mcp.json`; on Windows it must be
+  launched through `cmd.exe /d /c npx -y rea-agents@<version> mcp`, because
+  `npx` is a `.cmd` shim that a shell-less stdio spawn cannot execute.

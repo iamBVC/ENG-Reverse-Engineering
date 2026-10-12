@@ -7,5 +7,8 @@ src_generated/*
 !src_generated/bulk_patches.csv
 !src_generated/type_overrides.csv
 !src_generated/auto_decls.csv
+# ...and the REA/Ghidra cross-check evidence is a record too: the library identities
+# and the IDA/Ghidra partition findings it holds exist nowhere else in the tree.
+!src_generated/rea_stub_evidence.csv
 __pycache__/
 *.pyc

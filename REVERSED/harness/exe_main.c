@@ -42,10 +42,18 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 {
     (void)nCmdShow;
     set_working_directory();
+    /* Keep the startup trace even when the exe is double-clicked: a GUI-subsystem image
+       launched that way has no console, so stderr writes would go nowhere.  The log lands
+       next to the executable (the working directory was set above), and it is the first
+       thing to look at if the game does not start. */
+    if (freopen("groove_trace.log", "w", stderr) == NULL) {
+        /* no log available - carry on, the trace is a diagnostic, not a requirement */
+    }
     /* Two lines of instrumentation, because "it crashes" is not a diagnosis: with them a
        run says whether the fault is inside the game's main or outside it. */
     fprintf(stderr, "[winmain] calling sub_41D350(hInst=%p, cmd=%.20s)\n",
             (void *)hInstance, lpCmdLine ? lpCmdLine : "(null)");
+    fprintf(stderr, "[winmain] working directory = the executable's own folder\n");
     fflush(stderr);
     int rc = sub_41D350((int)hInstance, (int)hPrevInstance, lpCmdLine);
     fprintf(stderr, "[winmain] sub_41D350 returned %d\n", rc);
