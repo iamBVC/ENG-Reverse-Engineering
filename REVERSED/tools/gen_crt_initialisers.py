@@ -39,6 +39,7 @@ Writes
 """
 from __future__ import annotations
 
+import re
 import struct
 import sys
 from pathlib import Path
@@ -91,8 +92,22 @@ def main() -> int:
     (ROOT / "src_generated" / "crt_initialisers.txt").write_text(
         "\n".join("0x%06X" % a for a in wanted) + "\n", encoding="utf-8")
 
+    # harness/crt_bodies.txt lists the reversed CRT bodies a rebuild must not run (its own
+    # comment explains why).  Some sit in the same `.CRT$XI*` range as the game's
+    # initialisers, so that list is filtered out here too: the table should name only what
+    # this build actually compiles.
+    dropped = set()
+    body_lines = (ROOT / "harness" / "crt_bodies.txt").read_text(encoding="utf-8").splitlines()
+    for line in body_lines:
+        # only the entries, never the prose: the file's comments name other addresses
+        # (that is how the entry above was found), and reading those as entries once
+        # removed the game's *first* initialiser from the table.
+        entry = line.split("#", 1)[0]
+        for token in re.findall("[Ss][Uu][Bb]_([0-9A-Fa-f]{6})", entry):
+            dropped.add(int(token, 16))
     calls = [resolve(pe, a) for _, a in entries]
-    have = [a for a in calls if (ROOT / "decompiled" / ("sub_%06X.c" % a)).exists()]
+    have = [a for a in calls
+            if a not in dropped and (ROOT / "decompiled" / ("sub_%06X.c" % a)).exists()]
     missing = [a for a in calls if a not in have]
 
     lines = [

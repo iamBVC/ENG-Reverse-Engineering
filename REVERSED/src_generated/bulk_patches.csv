@@ -221,14 +221,12 @@ sub_414390,sub_413BF0(0);,"sub_413BF0(param_1,0);"
 sub_414460,sub_413BF0(0);,"sub_413BF0(local_3c,0);"
 sub_414460,"cVar1 = sub_413F10(uVar4,1);","cVar1 = sub_413F10(local_3c,uVar4,1);"
 sub_41BCB0,void sub_41BCB0(int param_1),unsigned int * sub_41BCB0(int param_1)
-sub_40F4C0,sub_40E080();,sub_40E080((undefined4 *)0x583410);
 sub_436550,void sub_436550(,int sub_436550(
 sub_41E790,void __thiscall,void * __thiscall
 sub_42AC50,switch(local_c) {,switch((unsigned int)local_c) {
 sub_42AC50,case (uint *)0x,case 0x
 sub_42AC50,iVar9 = __ftol();,iVar9 = (int)(*(float *)&local_18 + 0.5f);
 sub_42AC50,iVar10 = __ftol();,iVar10 = (int)(*(float *)&local_1c - 0.5f);
-sub_5632EA,*param_1 = &type_info::vftable;,*param_1 = (undefined4 *)0x56E760;
 sub_5632FF,sub_5632EA();,sub_5632EA(param_1);
 sub_56D5AC,exception::~exception(param_1);,sub_56D64F(param_1);
 sub_56D5AC,"exception * __thiscall sub_56D5AC(exception *param_1,byte param_2)","undefined4 * __thiscall sub_56D5AC(undefined4 *param_1,byte param_2)"
@@ -406,3 +404,10 @@ sub_40E050,  sub_40E080();,"  /* PATCH: the original is a thiscall thunk - `mov 
      original's layout, where the rebuild has nothing mapped (measured: the
      constructor faulted writing [this+8]). */
   sub_40E080((undefined4 *)&DAT_00582260);"
+sub_40F4C0,sub_40E080(),sub_40E080((undefined4 *)&DAT_00583410)
+sub_5632EA,*param_1 = &type_info::vftable;,*param_1 = (undefined4 *)0x56E760;
+sub_40FD00,        sub_413170();,"        /* PATCH: the original sets the object in ECX before the call -
+           `mov ecx, esi; call sub_413170`, with esi the node being freed on the next
+           line - and Ghidra's call dropped it (the callee is typed `__fastcall`).
+           Measured: the DirectDraw object-list teardown faulted inside it. */
+        sub_413170(piVar1);"

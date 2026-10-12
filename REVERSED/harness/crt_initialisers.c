@@ -8,7 +8,7 @@
  * Each entry is resolved through its `jmp` stub, so what is called is the real body.
  * Only entries with a decompiled body are listed; an undefined reference would just
  * fail the link.  Counts:
- *   155 entries in the tables, 155 resolved, 71 with a body, 84 without.
+ *   155 entries in the tables, 155 resolved, 67 with a body, 88 without.
  */
 #include "ghidra_prototypes.h"
 
@@ -80,9 +80,5 @@ void (*const groove_crt_initialisers[])(void) = {
     (void (*)(void))sub_5587C0,
     (void (*)(void))sub_558F90,
     (void (*)(void))sub_56D3E9,
-    (void (*)(void))sub_5626BF,
-    (void (*)(void))sub_56753F,
-    (void (*)(void))sub_56C06A,
-    (void (*)(void))sub_567FCA,
 };
-const unsigned int groove_crt_initialiser_count = 71;
+const unsigned int groove_crt_initialiser_count = 67;

@@ -27,6 +27,16 @@ sub_5626AD       # _onexit  -> the modern CRT registers its own; the 2001 table 
 sub_562640       # the __onexit table growth behind it
 sub_5645F3       # that growth's remaining-capacity helper
 
+# ...and the CRT's own *initialisers*, which the initialiser table lists too (they are in
+# the same `.CRT$XI*` range as the game's).  Measured: initialisers 1-68 ran and then 69
+# faulted inside `_ioinit` (`sub_56753F`), building the 2001 stdio table with hard-coded
+# original addresses as its loop bounds (0x57CCB0, 0x57CAA0).  The modern CRT does all four
+# of these itself:
+sub_5626BF       # allocates the 2001 __onexit table (DAT_006db930 = _malloc(0x80))
+sub_56753F       # _ioinit - the 2001 stdio/_iob table
+sub_56C06A       # an internal CRT flag initialiser (DAT_006db928)
+sub_567FCA       # installs the game's top-level exception filter; the modern CRT installs its own
+
 # Found the same way (IDA names the call site, the body is the 2001 CRT's):
 #   sub_562840  __alloca_probe - already a documented no-op in crt_aliases.c
 #   sub_5666EC  the inside of fclose (only reached from sub_5628EB, now mapped away)
