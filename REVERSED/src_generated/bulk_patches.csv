@@ -389,3 +389,20 @@ sub_568953,"    if (param_1 == *puVar1) {
     puVar1 = puVar1 + 2;
     iVar2 = iVar2 + 1;
   } while ((int)puVar1 < (int)&DAT_0057cee0);"
+sub_567FCA,  DAT_006da430 = SetUnhandledExceptionFilter(sub_567F84);,"  /* PATCH: modern windows.h types the slot and the argument differently from the 2001
+     headers (Ghidra typed the handler `undefined4 (__cdecl *)(int *)`), so the two casts
+     are what makes this compile.  Behaviour is the original's: the CRT initialiser
+     installs its top-level exception filter here. */
+  DAT_006da430 = (code *)SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)sub_567F84);"
+sub_562640,(4 - DAT_006db930),(4 - (int)DAT_006db930)   /* PATCH: DAT_006db930 is a pointer (its usages dereference it */
+sub_562640,((int)DAT_006db92c - DAT_006db930 >> 2),"/* and pass it as one), so Ghidra's original int arithmetic on it needs the cast; before
+     the section-boundary fix the slot carried a bogus initial value and read as an int. */
+     ((int)DAT_006db92c - (int)DAT_006db930 >> 2)"
+sub_40E050,  sub_40E080();,"  /* PATCH: the original is a thiscall thunk - `mov ecx,0x582260; jmp 0x40E080` - so the
+     object is in ECX and Ghidra's call dropped it (the callee is typed `__fastcall`,
+     taking it in ECX).  Without it the constructor runs with a garbage `this`: measured,
+     the run died on `call 0` inside static initialiser 13 (`sub_40E040`).  The
+     object address must be the *symbol*: hard-coding 0x582260 aims at the
+     original's layout, where the rebuild has nothing mapped (measured: the
+     constructor faulted writing [this+8]). */
+  sub_40E080((undefined4 *)&DAT_00582260);"

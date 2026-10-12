@@ -50,6 +50,55 @@ public class ExportDecompiledC extends GhidraScript {
         }
         println("renamed " + renamed + " functions to sub_<addr>");
 
+        // ---- 1b. create the functions only a data table points at ----
+        // An address that is only ever *referenced as a value* is not a function as far
+        // as Ghidra's analysis is concerned, so it has no body to decompile - which is
+        // why `tools/gen_crt_initialisers.py` reads the initialiser tables out of the
+        // executable and this step turns each entry into a real function.  The tables
+        // are `_initterm(0x570000,0x570260)` and `_initterm(0x570264,0x570278)`, called
+        // from `_cinit` at 0x563B87; the same route will take any other list of
+        // "address used as a value but never called directly" (the WndProc at 0x41DDA0
+        // is the next one).
+        File listFile = new File(args.length > 1 ? args[1] : "");
+        int created = 0;
+        if (listFile.exists()) {
+            try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(listFile))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+                    long va = Long.parseLong(line.startsWith("0x") ? line.substring(2) : line, 16);
+                    ghidra.program.model.address.Address a = toAddr(va);
+                    if (getFunctionAt(a) != null) {
+                        continue;
+                    }
+                    try {
+                        Function f = createFunction(a, String.format("sub_%06X", va));
+                        if (f != null) {
+                            // Ghidra auto-names a 5-byte `jmp` a thunk (`thunk_FUN_00402760`),
+                            // which would also change the exported file's name; the rebuild
+                            // keys everything by `sub_<addr>`, so force it.
+                            if (!f.getName().equals(String.format("sub_%06X", va))) {
+                                try {
+                                    f.setName(String.format("sub_%06X", va), SourceType.USER_DEFINED);
+                                }
+                                catch (Exception e) {
+                                    println("could not rename " + f.getName() + ": " + e);
+                                }
+                            }
+                            created++;
+                        }
+                    }
+                    catch (Exception e) {
+                        println("could not create a function at " + line + ": " + e);
+                    }
+                }
+            }
+            println("created " + created + " functions from " + listFile);
+        }
+
         // ---- 2. decompile everything ------------------------------------
         DecompInterface dec = new DecompInterface();
         dec.toggleCCode(true);

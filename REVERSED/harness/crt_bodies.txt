@@ -15,6 +15,18 @@ sub_5628EB       # _fclose  -> fclose
 sub_562717       # _sprintf -> vsprintf (via a variadic wrapper)
 sub_56279D       # _strtok  -> strtok
 
+# Found the same way, reached now that the game's static initialisers run
+# (tools/gen_crt_initialisers.py, called from harness/exe_main.c): every one of the 72
+# initialisers ends in `push <destructor>; call sub_5626AD`, i.e. the 2001 CRT's `_onexit`
+# registration, and that walks the 2001 CRT's own table (`DAT_006db930`/`DAT_006db92c`) -
+# which a rebuild never initialises, because the modern CRT keeps its own.  Measured: the
+# access violation is at `_sub_5645F3+0x38` under `_sub_562640+0x11` under
+# `_sub_5626AD+0xF` under the first initialiser `sub_402710`.  Dropping the three makes the
+# registration a no-op stub; the destructors are a shutdown-only concern.
+sub_5626AD       # _onexit  -> the modern CRT registers its own; the 2001 table is not ours
+sub_562640       # the __onexit table growth behind it
+sub_5645F3       # that growth's remaining-capacity helper
+
 # Found the same way (IDA names the call site, the body is the 2001 CRT's):
 #   sub_562840  __alloca_probe - already a documented no-op in crt_aliases.c
 #   sub_5666EC  the inside of fclose (only reached from sub_5628EB, now mapped away)

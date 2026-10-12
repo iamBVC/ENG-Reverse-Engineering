@@ -47,11 +47,19 @@ echo Executable  : %EXE%
 echo Output      : %OUT%
 echo.
 
+rem  The second script argument is the list of addresses to create functions for
+rem  before decompiling: addresses the program only ever *references as a value* (the
+rem  CRT's initialiser tables today) are not functions as far as analysis is concerned,
+rem  so without this they have no body to export.  Regenerate the list with
+rem  `python tools\gen_crt_initialisers.py`; it is derived from the executable, not
+rem  maintained by hand.
+set "EXTRAS=%ROOT%\src_generated\crt_initialisers.txt"
+
 rem  -analysisTimeoutPerFile guards against a pathological function eating the run
 call "%GHIDRA_HOME%\support\analyzeHeadless.bat" "%PROJ%" GrooveRebuild ^
      -import "%EXE%" ^
      -scriptPath "%ROOT%\tools" ^
-     -postScript ExportDecompiledC.java "%OUT%" ^
+     -postScript ExportDecompiledC.java "%OUT%" "%EXTRAS%" ^
      -analysisTimeoutPerFile 1800 ^
      -deleteProject
 if errorlevel 1 ( echo [!] analysis failed & exit /b 1 )

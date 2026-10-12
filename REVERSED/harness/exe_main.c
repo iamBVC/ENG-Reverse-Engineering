@@ -21,6 +21,17 @@
 
 extern int sub_41D350(int hInstance, int hPrevInstance, char *lpCmdLine);
 
+/* The game's static initialisers, in the order the 2001 CRT ran them (see
+ * tools/gen_crt_initialisers.py and harness/crt_initialisers.c, which is generated).
+ *
+ * This is the one piece of the original startup the modern CRT cannot supply.  The 2001
+ * `entry` calls `_cinit` right before `WinMain`, and `_cinit` runs the compiler's
+ * initialiser tables through `_initterm`; skipping it left every global object at its
+ * load-time value, which for a `dd ?` slot means zero.  `DAT_00583410` - the head of the
+ * DirectDraw object list - is exactly that, and the teardown `sub_40FD00` dereferenced it. */
+extern void (*const groove_crt_initialisers[])(void);
+extern const unsigned int groove_crt_initialiser_count;
+
 /* Run from the executable's own directory, whatever folder it is launched from: the game
  * opens its assets by relative name ("111.cor", "Wads\..."), so this is what makes the
  * rebuild work from anywhere instead of only from the folder it was installed into. */
@@ -49,6 +60,27 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
     if (freopen("groove_trace.log", "w", stderr) == NULL) {
         /* no log available - carry on, the trace is a diagnostic, not a requirement */
     }
+    /* The module handle comes first: tools/crash_report.py needs it to turn a fault
+       address into a function name, and a fault inside the initialisers would otherwise
+       happen before anything logged it. */
+    fprintf(stderr, "[winmain] hInst=%p  running %u static initialiser(s)\n",
+            (void *)hInstance, groove_crt_initialiser_count);
+    fflush(stderr);
+
+    /* Run the game's static initialisers, as the original CRT startup did.  Each one is
+       named as it starts: the last line in the trace is then the initialiser a fault came
+       from, which is otherwise invisible (they all run before anything else does). */
+    {
+        unsigned int i;
+        for (i = 0; i < groove_crt_initialiser_count; ++i) {
+            fprintf(stderr, "[winmain] init %u/%u\n", i + 1, groove_crt_initialiser_count);
+            fflush(stderr);
+            groove_crt_initialisers[i]();
+        }
+        fprintf(stderr, "[winmain] static initialisers done\n");
+        fflush(stderr);
+    }
+
     /* Two lines of instrumentation, because "it crashes" is not a diagnosis: with them a
        run says whether the fault is inside the game's main or outside it. */
     fprintf(stderr, "[winmain] calling sub_41D350(hInst=%p, cmd=%.20s)\n",
