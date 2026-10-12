@@ -344,3 +344,5 @@ sub_41D350,sub_41D340();,"sub_41D340();
                   fprintf(stderr, ""[main] J\n""); fflush(stderr);"
 sub_41D350,sub_419460();,"sub_419460();
                   fprintf(stderr, ""[main] K\n""); fflush(stderr);"
+sub_41D350,"iVar4 = sub_415690(0,s_111_cor_00572564);","iVar4 = sub_415690(0,s_111_cor_00572564);
+    fprintf(stderr, ""[main] loader -> %d\n"", iVar4); fflush(stderr);"

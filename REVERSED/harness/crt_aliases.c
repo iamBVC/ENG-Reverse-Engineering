@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdarg.h>
 
 /* ---- allocation ------------------------------------------------------- */
 void *_malloc(size_t n) { return malloc(n); }
@@ -59,6 +60,33 @@ double fsin(double x) { return sin(x); }
  * faithful implementation here is a no-op.  It is the first of the Ghidra-only stubs in
  * the CRT region whose *name* can be recovered from the listing's call sites. */
 void sub_562840(void) { }
+
+/* ---- the reversed CRT bodies, mapped onto the modern CRT ---------------
+ * IDA names these call targets `_fopen` / `_fwrite` / `_fclose`; Ghidra decompiled the
+ * *bodies* as ordinary `sub_XXXX` functions.  They cannot work in a rebuild: they use the
+ * MSVC 6 FILE layout (offset 0x0C is `_flag`, 0x10 `_file`) and the 2001 CRT's `_iob`
+ * table and heap, none of which a modern `fopen` produces.  This is what faults on the
+ * game's first save write (`sub_41C050`): the reversed `fclose` writing through a FILE the
+ * rebuild's own fopen never made.
+ *
+ * Mapping the calls onto the modern CRT is the correct answer - the same decision already
+ * taken for `_malloc`/`_strlen` and for the C++ runtime - and the bodies are excluded from
+ * the build in harness/substituted.txt so there is exactly one definition of each. */
+void  *sub_562AEE(const char *path, const char *mode) { return fopen(path, mode); }
+size_t sub_562B75(void *buf, size_t size, size_t count, void *stream)
+{
+    return fwrite(buf, size, count, (FILE *)stream);
+}
+int    sub_5628EB(void *stream) { return fclose((FILE *)stream); }
+/* The reversed `sprintf` body (IDA names the call `_sprintf`).  Same argument as above, and
+ * the same fix - and it matters here because the format is "\\sking%d.ksv" with a string
+ * straight out of the registry: the 2001 body walks that value itself. */
+int    sub_562717(char *buf, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    return vsprintf(buf, fmt, ap);
+}
 
 /* ---- x87 conversions: their convention is the point -------------------- */
 int __declspec(naked) __ftol()

@@ -18,5 +18,8 @@ sub_415AD0      # fread(Buffer, 1, 1, Stream)
 sub_415AF0      # fread(Buffer, 2, 1, Stream)
 sub_562941      # string free: the harness needs its own for buffers it owns
 
+# (The reversed CRT bodies - _fopen/_fwrite/_fclose - are in crt_bodies.txt instead: those
+# are dropped from the exe too, while these six are only dropped from the harness DLL.)
+
 # operator_new is *not* listed: it is not a `sub_XXXX` name, so make_bulk never emits
 # its body either - io_substitutes.c has always been the only definition in both builds.

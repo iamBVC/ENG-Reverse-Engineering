@@ -134,8 +134,13 @@ rem (sub_41D350, which the original startup calls - see that file).
 if not "%MODE%"=="bulk" goto skip_exe
 echo === linking groove_rebuild.exe (all 968 functions, original entry) ===
 if not exist "exe_obj" mkdir "exe_obj"
+rem The exe keeps the real stream wrappers (it reads actual files) but drops the reversed
+rem CRT bodies: those need the 2001 FILE layout and _iob table, and crt_aliases.c maps
+rem their names onto the modern CRT instead.
+python "%ROOT%\tools\make_dll_source.py" --exe
+if errorlevel 1 ( popd & exit /b 1 )
 cl /nologo /c /TC /W0 /GS- /MT /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
-   "%ROOT%\src_generated\chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
+   "%ROOT%\build\exe_chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
    "%ROOT%\src_generated\link_stubs.c" "%ROOT%\harness\crt_aliases.c" ^
    "%ROOT%\harness\exe_main.c" /Fo"exe_obj\\"
 if errorlevel 1 ( popd & exit /b 1 )

@@ -17,19 +17,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src_generated" / "chunks"
-OUT = ROOT / "build" / "dll_chunks"
+OUT = ROOT / "build" / ("exe_chunks" if "--exe" in sys.argv else "dll_chunks")
 MARKER = re.compile(r"^/\* ==== ([\w@]+) ==== \*/", re.M)
 
 
-def substituted() -> set[str]:
-    path = ROOT / "harness" / "substituted.txt"
+def names_in(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    names = set()
+    out = set()
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.split("#")[0].strip()
         if line:
-            names.add(line)
+            out.add(line)
+    return out
+
+
+def substituted() -> set[str]:
+    """What to drop from the chunk set.
+
+    * `--exe` -> only the reversed CRT bodies (`crt_bodies.txt`).  The exe keeps the real
+      stream wrappers, because it reads actual files.
+    * otherwise -> those *and* the six the harness supplies itself (`substituted.txt`),
+      because the DLL is driven from a memory buffer.
+    """
+    names = names_in(ROOT / "harness" / "crt_bodies.txt")
+    if "--exe" not in sys.argv:
+        names |= names_in(ROOT / "harness" / "substituted.txt")
     return names
 
 
