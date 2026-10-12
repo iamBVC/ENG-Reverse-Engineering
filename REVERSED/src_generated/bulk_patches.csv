@@ -516,3 +516,118 @@ sub_4116D0,local_20,enum_context.record
 sub_411D60,local_2c,enum_context.parent
 sub_411D60,local_28,enum_context.caps
 sub_411D60,local_24,enum_context.record
+sub_411D60,      iVar5 = (**(groove_com4 **)(*(int *)param_6[1] + 0x28)),"      fprintf(stderr, ""[d3d] depth enumeration begin\n""); fflush(stderr);
+      iVar5 = (**(groove_com4 **)(*(int *)param_6[1] + 0x28))"
+sub_411D60,"((int *)param_6[1],param_1,sub_412640,&enum_context.parent);","((int *)param_6[1],param_1,sub_412640,&enum_context.parent);
+      fprintf(stderr, ""[d3d] depth enumeration hr=%08x\n"", iVar5); fflush(stderr);"
+sub_411D60,"    iVar5 = (**(groove_com5 **)(*(int *)*puVar8 + 0x20))((int *)*puVar8,0,0,&enum_context.parent,sub_412320);","    fprintf(stderr, ""[d3d] display enumeration begin\n""); fflush(stderr);
+    iVar5 = (**(groove_com5 **)(*(int *)*puVar8 + 0x20))((int *)*puVar8,0,0,&enum_context.parent,sub_412320);
+    fprintf(stderr, ""[d3d] display enumeration hr=%08x\n"", iVar5); fflush(stderr);"
+sub_40FF40,"  undefined4 local_10;
+  undefined4 local_c;
+  undefined4 local_8;
+  undefined4 local_4;","  undefined4 windowed_size[2];
+  undefined4 fullscreen_size[2];"
+sub_40FF40,local_10,windowed_size[0]
+sub_40FF40,local_c,windowed_size[1]
+sub_40FF40,local_8,fullscreen_size[0]
+sub_40FF40,local_4,fullscreen_size[1]
+sub_410700,float param_4,int param_4
+sub_410700,  longlong lVar1;,"  longlong lVar1;
+  float work_float;
+  int palette_index;"
+sub_410700,for (param_4 = 0.0; (int)param_4 < 8; param_4 = (float)((int)param_4 + 1)),for (palette_index = 0; palette_index < 8; ++palette_index)
+sub_410700,(int)param_4 *,palette_index *
+sub_410700,param_4 = (float),work_float = (float)
+sub_410700,_DAT_00583388 - param_4,_DAT_00583388 - work_float
+sub_410700,_DAT_0058338c - param_4,_DAT_0058338c - work_float
+sub_410700,"  undefined4 local_20c [20];
+  undefined4 local_1bc;",  undefined4 driver_caps[25] = {0};
+sub_410700,local_20c,driver_caps
+sub_410700,local_1bc,driver_caps[20]
+sub_410700,"  undefined4 local_1a8;
+  LONG local_1a4;
+  LONG local_1a0;
+  LONG local_19c;
+  LONG local_198;",  unsigned int monitor_info[18] = {0};
+sub_410700,local_1a8,monitor_info[0]
+sub_410700,local_1a4,monitor_info[1]
+sub_410700,local_1a0,monitor_info[2]
+sub_410700,local_19c,monitor_info[3]
+sub_410700,local_198,monitor_info[4]
+sub_410700,"  undefined4 local_148;
+  undefined4 local_144;
+  undefined4 local_140;
+  undefined4 local_13c;
+  undefined4 local_134;
+  undefined4 local_100 [8];
+  undefined4 local_e0;
+  undefined4 local_dc;
+  undefined4 local_d8;
+  undefined4 local_d4;",  undefined4 surface_desc[31] = {0};
+sub_410700,local_148,surface_desc[0]
+sub_410700,local_144,surface_desc[1]
+sub_410700,local_140,surface_desc[2]
+sub_410700,local_13c,surface_desc[3]
+sub_410700,local_134,surface_desc[5]
+sub_410700,local_100,(surface_desc + 18)
+sub_410700,local_e0,surface_desc[26]
+sub_410700,local_dc,surface_desc[27]
+sub_410700,local_d8,surface_desc[28]
+sub_410700,local_d4,surface_desc[29]
+sub_410550,(**(code **)*local_18),(**(groove_com3 **)*local_18)
+sub_410550,(**(code **)(*local_18 + 8)),(**(groove_com1 **)(*local_18 + 8))
+sub_410700,(**(code **)(*DAT_00582ccc + 0x50)),(**(groove_com3 **)(*DAT_00582ccc + 0x50))
+sub_410700,(**(code **)(*DAT_00582ccc + 0x54)),(**(groove_com6 **)(*DAT_00582ccc + 0x54))
+sub_410700,(**(code **)(*DAT_00582ccc + 0x18)),(**(groove_com4 **)(*DAT_00582ccc + 0x18))
+sub_410700,(**(code **)(*DAT_00582ccc + 0x14)),(**(groove_com5 **)(*DAT_00582ccc + 0x14))
+sub_410700,(**(code **)(*DAT_00582cdc + 0x14)),(**(groove_com6 **)(*DAT_00582cdc + 0x14))
+sub_410700,(**(code **)(*DAT_00582cdc + 0x30)),(**(groove_com3 **)(*DAT_00582cdc + 0x30))
+sub_410700,(**(code **)(*DAT_00582ce4 + 0xc)),(**(groove_com2 **)(*DAT_00582ce4 + 0xc))
+sub_410700,(**(code **)(*DAT_00582cdc + 0x7c)),(**(groove_com2 **)(*DAT_00582cdc + 0x7c))
+sub_410700,(**(code **)(*DAT_00582ce4 + 0x7c)),(**(groove_com2 **)(*DAT_00582ce4 + 0x7c))
+sub_410700,(**(code **)(*DAT_00582ce4 + 0x54)),(**(groove_com2 **)(*DAT_00582ce4 + 0x54))
+sub_410550,"__CxxThrowException_8(&local_28,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_24, local_20); fflush(stderr);
+    __CxxThrowException_8(&local_28,&DAT_0056eff0);"
+sub_410550,"__CxxThrowException_8(&local_34,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_30, local_2c); fflush(stderr);
+    __CxxThrowException_8(&local_34,&DAT_0056eff0);"
+sub_410550,"__CxxThrowException_8(&local_40,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_3c, local_38); fflush(stderr);
+    __CxxThrowException_8(&local_40,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_40,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_3c, local_38); fflush(stderr);
+    __CxxThrowException_8(&local_40,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_94,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_90, local_8c); fflush(stderr);
+    __CxxThrowException_8(&local_94,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_58,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_54, local_50); fflush(stderr);
+    __CxxThrowException_8(&local_58,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_70,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_6c, local_68); fflush(stderr);
+    __CxxThrowException_8(&local_70,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_88,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_84, local_80); fflush(stderr);
+    __CxxThrowException_8(&local_88,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_a0,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_9c, local_98); fflush(stderr);
+    __CxxThrowException_8(&local_a0,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_28,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_24, local_20); fflush(stderr);
+    __CxxThrowException_8(&local_28,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_34,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_30, local_2c); fflush(stderr);
+    __CxxThrowException_8(&local_34,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_4c,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_48, local_44); fflush(stderr);
+    __CxxThrowException_8(&local_4c,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_64,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_60, local_5c); fflush(stderr);
+    __CxxThrowException_8(&local_64,&DAT_0056eff0);"
+sub_410700,"__CxxThrowException_8(&local_7c,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_78, local_74); fflush(stderr);
+    __CxxThrowException_8(&local_7c,&DAT_0056eff0);"
+sub_411000,"__CxxThrowException_8(&local_48,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_44, local_40); fflush(stderr);
+    __CxxThrowException_8(&local_48,&DAT_0056f168);"
+sub_411000,"__CxxThrowException_8(&local_60,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_5c, local_58); fflush(stderr);
+    __CxxThrowException_8(&local_60,&DAT_0056f168);"
+sub_411000,"__CxxThrowException_8(&local_30,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_2c, local_28); fflush(stderr);
+    __CxxThrowException_8(&local_30,&DAT_0056f168);"
+sub_411000,"__CxxThrowException_8(&local_6c,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_68, local_64); fflush(stderr);
+    __CxxThrowException_8(&local_6c,&DAT_0056f168);"
+sub_411000,"__CxxThrowException_8(&local_3c,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_38, local_34); fflush(stderr);
+    __CxxThrowException_8(&local_3c,&DAT_0056f168);"
+sub_411000,"__CxxThrowException_8(&local_54,&DAT_0056f168);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_50, local_4c); fflush(stderr);
+    __CxxThrowException_8(&local_54,&DAT_0056f168);"
+sub_410700,(**(code **)*DAT_00582cdc),(**(groove_com3 **)*DAT_00582cdc)
+sub_410700,(**(code **)(*DAT_00582cec + 0xc)),(**(groove_com3 **)(*DAT_00582cec + 0xc))
+sub_4106C0,(**(code **)(*DAT_00582cd0 + 8)),(**(groove_com1 **)(*DAT_00582cd0 + 8))
+sub_4106C0,(**(code **)(*DAT_00582ccc + 8)),(**(groove_com1 **)(*DAT_00582ccc + 8))

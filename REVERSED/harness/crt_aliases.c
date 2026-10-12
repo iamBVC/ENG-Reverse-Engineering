@@ -57,6 +57,8 @@ int _strcmp(const char *a, const char *b) { return strcmp(a, b); }
 int _strncmp(const char *a, const char *b, size_t n) { return strncmp(a, b, n); }
 char *_strncpy(char *d, const char *s, size_t n) { return strncpy(d, s, n); }
 int _strcmpi(const char *a, const char *b) { return _stricmp(a, b); }
+/* Ghidra's separately identified MSVC 6 __strcmpi is the same CRT operation. */
+int __strcmpi(const char *a, const char *b) { return _stricmp(a, b); }
 char *_strrchr(const char *s, int c) { return strrchr(s, c); }
 
 /* ---- x87 math helpers -------------------------------------------------- */

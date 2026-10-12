@@ -142,9 +142,11 @@ typedef long long          longlong;
 typedef int                code();
 /* Fixed argument counts retain stdcall cleanup for the recovered COM sites. */
 typedef int __stdcall groove_com1(UINT_PTR);
+typedef int __stdcall groove_com2(UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com3(UINT_PTR, UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com4(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com5(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
+typedef int __stdcall groove_com6(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 
 /* The original passes addresses of adjacent stack slots as callback contexts.
  * Separate C locals have no guaranteed adjacency, so keep those slots together.
@@ -183,6 +185,7 @@ int    _strcmp(const char *a, const char *b);
 int    _strncmp(const char *a, const char *b, size_t n);
 char  *_strncpy(char *d, const char *s, size_t n);
 int    _strcmpi(const char *a, const char *b);
+int    __strcmpi(const char *a, const char *b);
 char  *_strrchr(const char *s, int c);
 /* NB the spelling is the *C identifier*, taken from the linker's symbol: the log's
  * `_fcos` is the symbol for a C name `fcos`, so the definition is `fcos`. */

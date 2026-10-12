@@ -58,6 +58,49 @@ functions.
 
 ### Continuation checkpoint (2026-10-12)
 
+**Second desktop trace:** depth and display enumeration both return success,
+both HAL adapters enter the list, and main reports `ddraw=1`. The next trace
+names `__strcmpi` and the still-stubbed legacy throw helper. `__strcmpi` now maps
+to the real case-insensitive CRT comparison instead of returning zero for every
+pair. Device creation/query/release and surface-setup COM calls now retain their
+stdcall argument counts. The fourth argument to `sub_410700` is an object address,
+not a float; its later palette-index and floating scratch uses are separate locals.
+
+Surface setup now has actual 124-byte surface descriptions, 100-byte capability
+outputs, and 72-byte monitor-info storage. `sub_40FF40` passes real width/height
+pairs rather than pointers to separate locals. Graphics throw sites log their
+message and HRESULT before the existing legacy exception stub, so that future
+failures can be distinguished. Faithful MSVC 6 exception handling remains open.
+
+`python tools\test_graphics_surfaces.py` exercises the generated surface setup
+against COM mocks in all four combinations of offscreen/depth requirements. It
+checks display-mode arguments, descriptor fields and complete output-buffer
+writes. The hardware test also passes actual DirectDraw4/Direct3D3 interface
+creation/query/release. Hardware enumeration and callback tests still pass;
+1,130 included functions compile and the executable links. These are focused
+initialization checks, not validation of real fullscreen rendering, viewport
+math, texture enumeration or gameplay. The incoming desktop log is preserved
+as `build/hardware_user_trace_before_surface_fix.log`.
+
+**Desktop HAL trace follow-up:** the user's normal desktop run does enumerate
+Direct3D HAL (`caps=1`, flags `0x1ff`) and stops just afterward. Inspection found
+two callback contexts represented as separate C locals: the original passes
+addresses of adjacent stack slots, and the callbacks index those slots at fixed
+offsets. `groove_ddraw_enum_context` and `groove_d3d_enum_context` now preserve
+those layouts explicitly, with x86 size/offset checks. The display-format
+constructor in `sub_412320` also now receives its allocated object (`param_1`),
+matching the original ECX argument before the call to `sub_413570`.
+
+`python tools\test_hardware_enumeration.py` links against the bulk DLL objects
+and drives the real generated hardware callback through deterministic COM
+methods. It passes depth-format selection, display-mode creation and reuse,
+and insertion into the parent adapter's list. The fixture exercises the branch
+the session's software-only renderer cannot reach; it is not a real-GPU gameplay
+test. The callback tests still pass, all 1,130 included functions compile, and
+the exe links. Depth/display enumeration begin/result probes were added for
+the next desktop run. The old desktop log is preserved in
+`build/hardware_user_trace_before_context_fix.log`.
+
 **Later checkpoint:** the bulk now includes **1,130 functions**, all compiling
 with zero errors. Six assembly-recovered callbacks/comparators live in
 `src_recovered/`; `make_bulk.py` prefers those files over same-named Ghidra exports
