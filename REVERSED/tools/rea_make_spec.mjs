@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
-const TARGET = resolve(ROOT, "..", "WAD", "groove.exe");
+const TARGET = resolve(ROOT, "..", "Game", "groove.exe");
 
 const mode = process.argv[2] ?? "dossier";
 const scope = process.argv[3] ?? "stubs";

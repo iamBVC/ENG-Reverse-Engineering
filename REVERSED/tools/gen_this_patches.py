@@ -35,7 +35,7 @@ from pe_tools import parse_listing, with_sizes  # noqa: E402
 OUT = ROOT / "src_generated"
 BUILD = ROOT / "build"
 PATCHES = OUT / "bulk_patches.csv"
-ASM = ROOT.parent / "WAD" / "groove.exe.asm"
+ASM = ROOT.parent / "Game" / "groove.exe.asm"
 
 ERROR_RE = re.compile(r"(chunk_\d+\.c)\((\d+)\): error (C\d+): ([^\n]*)")
 CALL_RE = re.compile(r"'[^']*?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)'")

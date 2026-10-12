@@ -57,7 +57,7 @@ def classify(func, lines: list[str]) -> str:
 
 
 def build(root: Path) -> Path:
-    asm = root / "WAD" / "groove.exe.asm"
+    asm = root / "Game" / "groove.exe.asm"
     all_lines = asm.read_text(encoding="latin1", errors="replace").splitlines()
     funcs = with_sizes(parse_listing(asm))
     funcs.sort(key=lambda f: (f.size or 0, f.name))

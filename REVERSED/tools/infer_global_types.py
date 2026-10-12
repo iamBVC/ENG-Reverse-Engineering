@@ -290,7 +290,7 @@ def main() -> int:
     before = clean_count()
     print(f"baseline (no overrides): {before} functions compiling cleanly")
 
-    seeded = {k: v for k, v in seed_from_asm(ROOT.parent / "WAD" / "groove.exe.asm").items()
+    seeded = {k: v for k, v in seed_from_asm(ROOT.parent / "Game" / "groove.exe.asm").items()
               if k not in table}
     table.update(seeded)
     best = before
@@ -337,7 +337,7 @@ def main() -> int:
 
     if args.families:
         best, kept = greedy_families(
-            seed_from_asm(ROOT.parent / "WAD" / "groove.exe.asm"),
+            seed_from_asm(ROOT.parent / "Game" / "groove.exe.asm"),
             table, best, args.max_families, args.family_span, args.group)
         print(f"\nfamily search kept {kept} families")
 

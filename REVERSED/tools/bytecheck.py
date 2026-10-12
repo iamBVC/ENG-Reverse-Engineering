@@ -2,7 +2,7 @@
 
 For every function that exists in the original (see `functions.csv`) and was
 found in the compiled objects (`build/objects/*.obj`), this compares the
-recompiled machine code against the original bytes cut out of `WAD/groove.exe`,
+recompiled machine code against the original bytes cut out of `Game/groove.exe`,
 and updates the `status` column of `functions.csv`.
 
 Verdicts
@@ -78,8 +78,8 @@ def dump(name: str, orig: bytes, new: bytes, offset: int | None) -> None:
 def main() -> int:
     root = Path(__file__).resolve().parent.parent.parent
     rev = root / "REVERSED"
-    pe = PE(root / "WAD" / "groove.exe")
-    listing = {f.name: f for f in with_sizes(parse_listing(root / "WAD" / "groove.exe.asm")) if f.va}
+    pe = PE(root / "Game" / "groove.exe")
+    listing = {f.name: f for f in with_sizes(parse_listing(root / "Game" / "groove.exe.asm")) if f.va}
 
     manifest_path = rev / "functions.csv"
     rows: list[dict] = []

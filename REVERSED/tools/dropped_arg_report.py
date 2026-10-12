@@ -40,8 +40,8 @@ from pe_tools import PE, parse_listing, with_sizes  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
 OUT = ROOT / "src_generated"
-ASM = ROOT.parent / "WAD" / "groove.exe.asm"
-EXE = ROOT.parent / "WAD" / "groove.exe"
+ASM = ROOT.parent / "Game" / "groove.exe.asm"
+EXE = ROOT.parent / "Game" / "groove.exe"
 MARKER = re.compile(r"^/\* ==== ([\w@]+) ==== \*/", re.M)
 ERROR_RE = re.compile(r"(chunk_\d+\.c)\((\d+)\): error (C\d+): ([^\n]*)")
 CALL_RE = re.compile(r"'[^']*?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)'")

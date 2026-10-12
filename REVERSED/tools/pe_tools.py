@@ -227,8 +227,8 @@ def with_sizes(funcs: list[Function]) -> list[Function]:
 def main() -> int:
     here = Path(__file__).resolve().parent
     root = here.parent.parent
-    exe = root / "WAD" / "groove.exe"
-    asm = root / "WAD" / "groove.exe.asm"
+    exe = root / "Game" / "groove.exe"
+    asm = root / "Game" / "groove.exe.asm"
     if "--info" in sys.argv and exe.exists():
         pe = PE(exe)
         print(f"{pe.path.name}: {len(pe.data):,} bytes")

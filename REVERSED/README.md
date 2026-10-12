@@ -96,7 +96,7 @@ REVERSED/
   tools/
     pe_tools.py          PE32 reader; cuts any original function's bytes out of groove.exe
     coff_tools.py        COFF .obj reader; extracts one recompiled function's bytes
-    gen_functions.py     builds functions.csv from WAD/groove.exe.asm
+    gen_functions.py     builds functions.csv from Game/groove.exe.asm
     bytecheck.py         the verifier (EXACT / RELOC / DIFF, --dump, --list)
     show_asm.py          print a function's listing verbatim (the workflow tool)
   build/                 generated: objects/ and groove_rebuild.exe   (gitignored)
@@ -1047,7 +1047,7 @@ bulk translation unit is finally linked.
 ## The loop for the next function
 
 1. `check.bat --list` - pick the smallest untouched function.
-2. Read it in `WAD/groove.exe.asm`; give it a real name when its purpose is clear.
+2. Read it in `Game/groove.exe.asm`; give it a real name when its purpose is clear.
 3. Write it in `src/` with **the original name as the C identifier**, so the
    harness maps it 1:1 (glue helpers that do not exist in the original get a
    `groove_` prefix and are excluded from byte comparison).

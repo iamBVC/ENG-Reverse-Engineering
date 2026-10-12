@@ -85,6 +85,23 @@ void sub_562840(void) { }
  * Mapping the calls onto the modern CRT is the correct answer - the same decision already
  * taken for `_malloc`/`_strlen` and for the C++ runtime - and the bodies are excluded from
  * the build in harness/substituted.txt so there is exactly one definition of each. */
+/* The reversed `free` (IDA names the free at 0x5628BC as a plain `sub_`): the node
+   destructor `sub_413170` releases each DirectDraw list node's buffer through it, and those
+   nodes are allocated by `operator_new` above - a modern `malloc`.  Leaving the decompiled
+   body in place made it walk the 2001 CRT's heap over a modern block (measured: the access
+   violation inside it, at `+0x3F`, during the list teardown after `[main] E`). */
+void   sub_5628BC(void *p)
+{
+    /* Probe: the object list's teardown asks this to release each node's buffer, and it is
+       also where a bad pointer surfaces.  Printing it separates "the sentinel was destroyed
+       as a node" (a pointer into our own image's data) from "a field was corrupt" (a heap
+       pointer elsewhere).  The first few are enough; the fault is early. */
+    static int shown = 0;
+    if (shown++ < 8)
+        fprintf(stderr, "[free] %p from %p\n", p, _ReturnAddress());
+    free(p);
+}
+
 void  *sub_562AEE(const char *path, const char *mode) { return fopen(path, mode); }
 size_t sub_562B75(void *buf, size_t size, size_t count, void *stream)
 {

@@ -64,7 +64,7 @@ def main() -> int:
     ap.add_argument("--wad", default="t1l1m001.wad")
     args = ap.parse_args()
 
-    wad_path = REPO / "WAD" / args.wad
+    wad_path = REPO / "Game" / "wads" / args.wad
     data, chunks, by_tag = read_wad(wad_path)
     map_chunk = chunk_bytes(data, by_tag["MAP "])
     trak_chunk = chunk_bytes(data, by_tag["TRAK"])

@@ -15,6 +15,12 @@ sub_5628EB       # _fclose  -> fclose
 sub_562717       # _sprintf -> vsprintf (via a variadic wrapper)
 sub_56279D       # _strtok  -> strtok
 
+# Found the same way, reached now that the game's DirectDraw object list is populated:
+# the node destructor (`sub_413170`) releases the node's buffer through `sub_5628BC`, which
+# is the 2001 CRT's `free` - it walks the 2001 heap, and the node came from a modern
+# `malloc` (see `operator_new` in crt_aliases.c).  Measured: the access violation at
+# `_sub_5628BC+0x3F` under `_sub_413170+0x38` under the list teardown `sub_40FD00+0xA5`.
+
 # Found the same way, reached now that the game's static initialisers run
 # (tools/gen_crt_initialisers.py, called from harness/exe_main.c): every one of the 72
 # initialisers ends in `push <destructor>; call sub_5626AD`, i.e. the 2001 CRT's `_onexit`
@@ -23,6 +29,7 @@ sub_56279D       # _strtok  -> strtok
 # access violation is at `_sub_5645F3+0x38` under `_sub_562640+0x11` under
 # `_sub_5626AD+0xF` under the first initialiser `sub_402710`.  Dropping the three makes the
 # registration a no-op stub; the destructors are a shutdown-only concern.
+sub_5628BC       # _free    -> free (crt_aliases.c says so); the 2001 heap is not ours either
 sub_5626AD       # _onexit  -> the modern CRT registers its own; the 2001 table is not ours
 sub_562640       # the __onexit table growth behind it
 sub_5645F3       # that growth's remaining-capacity helper

@@ -411,3 +411,32 @@ sub_40FD00,        sub_413170();,"        /* PATCH: the original sets the object
            line - and Ghidra's call dropped it (the callee is typed `__fastcall`).
            Measured: the DirectDraw object-list teardown faulted inside it. */
         sub_413170(piVar1);"
+sub_40F4F0,(int *)&DAT_00583414,(int *)&DAT_00583410[1]   /* PATCH: the sentinel is the second dword of the head object */
+sub_40FD00,(int *)&DAT_00583414,(int *)&DAT_00583410[1]   /* PATCH: the sentinel is the second dword of the head object */
+sub_4116D0,DAT_00583418,(*(unsigned int **)((char *)&DAT_00583410 + 8))   /* PATCH: third dword of the same object */
+sub_417750,DAT_00583418,(*(unsigned int **)((char *)&DAT_00583410 + 8))   /* PATCH: third dword of the same object */
+sub_4116D0,"sub_4130B0(param_2,param_1,param_5)","/* PATCH: the callee is `__thiscall`, so the object is in ECX - the listing is explicit:
+       `push 0x28 / call operator_new / mov eax,ecx` then the three pushes and
+       `call sub_4130B0`, ECX untouched.  Without it the freshly allocated node never
+       reaches its constructor, the list holds an uninitialised block and the destructor
+       frees a garbage field (measured: the abort inside the modern `free`).  `param_3`
+       is the block: the null check just above tests it. */
+    sub_4130B0((undefined4 *)param_3,param_2,param_1,param_5)"
+sub_40FD00,  sub_40FE10();,"  sub_40FE10();
+  /* probe: head vs sentinel vs the object's own address, at the teardown */
+  fprintf(stderr, ""[list] head=%p sentinel=%p self=%p | "", (void *)DAT_00583410, (void *)&DAT_00583410[1], (void *)&DAT_00583410); fflush(stderr);"
+sub_4116D0,    sub_413170();,"    /* PATCH: the destructor is `__thiscall`; the bytes show `mov ecx,[ebp-0x1c]` (the
+       node local) right before the call, so `piVar1` - the same pointer freed on
+       the next line - is the object.  Without it ECX still held the global list
+       head and the destructor read *its* fields and tried to free a static
+       address (measured: the abort inside the modern free, from here). */
+    sub_413170(piVar1);"
+sub_413170,  puStack_8 = &LAB_0056d7e3;,"  /* probe: who destroys what */
+  fprintf(stderr, ""[destroy] this=%p from %p | "", (void *)param_1, _ReturnAddress()); fflush(stderr);
+  puStack_8 = &LAB_0056d7e3;"
+sub_40E080,  param_1[1] = 0;,"  param_1[1] = 0;
+  /* probe: the list is empty right after this - head should be &head + 4 */
+  fprintf(stderr, ""[listinit] this=%p head=%p | "", (void *)param_1, (void *)*param_1); fflush(stderr);"
+sub_4116D0,  piVar1 = local_20 + 1;,"  /* probe: the insert path - local_20 is the node it is about to link */
+  fprintf(stderr, ""[insert] local_20=%p piVar3=%p head=%p sent=%p | "", (void *)local_20, (void *)piVar3, (void *)DAT_00583410, (void *)&DAT_00583410[1]); fflush(stderr);
+  piVar1 = local_20 + 1;"

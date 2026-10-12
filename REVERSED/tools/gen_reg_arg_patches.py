@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pe_tools import PE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-EXE = ROOT.parent / "WAD" / "groove.exe"
+EXE = ROOT.parent / "Game" / "groove.exe"
 DEC = ROOT / "decompiled"
 PATCHES = ROOT / "src_generated" / "bulk_patches.csv"
 GLOBALS_H = ROOT / "src_generated" / "ghidra_globals.h"

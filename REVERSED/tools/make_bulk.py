@@ -224,7 +224,7 @@ def main() -> int:
         print(f"no decompiled sources in {DEC}; run tools/ghidra_decompile.bat first")
         return 1
 
-    exe = PE(ROOT.parent / "WAD" / "groove.exe")
+    exe = PE(ROOT.parent / "Game" / "groove.exe")
 
     # ---- data symbols Ghidra knows about ---------------------------------
     data: dict[int, tuple[str, int, str]] = {}
@@ -487,6 +487,7 @@ def main() -> int:
         override = type_overrides.get(canonical)
         if override is not None and override.startswith("string:"):
             override = None          # handled at the top of the iteration
+        is_buffer = False
         if override is not None and override.startswith("array:"):
             # `array:0x800` - "this datum is a buffer of that many bytes".  Ghidra's symbol
             # table records only the access it saw, so a 2 KB scratch buffer the code fills
@@ -497,6 +498,7 @@ def main() -> int:
             # "address-taken means buffer" rule turned scalar globals into arrays and cost
             # 265 compile errors, so it is an override instead.
             size = int(override.split(":", 1)[1], 16)
+            is_buffer = True
             override = None
         if override is not None:
             ctype = {"float": "float", "double": "double",
@@ -579,7 +581,7 @@ def main() -> int:
             except ValueError:
                 return b""
 
-        if size > 4 and not ctype.endswith("*"):
+        if size > 4 and (is_buffer or not ctype.endswith("*")):
             # a multi-byte datum is an array in the original; declaring it as one
             # scalar would let the code (and the harness) write past its storage
             elem = {8: "long long", 4: "int"}.get(4, "int")

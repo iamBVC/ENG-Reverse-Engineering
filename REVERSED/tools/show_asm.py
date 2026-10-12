@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pe_tools import parse_listing, with_sizes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-ASM = ROOT / "WAD" / "groove.exe.asm"
+ASM = ROOT / "Game" / "groove.exe.asm"
 
 
 def main() -> int:

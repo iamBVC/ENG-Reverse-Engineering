@@ -30,7 +30,7 @@ if not exist "%JAVA_HOME%\bin\java.exe" (
 )
 
 set "EXE=%~1"
-if "%EXE%"=="" set "EXE=%ROOT%\..\WAD\groove.exe"
+if "%EXE%"=="" set "EXE=%ROOT%\..\Game\groove.exe"
 if not exist "%EXE%" (
     echo [!] target executable not found: "%EXE%"
     exit /b 1

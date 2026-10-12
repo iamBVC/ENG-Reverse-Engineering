@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pe_tools import PE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-EXE = ROOT.parent / "WAD" / "groove.exe"
+EXE = ROOT.parent / "Game" / "groove.exe"
 
 # (begin, end) of each _initterm range, as `_cinit` at 0x563B87 passes them.
 TABLES = [
