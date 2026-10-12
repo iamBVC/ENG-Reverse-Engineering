@@ -165,6 +165,11 @@ double fsin(double x);
 int    __ftol();            /* operand in ST(0), result in EAX */
 float10 __frnd();           /* rounds its operand and leaves it on the FPU stack */
 
+/* The portable default for the game's data paths: `.`, i.e. the executable's own folder,
+ * which harness/exe_main.c makes the working directory.  The patched registry reads use it
+ * instead of the installer's keys, so the rebuild needs nothing set up on the machine. */
+extern char groove_default_path[];
+
 /* The binary's own `FILE`.  `<stdio.h>` cannot supply it: the installed CRT declares
  * `FILE` as an opaque `struct { void *_Placeholder; }`, so the member accesses inside
  * `sub_5628EB` (the body of `fclose`, 0x5628EB) do not compile against it - and

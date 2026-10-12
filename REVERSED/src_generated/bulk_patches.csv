@@ -346,3 +346,12 @@ sub_41D350,sub_419460();,"sub_419460();
                   fprintf(stderr, ""[main] K\n""); fflush(stderr);"
 sub_41D350,"iVar4 = sub_415690(0,s_111_cor_00572564);","iVar4 = sub_415690(0,s_111_cor_00572564);
     fprintf(stderr, ""[main] loader -> %d\n"", iVar4); fflush(stderr);"
+sub_41C050,"sub_562717(local_200,s__sking_d_ksv_005724c0,uVar1,iVar3);","sub_562717(local_200,s__sking_d_ksv_005724c0,uVar1,iVar3);
+    fprintf(stderr, ""[save] path -> %.120s\n"", local_200); fflush(stderr);"
+sub_41C050,"iVar2 = sub_562AEE(local_200,&DAT_00570350);","iVar2 = sub_562AEE(local_200,&DAT_00570350);
+    fprintf(stderr, ""[save] fopen -> %p\n"", (void *)iVar2); fflush(stderr);"
+sub_415690,"pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0);","pcVar2 = (char *)sub_405790(s_HDPath_00571d94,groove_default_path);"
+sub_415690,"pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0);","pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,groove_default_path);"
+sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
+sub_41C0E0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"
+sub_41CBE0,"uVar1 = sub_405790(s_HDPath_00571d94,0);","uVar1 = sub_405790(s_HDPath_00571d94,groove_default_path);"

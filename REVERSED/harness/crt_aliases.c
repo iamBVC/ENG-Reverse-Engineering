@@ -23,6 +23,17 @@
 #include <math.h>
 #include <stdarg.h>
 
+/* ---- the portable default path ----------------------------------------
+ * The 2001 game gets its data paths from the installer's registry keys
+ * (`Software\Disney Interactive\Emperors New Groove\1.0`), and when a key is missing the
+ * settings reader returns the caller's default - which every call site passes as 0.
+ * `sprintf("%s")` on that 0 faults, in this CRT and in the 2001 one, so a machine without
+ * the installer never starts the game (checked: the shipped exe does not start here
+ * either).  A static recompilation should not need an installer at all, so the path-shaped
+ * reads default to "." - the process working directory, which exe_main.c sets to the
+ * executable's own folder.  Nothing machine-specific is required to run it. */
+char groove_default_path[] = ".";
+
 /* ---- allocation ------------------------------------------------------- */
 void *_malloc(size_t n) { return malloc(n); }
 void  _free(void *p) { free(p); }

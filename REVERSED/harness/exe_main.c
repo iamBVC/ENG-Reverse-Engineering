@@ -21,9 +21,27 @@
 
 extern int sub_41D350(int hInstance, int hPrevInstance, char *lpCmdLine);
 
+/* Run from the executable's own directory, whatever folder it is launched from: the game
+ * opens its assets by relative name ("111.cor", "Wads\..."), so this is what makes the
+ * rebuild work from anywhere instead of only from the folder it was installed into. */
+static void set_working_directory(void)
+{
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, path, sizeof path);
+    if (n == 0 || n >= sizeof path)
+        return;
+    while (n > 0 && path[n - 1] != '\\' && path[n - 1] != '/')
+        --n;
+    if (n == 0)
+        return;
+    path[n] = '\0';
+    SetCurrentDirectoryA(path);
+}
+
 int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     (void)nCmdShow;
+    set_working_directory();
     /* Two lines of instrumentation, because "it crashes" is not a diagnosis: with them a
        run says whether the fault is inside the game's main or outside it. */
     fprintf(stderr, "[winmain] calling sub_41D350(hInst=%p, cmd=%.20s)\n",

@@ -466,6 +466,17 @@ def main() -> int:
                     decls.append(f"#define {other} {canonical}")
             continue
         override = type_overrides.get(canonical)
+        if override is not None and override.startswith("array:"):
+            # `array:0x800` - "this datum is a buffer of that many bytes".  Ghidra's symbol
+            # table records only the access it saw, so a 2 KB scratch buffer the code fills
+            # through `&DAT_x` is declared one byte: `DAT_0057ddc4` is written with 0x800
+            # bytes by the registry reader (`sub_4058A0`, which sets `local_4 = 0x800`), and
+            # a one-byte declaration means the rebuild overwrites everything after it in the
+            # data section.  Sizing it has to be a *recorded* decision per symbol - a broad
+            # "address-taken means buffer" rule turned scalar globals into arrays and cost
+            # 265 compile errors, so it is an override instead.
+            size = int(override.split(":", 1)[1], 16)
+            override = None
         if override is not None:
             ctype = {"float": "float", "double": "double",
                      "pointer": "unsigned int *"}.get(override, "int")
