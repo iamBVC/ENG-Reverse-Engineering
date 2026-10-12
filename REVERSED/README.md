@@ -675,6 +675,103 @@ That is the loop for a runnable image: **run it, read the name, reverse that fun
 rebuild** - and the name comes from the stubs themselves, so no debugger is needed to know
 where it stopped.
 
+### The first two names, and the recipes they establish
+
+**`sub_405960`** (401 bytes) is a registry-settings helper: `registry_root(root, subkey,
+access)` walks a `HKEY` tree with the CRT's `strtok`.  Two things made it tractable, and
+both generalise:
+
+* Ghidra's `in_stack_<hex>` names *are* its arguments.  The offsets line up exactly with
+  IDA's `arg_0`/`arg_4`/`samDesired` once the `__alloca_probe` frame shift (0x1010) is
+  subtracted - so `in_stack_00001014` = the root, `in_stack_00001018` = the subkey string,
+  `in_stack_0000101c` = `samDesired`, and the same rule maps `&stack0x00000810` to IDA's
+  `String` buffer and `&stack0x0000000c` to its `dwDisposition`.  Nine replacements, all
+  mechanical, all from the listing;
+* its two `strtok` calls had lost **both** arguments (`sub_56279D()` with a definition of
+  `(byte *, byte *)`).  The listing shows the pushes: `(String, "\\")` and `(0, "\\")`.
+  The delimiter is the single backslash at 0x570334, and it is passed as a local
+  `char delim[2] = {0x5c, 0}` rather than a string literal - the address *is* declared in
+  the generated globals, but as a plain `unsigned char`, which the generator would
+  materialise as zero.
+
+Result: clean subset 969 -> **970**, `in_stack_` 26 -> 22 for that one function, and its
+stub removed itself through the LNK2005 rule.  It also fixed two of the 33 `C2198` sites as
+a side effect.
+
+**`sub_562840`**, the next name a run printed, is *not* game code at all: IDA's listing
+names the call `__alloca_probe`.  It is the MSVC 6 stack probe, and a rebuild does not need
+it (the modern compiler emits its own probe for a frame that size), so it is now a no-op in
+[`harness/crt_aliases.c`](harness/crt_aliases.c) with that explanation.  That is a rule worth
+keeping: **a Ghidra-only `sub_XXXXXX` in the CRT region can often be named from the call
+sites in IDA's listing** - which is cheaper than reversing it, and correct.
+
+After both, a run walks past the settings code and prints no stub at all; it now stops
+where the game would create its window and wait.
+
+### Localising the first crash (in progress)
+
+With the startup running, the exe faulted inside the game's main.  Eleven probes inserted as
+recorded patch rows (`fprintf(stderr, "[main] X\n")` after chosen statements of
+`sub_41D350`) narrow it to a three-statement window:
+
+```
+[winmain] calling sub_41D350(...)
+[main] A                       <- after `cVar3 = sub_41DC10();`
+(crash)                        <- ... and before the next probe,
+                                  `sub_41C050()`
+```
+
+Inside that window sits:
+
+```c
+if (cVar3 == '\0') {
+    iVar4 = sub_415690(0, "111.cor");                       /* the file loader */
+    if (iVar4 == 0) {
+        /* 111.cor is missing, so this is the path a bare run takes */
+        lpText = (&PTR_s_Inserire_il_CD_del_gioco_per_com_0057ba3c)[DAT_00584f04];
+    } else { ... strtok / __strcmpi / sub_41C050(); }
+```
+
+Three real bugs were found and fixed on the way, all recorded:
+
+* `DAT_0058115c = sub_41BCB0();` and `DAT_00581160 = sub_41BCB0();` - the object
+  initialiser was called with **no object**, so it wrote through an uninitialised `this`
+  (`*(param_1 + 0x20/0x24)`).  The listing shows `mov [ebp+0x10], eax` ... `mov ecx, eax`,
+  and the C shows `pvVar5 = operator_new(0x28)` NULL-checked immediately above: the
+  argument is `pvVar5`.
+* `sub_41BCF0(0,0,0,0xff)` was one argument short - `xor eax,eax; ...; mov ecx,eax`, so the
+  leading argument is 0.
+* **the class that actually crashes here**: pointer slots initialised with *stale numeric
+  addresses* from the original's image.  `PTR_s_Inserire_il_CD_..._0057ba3c` held `0x579BD0`,
+  a string in the original's `.data`; the rebuild has something else at that address, and the
+  value is handed to `MessageBoxA` as the message text.  Three rules now apply, in order:
+  a datatype of `pointer` (or anything ending in `*`) in Ghidra's own symbol table types the
+  slot as a pointer; a target this unit defines becomes `&name`; anything else is
+  **materialised** - the bytes it pointed at are read out of `groove.exe` and emitted as
+  `groove_str_<addr>`, and the pointer is initialised with that.  74 pointer slots are now
+  symbolic and 13 strings exist only because a pointer needed them.
+
+A fourth fix was incidental: the shim had lost `#include <stdio.h>` when `groove_FILE`
+replaced it, so the first probe build failed with 24 `C2065`s on `fprintf`/`stderr`.
+
+The probes are deliberately kept in the patch table: they are how the next round sees where
+a run stops, and they are stderr-only.
+
+**Next probe, precisely:** print `iVar4` immediately after the `sub_415690(0, "111.cor")`
+call.  If it prints, the loader returned and the fault is in the message-box path; if it does
+not, the fault is inside the loader - which the original survives (it checks the result),
+so it would be a rebuild-side bug in that function.
+
+### Editing the patch table: never by hand
+
+This round cost three rounds of confusion to a single field.  A replacement text containing
+a comma needs the field quoted; a replacement containing a **quote** needs that quote
+*\"doubled\"* - and when I wrote one by hand instead, the row was silently malformed (the
+parser kept the extra column, `make_bulk` never saw the replacement, and the function failed
+with an error that pointed at the wrong line).  The table is now written through Python's
+`csv` module whenever a row contains anything but letters, digits, spaces and `_`.  Every
+generator already did that; the hand edits did not.
+
 ## Compiling and testing against the real WADs
 
 ```bat

@@ -20,6 +20,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+/* The rebuild's own diagnostics (and the stubs' self-reports) use fprintf/stderr.  This
+ * is safe for `FILE` too: the binary's own layout is `groove_FILE` below, and nothing in
+ * the generated code touches <stdio.h>'s opaque `FILE` any more. */
+#include <stdio.h>
 
 /* The decompiled code calls Win32 APIs and uses their types (DWORD, PVOID,
  * HANDLE, RaiseException, RtlUnwind, ...).  Lean out windows.h and keep its

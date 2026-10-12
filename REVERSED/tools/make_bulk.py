@@ -407,6 +407,45 @@ def main() -> int:
         with ov_path.open(encoding="utf-8") as fh:
             type_overrides = {r["name"]: r["type"] for r in csv.DictReader(fh)}
 
+    # the functions this rebuild contains: an initialised function pointer in the
+    # original's data can be re-pointed at the rebuilt one when its address matches
+    body_names = set(bodies)
+
+    # Pointers *inside* the original's data.  A slot that holds the address of another
+    # datum - a string table, a vtable, an array - is initialised numerically otherwise,
+    # and the rebuild relocates that target, so the number would point at the wrong byte.
+    # Pulling the target into the referenced set gives it a definition and a declaration,
+    # and then the initialiser can be the symbol the linker fixes up.
+    promoted = 0
+    for a in list(referenced):
+        size = data.get(a, (None, 4, None))[1]
+        try:
+            raw = exe.read(a, min(size, 4))
+        except ValueError:
+            continue
+        if len(raw) < 4:
+            continue
+        v = struct.unpack("<I", raw)[0]
+        if v in data and v not in referenced and not data[v][2] == "string":
+            referenced.setdefault(v, set()).add(data[v][0])
+            promoted += 1
+        elif v in data and v not in referenced and data[v][2] == "string":
+            referenced.setdefault(v, set()).add(data[v][0])
+            promoted += 1
+    if promoted:
+        print(f"  note: {promoted} datum(s) are pointer targets inside the original's "
+              f"data and were pulled in as referenced")
+
+    # A datum the code *assigns* is runtime state, not a constant: the heap allocator's
+    # head (0x586584) holds `d2 33 e0 33` in the file, but at run time it is whatever the
+    # allocator put there, and initialising it with the file's bytes made every allocation
+    # return that number as a pointer - the differential harness caught it (3 failures,
+    # was 1).  So the initial value is only used for data no body writes.
+    written: set[str] = set()
+    for body in bodies.values():
+        for name in set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b\s*(?:\[[^\]]*\])?\s*(?:\.[A-Za-z_]+\s*)?=(?!=)", body)):
+            written.add(name)
+
     defs: list[str] = []
     decls: list[str] = []
     for a in sorted(referenced):
@@ -436,7 +475,13 @@ def main() -> int:
                 if IDENT_RE.match(other):
                     decls.append(f"#define {other} {canonical}")
             continue
-        if canonical in funcptr_syms:
+        if _dt == "pointer" or _dt.endswith("*"):
+            # Ghidra's own symbol table says this datum holds an address.  That is
+            # evidence the usage heuristics were ignoring: `PTR_s_Inserire_il_CD_...` was
+            # typed `int`, so a string-table pointer was initialised as the *number*
+            # 0x579BD0 - which is the game main's crash (it hands that to MessageBoxA).
+            ctype = "unsigned int *"
+        elif canonical in funcptr_syms:
             # the code calls through it - `(*DAT_x)(...)` - so it holds a function
             # address; which flavour depends on who fills it in (see above).
             ctype = "FARPROC" if canonical in win32ptr_syms else "code *"
@@ -458,18 +503,124 @@ def main() -> int:
             ctype = "unsigned short"
         else:
             ctype = "unsigned char"
+        def target_bytes(v: int, cap: int = 512) -> bytes | None:
+            """A NUL-terminated, printable string at `v` in the original's image, if any.
+
+            Used for pointer slots whose target has no symbol: those are string tables,
+            and the string is what the code will dereference.
+            """
+            sec = exe.section_for_rva(v - exe.image_base)
+            if sec is None or sec.is_code:
+                return None
+            try:
+                raw = exe.read(v, cap)
+            except ValueError:
+                return None
+            end = raw.find(b"\0")
+            if end < 1:
+                return None
+            text = raw[:end]
+            if not all(0x20 <= b < 0x7F for b in text):
+                return None
+            return text + b"\0"
+
+        def initial(a: int, n: int) -> bytes:
+            """The datum's initial value, read out of groove.exe.
+
+            Everything except strings and floats used to be emitted *zero*, and the
+            original's data section is not all zero: 0x583374 holds two floats, 0x585A68
+            holds 500, 0x5846E4 another float pair.  A rebuild that computes those
+            constants as 0 gets wrong values - and where a table entry or a divisor is
+            involved, faults.  Slots in the image's BSS read as zero in the original as
+            well (checked: 0x581168, 0x58115C), so nothing changes for those.
+            """
+            # Only a *data* section holds initialised values.  Some symbols the table
+            # places in `.text` (and some it places nowhere) were read as code bytes:
+            # 0x33E033D2 is two `xor` instructions, and initialising the allocator's
+            # cursor with that made every allocation return garbage - the differential
+            # harness caught it (3 failures, was 1).
+            sec = exe.section_for_rva(a - exe.image_base)
+            if sec is None or sec.is_code:
+                return b""
+            try:
+                return exe.read(a, n)
+            except ValueError:
+                return b""
+
         if size > 4 and not ctype.endswith("*"):
             # a multi-byte datum is an array in the original; declaring it as one
             # scalar would let the code (and the harness) write past its storage
             elem = {8: "long long", 4: "int"}.get(4, "int")
             count = max(1, (size + 3) // 4)
-            defs.append(f"{elem} {canonical}[{count}];   /* 0x{a:08X}, {size} byte(s) */")
+            raw = b"" if (referenced[a] & written) else initial(a, 4 * count)
+            raw = raw.ljust(4 * count, b"\0")
+            if any(raw):
+                vals = struct.unpack(f"<{count}i", raw)
+                defs.append(f"{elem} {canonical}[{count}] = "
+                            f"{{{', '.join(str(v) for v in vals)}}};"
+                            f"   /* 0x{a:08X}, {size} byte(s), initial value from groove.exe */")
+            else:
+                defs.append(f"{elem} {canonical}[{count}];   /* 0x{a:08X}, {size} byte(s) */")
             decls.append(f"extern {elem} {canonical}[{count}];")
             for other in sorted(referenced[a] - {canonical}):
                 if IDENT_RE.match(other):
                     decls.append(f"#define {other} {canonical}")
             continue
-        defs.append(f"{ctype} {canonical};   /* 0x{a:08X}, {size} byte(s) */")
+        spellings = referenced[a]
+        if spellings & written:
+            raw = b""            # runtime state: the file's bytes are not its initial value
+        else:
+            raw = initial(a, size)
+        value = struct.unpack("<I", raw.ljust(4, b"\0"))[0] if raw else 0
+        if ctype.startswith(("code", "FARPROC")):
+            # a function-pointer slot: the original's value is an address in the original
+            # image, so initialise it *symbolically* when the target is a function that
+            # this rebuild also contains - otherwise leave it alone (the code assigns
+            # these before calling through them).
+            target = f"sub_{value:06X}" if value >= 0x400000 and f"sub_{value:06X}" in body_names else None
+            if target:
+                defs.append(f"{ctype} {canonical} = ({ctype})&{target};"
+                            f"   /* 0x{a:08X}, initial function pointer from groove.exe */")
+            else:
+                defs.append(f"{ctype} {canonical};   /* 0x{a:08X}, {size} byte(s) */")
+        elif value and ctype.endswith("*"):
+            # a pointer that points *inside* the image: symbol when the target is one of
+            # the data symbols, numeric otherwise (neither is safe to dereference, but
+            # the symbolic form is what the linker can fix up)
+            tname = data.get(value)
+            if tname and value in referenced:
+                # the target is one of the symbols this translation unit defines, so the
+                # symbolic form is both legal and linkable
+                tname = renames.get(tname[0], tname[0])
+                defs.append(f"{ctype} {canonical} = ({ctype})&{tname};"
+                            f"   /* 0x{a:08X}, initial pointer from groove.exe */")
+            else:
+                # Either the target has no symbol here, or it has one this unit does not
+                # define (the promotion above covers the common case; this is the rest,
+                # and picking `&name` for an undefined name is exactly the C2065 that
+                # stopped the build).  Materialise what it pointed at instead. - a
+                # string table entry, typically (`PTR_s_Inserire_il_CD_..._0057ba3c =
+                # 0x579BD0`).  Keeping the number points at whatever the rebuild has at
+                # that address, which is how the game's main crashed: it hands the value
+                # to MessageBoxA as the message text.  So materialise the bytes it pointed
+                # at and point at *those*.
+                text = target_bytes(value)
+                if text:
+                    safe = f"groove_str_{value:08X}"
+                    defs.append(f"const char {safe}[] = "
+                                f"{{{','.join(str(b) for b in text)}}};"
+                                f"   /* 0x{value:06X}, {len(text)} byte(s), string from groove.exe */")
+                    decls.append(f"extern const char {safe}[];")
+                    defs.append(f"{ctype} {canonical} = ({ctype}){safe};"
+                                f"   /* 0x{a:08X}, initial pointer to a materialised string */")
+                else:
+                    defs.append(f"{ctype} {canonical} = ({ctype})0x{value:X};"
+                                f"   /* 0x{a:08X}, initial value from groove.exe */")
+        elif value and not ctype.endswith("*"):
+            defs.append(f"{ctype} {canonical} = 0x{value:X};"
+                        f"   /* 0x{a:08X}, {size} byte(s), initial value from groove.exe */")
+        else:
+            defs.append(f"{ctype} {canonical};   /* 0x{a:08X}, {size} byte(s) */")
         decls.append(f"extern {ctype} {canonical};")
         for other in sorted(referenced[a] - {canonical}):
             # only spellings that are legal macro names can be aliased; the others

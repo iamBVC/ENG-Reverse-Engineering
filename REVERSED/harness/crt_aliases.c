@@ -52,6 +52,14 @@ char *_strrchr(const char *s, int c) { return strrchr(s, c); }
 double fcos(double x) { return cos(x); }
 double fsin(double x) { return sin(x); }
 
+/* ---- the MSVC 6 stack probe -------------------------------------------
+ * IDA's listing names the call: `sub_405960` calls `__alloca_probe` where the decompiled
+ * body calls `sub_562840()`.  A rebuild does not need it - the modern compiler emits its
+ * own probe for a frame that size, and the callers only ever call it for that - so the
+ * faithful implementation here is a no-op.  It is the first of the Ghidra-only stubs in
+ * the CRT region whose *name* can be recovered from the listing's call sites. */
+void sub_562840(void) { }
+
 /* ---- x87 conversions: their convention is the point -------------------- */
 int __declspec(naked) __ftol()
 {

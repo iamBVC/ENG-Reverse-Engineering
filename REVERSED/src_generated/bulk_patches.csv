@@ -301,4 +301,46 @@ sub_40F290,"void sub_40F290(int param_1,undefined4 param_2,undefined4 param_3)",
 sub_43B080,"void sub_43B080(int *param_1,int param_2)","void sub_43B080(int *param_1,int param_2, int unused_arg_2, int unused_arg_3, int unused_arg_4)"
 sub_562F18,int sub_562F18(code *UNRECOVERED_JUMPTABLE),"int sub_562F18(code *UNRECOVERED_JUMPTABLE, int unused_arg_1)"
 sub_562F4C,"void sub_562F4C(undefined4 param_1,code *UNRECOVERED_JUMPTABLE)","void sub_562F4C(undefined4 param_1,code *UNRECOVERED_JUMPTABLE, int unused_arg_2)"
+sub_405960,undefined4 sub_405960(undefined4 param_1),"undefined4 sub_405960(HKEY param_1,char *param_2,REGSAM param_3)"
+sub_405960,  HKEY in_stack_00001014,  /* param_1: the root key the caller passed (HKEY_LOCAL_MACHINE or _CURRENT_USER) */
+sub_405960,  char *in_stack_00001018,  /* param_2: the subkey path - copied into the local buffer below */
+sub_405960,  REGSAM in_stack_0000101c,"  /* param_3: samDesired, and Ghidra's unnamed stack slots: */ char String[0x800]; char Buffer[0x800]; DWORD dwDisposition; char delim[2] = {0x5c, 0};   /* the ""\"" the listing pushes at 0x570334 */"
+sub_405960,    pcVar7 = in_stack_00001018;,    pcVar7 = param_2;
+sub_405960,    pcVar7 = in_stack_00001018 + 1;,    pcVar7 = param_2 + 1;
+sub_405960,    cVar1 = *in_stack_00001018;,    cVar1 = *param_2;
+sub_405960,    in_stack_00001018 = pcVar7;,    param_2 = pcVar7;
+sub_405960,if (in_stack_00001014 == (HKEY)0x80000002) {,if (param_1 == (HKEY)0x80000002) {
+sub_405960,else if (in_stack_00001014 == (HKEY)0x80000001) {,else if (param_1 == (HKEY)0x80000001) {
+sub_405960,if (hKey != in_stack_00001014) {,if (hKey != param_1) {
+sub_405960,  pcVar8 = &stack0x00000810;,  pcVar8 = String;
+sub_405960,        pcVar8 = &stack0x00000010;,        pcVar8 = Buffer;
+sub_405960,(LPDWORD)&stack0x0000000c);,(LPDWORD)&dwDisposition);
 sub_562F53,"void sub_562F53(undefined4 param_1,code *UNRECOVERED_JUMPTABLE)","void sub_562F53(undefined4 param_1,code *UNRECOVERED_JUMPTABLE, int unused_arg_2)"
+sub_405960,"in_stack_0000101c,","param_3,"
+sub_405960,    lpSubKey = (LPCSTR)sub_56279D();,"    lpSubKey = (LPCSTR)sub_56279D((byte *)0x0,(byte *)delim);"
+sub_405960,  lpSubKey = (LPCSTR)sub_56279D();,"  lpSubKey = (LPCSTR)sub_56279D((byte *)String,(byte *)delim);"
+sub_41D350,DAT_0058115c = sub_41BCB0();,DAT_0058115c = sub_41BCB0((int)pvVar5);
+sub_41D350,DAT_00581160 = sub_41BCB0();,DAT_00581160 = sub_41BCB0((int)pvVar5);
+sub_41D350,"sub_41BCF0(0,0,0,0xff);","sub_41BCF0(0,0,0,0,0xff);"
+sub_41D350,cVar3 = sub_41DC10();,"cVar3 = sub_41DC10();
+  fprintf(stderr, ""[main] A\n""); fflush(stderr);"
+sub_41D350,sub_41C050();,"sub_41C050();
+      fprintf(stderr, ""[main] B\n""); fflush(stderr);"
+sub_41D350,cVar3 = sub_556340();,"cVar3 = sub_556340();
+      fprintf(stderr, ""[main] C\n""); fflush(stderr);"
+sub_41D350,sub_41D9C0();,"sub_41D9C0();
+        fprintf(stderr, ""[main] D\n""); fflush(stderr);"
+sub_41D350,cVar3 = sub_41DC40(param_1);,"cVar3 = sub_41DC40(param_1);
+        fprintf(stderr, ""[main] E\n""); fflush(stderr);"
+sub_41D350,sub_424590();,"sub_424590();
+                fprintf(stderr, ""[main] F\n""); fflush(stderr);"
+sub_41D350,cVar3 = sub_40FE30();,"cVar3 = sub_40FE30();
+                fprintf(stderr, ""[main] G\n""); fflush(stderr);"
+sub_41D350,sub_41F630(s_disneylogompeg_dat_00572528);,"sub_41F630(s_disneylogompeg_dat_00572528);
+                  fprintf(stderr, ""[main] H\n""); fflush(stderr);"
+sub_41D350,DAT_00581168 = operator_new(0x2c);,"DAT_00581168 = operator_new(0x2c);
+                  fprintf(stderr, ""[main] I\n""); fflush(stderr);"
+sub_41D350,sub_41D340();,"sub_41D340();
+                  fprintf(stderr, ""[main] J\n""); fflush(stderr);"
+sub_41D350,sub_419460();,"sub_419460();
+                  fprintf(stderr, ""[main] K\n""); fflush(stderr);"
