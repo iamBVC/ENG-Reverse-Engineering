@@ -151,8 +151,10 @@ int    _strncmp(const char *a, const char *b, size_t n);
 char  *_strncpy(char *d, const char *s, size_t n);
 int    _strcmpi(const char *a, const char *b);
 char  *_strrchr(const char *s, int c);
-double _fcos(double x);
-double _fsin(double x);
+/* NB the spelling is the *C identifier*, taken from the linker's symbol: the log's
+ * `_fcos` is the symbol for a C name `fcos`, so the definition is `fcos`. */
+double fcos(double x);
+double fsin(double x);
 /* Both of these are called with *and* without an argument in the decompiled source
  * (Ghidra lost the x87 operand at most sites), so the argument list is left
  * unspecified: `f()` accepts any arity, verified. */

@@ -148,7 +148,6 @@ sub_56C18E,void sub_56C18E(,int sub_56C18E(
 sub_56C1BC,void sub_56C1BC(,int sub_56C1BC(
 sub_56CFCA,void sub_56CFCA(,int sub_56CFCA(
 sub_56D0A0,void sub_56D0A0(,int sub_56D0A0(
-sub_43B080,"void sub_43B080(int *param_1,int param_2)","void sub_43B080(int *param_1,int param_2, int unused_arg_2, int unused_arg_3, int unused_arg_4)"
 sub_410700,_DAT_00583388 = (float)DAT_00583374;,_DAT_00583388 = (float)(int)DAT_00583374;
 sub_4146B0,fVar1 = (float)DAT_00583374;,fVar1 = (float)(int)DAT_00583374;
 sub_414780,fVar2 = (float)DAT_00583374;,fVar2 = (float)(int)DAT_00583374;
@@ -229,10 +228,77 @@ sub_42AC50,switch(local_c) {,switch((unsigned int)local_c) {
 sub_42AC50,case (uint *)0x,case 0x
 sub_42AC50,iVar9 = __ftol();,iVar9 = (int)(*(float *)&local_18 + 0.5f);
 sub_42AC50,iVar10 = __ftol();,iVar10 = (int)(*(float *)&local_1c - 0.5f);
-sub_5632EA,*param_1 = &type_info::vftable;,"*param_1 = (undefined4 *)0x56E760;"
-sub_5632FF,sub_5632EA();,"sub_5632EA(param_1);"
-sub_56D5AC,exception::~exception(param_1);,"sub_56D64F(param_1);"
+sub_5632EA,*param_1 = &type_info::vftable;,*param_1 = (undefined4 *)0x56E760;
+sub_5632FF,sub_5632EA();,sub_5632EA(param_1);
+sub_56D5AC,exception::~exception(param_1);,sub_56D64F(param_1);
 sub_56D5AC,"exception * __thiscall sub_56D5AC(exception *param_1,byte param_2)","undefined4 * __thiscall sub_56D5AC(undefined4 *param_1,byte param_2)"
 sub_56BB21,iVar1 = sub_56B9F4();,"iVar1 = sub_56B9F4(param_1,param_2);"
 sub_56CD4A,"fVar5 = (float10)sub_56BA4E(*param_2,&local_8);","fVar5 = (float10)sub_56BA4E(*(uint *)param_2,*((uint *)param_2 + 1),&local_8);"
-sub_5628EB,undefined4 sub_5628EB(FILE *param_1),"undefined4 sub_5628EB(groove_FILE *param_1)"
+sub_5628EB,undefined4 sub_5628EB(FILE *param_1),undefined4 sub_5628EB(groove_FILE *param_1)
+sub_408390,void sub_408390(void),"void sub_408390(undefined4 param_1,undefined4 param_2,undefined4 param_3,undefined1 *param_4)"
+sub_408390,undefined1 *in_stack_00000010,/* arg_C: the 4th argument (unnamed in the decompilation) */
+sub_408390,*in_stack_00000010 = 0xff;,*param_4 = 0xff;
+sub_427FF0,uint sub_427FF0(void),uint sub_427FF0()
+sub_41BF30,    sub_41BEE0();,    sub_41BEE0((float *)*(int *)param_1);
+sub_41BF30,  sub_41BEE0();,  sub_41BEE0((float *)param_1);
+sub_41E1C0,"    sub_402910(0x3f800000,0x3f800000);","    sub_402910((int)DAT_00581168,0x3f800000,0x3f800000);"
+sub_41A440,"  sub_402910(0x3f800000,0x3f800000);","  sub_402910((int)DAT_00581168,0x3f800000,0x3f800000);"
+sub_406740,undefined * sub_406740(void),undefined * sub_406740()
+sub_41A920,sub_402960();,sub_402960((int)DAT_00581168);
+sub_41FB30,"sub_41BDB0(param_2 + 3,local_3c,6);","sub_41BDB0((int)DAT_0058115c, param_2 + 3,local_3c,6);"
+sub_42C460,sub_41BCC0(*(undefined4 *)(*(int *)(param_1 + 0x60) + iVar1 * 4));,"sub_41BCC0((int)DAT_0058115c, *(undefined4 *)(*(int *)(param_1 + 0x60) + iVar1 * 4));"
+sub_42C460,sub_41BCC0(DAT_00581164);,"sub_41BCC0((int)DAT_0058115c, DAT_00581164);"
+sub_40FE30,"uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834,0);","uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834);"
+sub_40FE30,"uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834,0);","uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834);"
+sub_40FE30,"sub_4057C0(s_ScreenBPP_0057176c,0x42000000,0);","sub_4057C0(s_ScreenBPP_0057176c,0x42000000);"
+sub_40FE30,"sub_4057C0(s_ScreenW_00571764,0x44200000,0);","sub_4057C0(s_ScreenW_00571764,0x44200000);"
+sub_40FE30,"sub_4057C0(s_ScreenH_0057175c,0x43f00000,0);","sub_4057C0(s_ScreenH_0057175c,0x43f00000);"
+sub_40FE30,"sub_4057C0(s_SoftwareScreenBPP_00571748,0x42000000,0);","sub_4057C0(s_SoftwareScreenBPP_00571748,0x42000000);"
+sub_40FE30,"sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000,0);","sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000);"
+sub_40FE30,"sub_4057C0(s_SoftwareScreenH_00571728,0x43480000,0);","sub_4057C0(s_SoftwareScreenH_00571728,0x43480000);"
+sub_40FF40,"uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834,0);","uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834);"
+sub_40FF40,"uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834,0);","uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834);"
+sub_410330,"uVar1 = sub_405720(*(undefined4 *)(DAT_00583420 + 0xc),0);",uVar1 = sub_405720(*(undefined4 *)(DAT_00583420 + 0xc));
+sub_410330,"uVar1 = sub_405720(*(undefined4 *)(DAT_00583424 + 0xc),0);",uVar1 = sub_405720(*(undefined4 *)(DAT_00583424 + 0xc));
+sub_410330,"sub_405870(s_SoftwareScreenBPP_00571748,*(undefined4 *)(DAT_00583428 + 0xc),0);","sub_405870(s_SoftwareScreenBPP_00571748,*(undefined4 *)(DAT_00583428 + 0xc));"
+sub_410330,"sub_405870(s_SoftwareScreenW_00571738,*(undefined4 *)(DAT_0058342c + 0xc),0);","sub_405870(s_SoftwareScreenW_00571738,*(undefined4 *)(DAT_0058342c + 0xc));"
+sub_410330,"sub_405870(s_SoftwareScreenH_00571728,*(undefined4 *)(DAT_0058342c + 0x10),0);","sub_405870(s_SoftwareScreenH_00571728,*(undefined4 *)(DAT_0058342c + 0x10));"
+sub_410330,"sub_405870(s_ScreenBPP_0057176c,*(undefined4 *)(DAT_00583428 + 0xc),0);","sub_405870(s_ScreenBPP_0057176c,*(undefined4 *)(DAT_00583428 + 0xc));"
+sub_410330,"sub_405870(s_ScreenW_00571764,*(undefined4 *)(DAT_0058342c + 0xc),0);","sub_405870(s_ScreenW_00571764,*(undefined4 *)(DAT_0058342c + 0xc));"
+sub_410330,"sub_405870(s_ScreenH_0057175c,*(undefined4 *)(DAT_0058342c + 0x10),0);","sub_405870(s_ScreenH_0057175c,*(undefined4 *)(DAT_0058342c + 0x10));"
+sub_4114F0,"sub_4057C0(s_ScreenBPP_0057176c,0x41800000,0);","sub_4057C0(s_ScreenBPP_0057176c,0x41800000);"
+sub_4114F0,"sub_4057C0(s_ScreenW_00571764,0x44200000,0);","sub_4057C0(s_ScreenW_00571764,0x44200000);"
+sub_4114F0,"sub_4057C0(s_ScreenH_0057175c,0x43f00000,0);","sub_4057C0(s_ScreenH_0057175c,0x43f00000);"
+sub_4114F0,"sub_4057C0(s_SoftwareScreenBPP_00571748,0x41800000,0);","sub_4057C0(s_SoftwareScreenBPP_00571748,0x41800000);"
+sub_4114F0,"sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000,0);","sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000);"
+sub_4114F0,"sub_4057C0(s_SoftwareScreenH_00571728,0x43480000,0);","sub_4057C0(s_SoftwareScreenH_00571728,0x43480000);"
+sub_415690,"pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0,0);","pcVar2 = (char *)sub_405790(s_HDPath_00571d94,0);"
+sub_415690,"pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0,0);","pcVar2 = (char *)sub_405790(s_CDPath_00571d8c,0);"
+sub_4170E0,"sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0,0);","sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0);"
+sub_4196D0,"sub_40F060(PTR_DAT_005724dc + 0x18,PTR_DAT_005724dc + 0x118);",sub_40F060(PTR_DAT_005724dc + 0x18);
+sub_419A60,"sub_405800(local_104,local_170,0);","sub_405800(local_104,local_170);"
+sub_419BD0,"pcVar5 = (char *)sub_405790(local_104,0,0);","pcVar5 = (char *)sub_405790(local_104,0);"
+sub_419BD0,"iVar1 = sub_405790(local_104,0,0);","iVar1 = sub_405790(local_104,0);"
+sub_41ABC0,"sub_4057C0(s_MusicVolume_00571f48,0x41200000,0);","sub_4057C0(s_MusicVolume_00571f48,0x41200000);"
+sub_41ABC0,"sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000,0);","sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000);"
+sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0,0);","uVar1 = sub_405790(s_HDPath_00571d94,0);"
+sub_41C0E0,"uVar1 = sub_405790(s_HDPath_00571d94,0,0);","uVar1 = sub_405790(s_HDPath_00571d94,0);"
+sub_41CB00,"sub_4057C0(s_SoundVolume_00571f30,0x43000000,0);","sub_4057C0(s_SoundVolume_00571f30,0x43000000);"
+sub_41CB00,"sub_4057C0(s_MusicVolume_00571f48,0x43000000,0);","sub_4057C0(s_MusicVolume_00571f48,0x43000000);"
+sub_41CBE0,"uVar1 = sub_405790(s_HDPath_00571d94,0,0);","uVar1 = sub_405790(s_HDPath_00571d94,0);"
+sub_424590,"sub_4057C0(ppuVar3[1],(float)*(int *)*ppuVar3,0);","sub_4057C0(ppuVar3[1],(float)*(int *)*ppuVar3);"
+sub_424590,"fVar4 = (float10)sub_4057C0(ppuVar3[1],*(undefined4 *)*ppuVar3,0);","fVar4 = (float10)sub_4057C0(ppuVar3[1],*(undefined4 *)*ppuVar3);"
+sub_424590,"fVar4 = (float10)sub_4057C0(ppuVar3[1],(float)(byte)**ppuVar3,0);","fVar4 = (float10)sub_4057C0(ppuVar3[1],(float)(byte)**ppuVar3);"
+sub_424680,"sub_405870(ppuVar3[1],uVar2,0);","sub_405870(ppuVar3[1],uVar2);"
+sub_424680,"sub_405830(ppuVar3[1],*(undefined4 *)*ppuVar3,0);","sub_405830(ppuVar3[1],*(undefined4 *)*ppuVar3);"
+sub_43CB40,"sub_4057C0(s_FrameAdvanceDelay_00578348,0x3f800000,0);","sub_4057C0(s_FrameAdvanceDelay_00578348,0x3f800000);"
+sub_43CB40,"uVar3 = sub_415690(local_180,local_80,DAT_00583374,DAT_00583378);","uVar3 = sub_415690(local_180,local_80);"
+sub_54DE00,"sub_546B70(DAT_00586430,0);",sub_546B70(DAT_00586430);
+sub_550E60,"iVar3 = sub_546600(DAT_006d94b4,0);",iVar3 = sub_546600(DAT_006d94b4);
+sub_40E4F0,void sub_40E4F0(int param_1),"void sub_40E4F0(int param_1, int unused_arg_1)"
+sub_40F060,undefined4 sub_40F060(undefined4 param_1),"undefined4 sub_40F060(undefined4 param_1, int unused_arg_1)"
+sub_40F290,"void sub_40F290(int param_1,undefined4 param_2,undefined4 param_3)","void sub_40F290(int param_1,undefined4 param_2,undefined4 param_3, int unused_arg_3)"
+sub_43B080,"void sub_43B080(int *param_1,int param_2)","void sub_43B080(int *param_1,int param_2, int unused_arg_2, int unused_arg_3, int unused_arg_4)"
+sub_562F18,int sub_562F18(code *UNRECOVERED_JUMPTABLE),"int sub_562F18(code *UNRECOVERED_JUMPTABLE, int unused_arg_1)"
+sub_562F4C,"void sub_562F4C(undefined4 param_1,code *UNRECOVERED_JUMPTABLE)","void sub_562F4C(undefined4 param_1,code *UNRECOVERED_JUMPTABLE, int unused_arg_2)"
+sub_562F53,"void sub_562F53(undefined4 param_1,code *UNRECOVERED_JUMPTABLE)","void sub_562F53(undefined4 param_1,code *UNRECOVERED_JUMPTABLE, int unused_arg_2)"

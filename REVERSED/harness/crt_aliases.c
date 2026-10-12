@@ -26,9 +26,13 @@
 void *_malloc(size_t n) { return malloc(n); }
 void  _free(void *p) { free(p); }
 
-/* the C++ operator new the game's own allocator calls (see sub_41EEA0); the
-   hand-ported track already made this decision: malloc/free are equivalent here */
+/* `operator_new` belongs here as much as malloc does, but harness/io_substitutes.c
+   defines its own copy (backed by malloc) for the two harness builds, and two
+   definitions of one symbol is a link error - so the harness build defines the guard
+   below on its command line and this file only supplies the exe's copy. */
+#ifndef GROOVE_IO_SUBSTITUTES
 void *operator_new(unsigned int n) { return malloc(n); }
+#endif
 
 /* ---- memory / string --------------------------------------------------- */
 void *_memset(void *d, int c, size_t n) { return memset(d, c, n); }
@@ -42,8 +46,11 @@ int _strcmpi(const char *a, const char *b) { return _stricmp(a, b); }
 char *_strrchr(const char *s, int c) { return strrchr(s, c); }
 
 /* ---- x87 math helpers -------------------------------------------------- */
-double _fcos(double x) { return cos(x); }
-double _fsin(double x) { return sin(x); }
+/* Named `fcos`/`fsin`, not `_fcos`/`_fsin`: MSVC decorates a C name with one leading
+   underscore, so the identifier that produces the symbol `_fcos` is `fcos` (the linker
+   log is the evidence - it lists the decorated form). */
+double fcos(double x) { return cos(x); }
+double fsin(double x) { return sin(x); }
 
 /* ---- x87 conversions: their convention is the point -------------------- */
 int __declspec(naked) __ftol()

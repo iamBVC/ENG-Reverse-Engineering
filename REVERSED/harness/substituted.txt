@@ -1,0 +1,22 @@
+# Functions the *harness* supplies itself, so they must not come from the bulk.
+#
+# harness/io_substitutes.c defines these six, because the drivers feed a chunk from a
+# memory buffer rather than a FILE: the four stream wrappers are the only place that
+# reaches the file system, so replacing them is what makes the loaders drivable at all.
+#
+# Two consequences if the bulk's own versions are linked instead:
+#   * duplicate definitions (LNK2005) if io_substitutes.c is linked too, and
+#   * the drivers hand a memory pointer to the real `fread` wrapper - which is how the
+#     MAP driver against the bulk DLL crashed with exit 0xC0000005 (measured).
+#
+# So tools/make_dll_source.py removes them from the chunk set used for the DLL, and the
+# tests run against 962 of the 968 functions with these six substituted.
+
+sub_415A90      # fread(Buffer, ElementSize, 1, Stream) - the stream wrappers
+sub_415AB0      # fread(Buffer, 4, 1, Stream)
+sub_415AD0      # fread(Buffer, 1, 1, Stream)
+sub_415AF0      # fread(Buffer, 2, 1, Stream)
+sub_562941      # string free: the harness needs its own for buffers it owns
+
+# operator_new is *not* listed: it is not a `sub_XXXX` name, so make_bulk never emits
+# its body either - io_substitutes.c has always been the only definition in both builds.

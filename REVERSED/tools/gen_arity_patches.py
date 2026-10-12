@@ -72,6 +72,16 @@ def split_top_level(text: str) -> list[str]:
     return parts
 
 
+def split_params(sig: str) -> list[str]:
+    """The parameter list of a definition line, as separate parameters."""
+    if "(" not in sig or ")" not in sig:
+        return []
+    args = sig[sig.index("(") + 1:sig.rindex(")")].strip()
+    if not args or args == "void":
+        return []
+    return split_top_level(args)
+
+
 def chunk_owners(fname: str) -> tuple[list[str], dict[int, str]]:
     """(lines, line number -> function name) for one generated chunk."""
     try:

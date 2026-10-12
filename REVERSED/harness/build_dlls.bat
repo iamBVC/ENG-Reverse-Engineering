@@ -43,7 +43,24 @@ rem `__imp__*` symbols - an import-address entry cannot be expressed as a C symb
 rem (`@` is not legal in an identifier), so the library is the only route.  ddraw.lib
 rem ships with the Windows SDK; DirectInput and Miles (mss32) do not, so those stay
 rem stubs.
-set "SYSLIBS=User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib WinMM.lib Shell32.Lib ComCtl32.Lib Version.lib ddraw.lib"
+rem Kernel32.lib is spelled out because the exe link needs it for the file/process calls
+rem the *real* stream wrappers make (CreateFileA, ReadFile, ...), and the DLL link does
+rem not pull those in: its chunk set is the filtered one, where the harness substitutes
+rem the wrappers.
+rem The CRT import libraries are named for the same reason: an exe pulls the runtime's
+rem own startup helpers, and those reference the undecorated names (`_memcpy`, `_cos`)
+rem and their IAT entries (`__imp__malloc`) - measured as 16 unresolved symbols when the
+rem CRT libs were left to the defaults.
+set "SYSLIBS=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib ^
+ WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib ^
+ ucrt.lib msvcrt.lib libvcruntime.lib"
+
+rem The exe is built against the *static* CRT instead: with the DLL CRT its own runtime
+rem helpers come from objects that expect the static implementations, and 14 of them
+rem (`_memcpy`, `_cos`, `__imp__malloc`, ...) stay unresolved (measured).  /MT is fine for
+rem a single-image rebuild - nothing crosses a runtime boundary there.
+set "SYSLIBS_EXE=Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.Lib OleAut32.Lib ^
+ WinMM.lib Shell32.lib ComCtl32.Lib Version.lib ddraw.lib libcmt.lib libucrt.lib libvcruntime.lib"
 
 set "MODE=subset"
 if /i "%~1"=="bulk" set "MODE=bulk"
@@ -58,13 +75,26 @@ goto build_subset
 echo === building groove_ghidra.dll (whole bulk: all 968 functions) ===
 rem The bulk keeps every function in the image (measured: /Gy + /OPT:REF does *not*
 rem discard the ones the wrappers cannot reach - a two-function test proved it), so the
-rem ~282 symbols it references but does not define have to be aliased to a stub with
-rem tools\gen_import_stubs.py before this link can succeed.  The first run is expected
-rem to fail and to write the list into build\_ghidra_link.log; that is the input of the
-rem generator.
-cl /nologo /c /TC /W0 /GS- /MD /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
-   "%ROOT%\src_generated\chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
+rem symbols it references but does not define need definitions: the system import
+rem libraries below, plus tools\gen_link_stubs.py for everything else.  That generator
+rem reads build\_bulk_link.log (this link) and build\_exe_link.log, and keeps what it
+rem already stubbed, so a first run that fails is expected only when something new is
+rem unresolved - the list is in src_generated\link_stubs.csv.  The chunk set comes from tools\make_dll_source.py: the same files as
+rem src_generated\chunks, minus the six functions the harness supplies itself
+rem (harness\substituted.txt) - the drivers feed a chunk from memory, so the real stream
+rem wrappers would be handed a FILE* that is not one.
+rem
+rem io_substitutes.c brings those six (plus groove_ftol), crt_aliases.c the rest of the
+rem CRT names, link_stubs.c everything else the bulk references but does not define.
+python "%ROOT%\tools\make_dll_source.py"
+if errorlevel 1 ( popd & exit /b 1 )
+rem /DGROOVE_IO_SUBSTITUTES: io_substitutes.c brings its own operator_new, so
+rem crt_aliases.c must not define a second one in this build (LNK2005).
+cl /nologo /c /TC /W0 /GS- /MD /DGROOVE_IO_SUBSTITUTES ^
+   /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
+   "%ROOT%\build\dll_chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
    "%ROOT%\src_generated\link_stubs.c" "%ROOT%\harness\crt_aliases.c" ^
+   "%ROOT%\harness\io_substitutes.c" ^
    "%ROOT%\harness\wrappers_bulk.c" "%ROOT%\harness\getters_ghidra.c"
 if errorlevel 1 ( popd & exit /b 1 )
 rem import_stubs.obj is deliberately *not* linked: measured, its /alternatename
@@ -72,7 +102,8 @@ rem aliases resolve nothing in this toolchain (see README).  Nothing depended on
 rem the subset link never included it either.
 link /nologo /DLL /OPT:REF /OUT:"%ROOT%\build\groove_ghidra.dll" ^
      chunk_*.obj ghidra_globals.obj link_stubs.obj crt_aliases.obj ^
-     wrappers_bulk.obj getters_ghidra.obj %SYSLIBS% > "_bulk_link.log" 2>&1
+     io_substitutes.obj wrappers_bulk.obj getters_ghidra.obj ^
+     %SYSLIBS% > "_bulk_link.log" 2>&1
 if errorlevel 1 ( echo [!] bulk link incomplete - see build\_bulk_link.log.  Regenerate the & echo     missing definitions with tools\gen_link_stubs.py and build again; the list of what & echo     is still a stub is written to src_generated\link_stubs.csv.  The compile itself & echo     succeeded: the objects are in build\chunk_*.obj & popd & exit /b 1 )
 goto build_hand
 
@@ -89,6 +120,31 @@ if errorlevel 1 ( echo [!] ghidra DLL link failed - see build\_ghidra_link.log &
 goto build_hand
 
 :build_hand
+
+rem In bulk mode the image also gets linked as an exe: the *unfiltered* chunks (the real
+rem stream wrappers, so nothing here is harness-specific) plus the same globals, stubs and
+rem CRT aliases.
+rem
+rem The entry point is NOT /ENTRY:entry.  The original entry is the *MSVC 6 CRT startup*,
+rem which in this image is an excluded artefact body - so overriding the entry with a stub
+rem of it left the runtime's own entry points unresolved (14 symbols).  Instead the modern
+rem CRT keeps its startup (WinMainCRTStartup, since the subsystem is WINDOWS) and
+rem harness\exe_main.c supplies the WinMain it asks for, calling the game's own main
+rem (sub_41D350, which the original startup calls - see that file).
+if not "%MODE%"=="bulk" goto skip_exe
+echo === linking groove_rebuild.exe (all 968 functions, original entry) ===
+if not exist "exe_obj" mkdir "exe_obj"
+cl /nologo /c /TC /W0 /GS- /MT /I"%ROOT%\include" /I"%ROOT%\src_generated" ^
+   "%ROOT%\src_generated\chunks\chunk_*.c" "%ROOT%\src_generated\ghidra_globals.c" ^
+   "%ROOT%\src_generated\link_stubs.c" "%ROOT%\harness\crt_aliases.c" ^
+   "%ROOT%\harness\exe_main.c" /Fo"exe_obj\\"
+if errorlevel 1 ( popd & exit /b 1 )
+link /nologo /SUBSYSTEM:WINDOWS /OUT:"%ROOT%\build\groove_rebuild.exe" ^
+     "exe_obj\*.obj" %SYSLIBS_EXE% > "_exe_link.log" 2>&1
+rem Not fatal: the exe is documented as one library-set short (14 runtime entry points),
+rem and the DLL above - the tested artifact - is already built.  Warn and carry on.
+if errorlevel 1 ( echo [!] exe link incomplete - see build\_exe_link.log; add whatever it & echo     still wants with tools\gen_link_stubs.py - it reads this log too. & echo     Continuing: the DLL is built, the exe is a known gap. )
+:skip_exe
 
 echo === building groove_hand.dll (hand-ported track) ===
 cl /nologo /c /TC /W0 /GS- /MD /I"%ROOT%\include" ^

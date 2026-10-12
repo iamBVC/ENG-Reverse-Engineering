@@ -487,6 +487,194 @@ Result: `968 of 968 functions compile, 0 errors, 0 excluded`.  `failed.txt` is e
 and the `hand patches applied` counter (237) is the check that every recorded patch
 still finds its line.
 
+### The artefact queue: one function done, and what it exposed
+
+The 39 stubbed game functions are the queue (see `src_generated/link_stubs.csv`), and the
+first one is the worked example of how to take one:
+
+**`sub_408390`** (8 bytes, `0x408390`).  Ghidra's body is
+`void sub_408390(void) { *in_stack_00000010 = 0xff; }` - it *wrote* through an argument it
+could not name, so the function was excluded as an artefact.  IDA's listing names it:
+
+```
+sub_408390 proc near
+arg_C= dword ptr  10h          ; the 4th argument
+mov     eax, [esp+arg_C]
+mov     byte ptr [eax], 0FFh
+retn
+```
+
+Three recorded patch rows (signature, the undeclared local, the store) turn it into a
+normal cdecl function with four arguments - and IDA's `arg_*` offsets line up with
+Ghidra's `in_stack_<hex>` offsets, which is what makes this mechanical rather than
+speculative.  Measured: clean subset 968 -> **969**, `needs hand fixing` 50 -> 49,
+`in_stack_` 26 -> 25, and the stub for it disappeared by itself - the next link reported
+LNK2005 ("the real code defines it now") and `gen_link_stubs.py` dropped the row: **157 ->
+156 stubs**.  That is the loop for the remaining 38: patch the body, and the stub list
+shrinks without anyone editing it.
+
+Doing it also exposed something worth knowing about the *metric*.
+
+### The compile metric depends on chunk size (measured)
+
+`compile_check.py` splits the subset into 40-function units, because MSVC gives up after
+~100 errors per translation unit.  The side effect: a function's *definition* is only
+visible to the call sites that happen to share its chunk, so arity mismatches between
+different chunks stay invisible.  Adding `sub_408390` to the clean set shifted the chunk
+boundaries and seven previously-hidden errors appeared at once.
+
+The honest numbers, both measured on the same source tree:
+
+```
+--chunk 40  (the normal measure)      969 functions, 0 errors
+--chunk 480 (every definition visible) 969 functions, 928 clean, 108 errors:
+                                       C2197 x69  (call passes *more* than declared)
+                                       C2198 x38  (call passes *fewer* - a real bug)
+                                       C2440 x1
+                                       in 41 functions, across 15 + 19 distinct callees
+```
+
+The 38 `C2198` are the ones that matter: in the chunked build the callee is elsewhere and
+silently reads whatever the missing parameters left on the stack, so those are behavioural
+bugs in the linked image, not just metric noise.  They are the same class the earlier
+rounds fixed by hand (dropped `this`, a `double` passed as two dwords, a `(void)`
+definition that should be `()`), so the fixes are one rule each - and the grouping above is
+already the plan: 19 callees need their argument restored or their parameter list
+reconciled, 15 need `(void)` -> `()` or widening.  Re-run `compile_check.py --chunk 480`
+after any change that shifts the clean set: it is the only measurement that sees them.
+
+### The arity queue: 106 -> 34 errors, and three tools
+
+**The arbiter is IDA's argument count.**  For a `cdecl` function every argument is on the
+stack, so the listing's `args` list is the complete parameter list - and when it disagrees
+with a call site, the call site is what is wrong.  That rule settles the ping-pong between
+"passes more" and "passes fewer", and both directions are now generated:
+
+* `[tools/gen_trim_patches.py]` drops the *trailing* arguments a callee never reads
+  (verified per callee: `sub_4057C0`'s body mentions only `param_1`/`param_2`, and IDA says
+  two) - 47 rows;
+* `[tools/gen_arity_patches.py]` widens the definition when IDA says it reads *more* than
+  Ghidra declared - 7 more rows in the last pass.
+
+The two generators below read the full-visibility log and write recorded rows:
+
+* [`tools/gen_arity_patches.py`](tools/gen_arity_patches.py) - the "call passes *more* than
+declared" side: widen the callee, or emit `()` when its definition is `(void)`.  One run
+removed **all 69** `C2197` errors (16 rows).
+* [`tools/gen_this_patches.py`](tools/gen_this_patches.py) - the "call passes *fewer*" side,
+where the missing argument has to come from the binary: it takes the callee's convention
+from the *decompiled* source (a recorded patch can rewrite the chunk's line - the
+`sub_41BCB0` return-type fix dropped its `__fastcall`), translates the caller's listing
+(`mov ecx, dword_581168` -> `DAT_00581168`), and only prepends the caller's own `param_1`
+when the caller is a member function *and* nothing touches `ecx` before the call.  4 rows,
+every one the same `DAT_0058115c`/`DAT_00581168` object - the same shape the hand-written
+`sub_402910` fix used, which is the consistency check that matters.
+
+Measured on the same tree, over three passes until both generators stopped adding rows:
+**106 -> 34 errors** - `C2198` 33 (the genuine dropped-argument sites), `C2440` 1, and
+`C2197` 69 -> 0 twice over (widening, then reverting the widenings IDA disagreed with and
+trimming their call sites instead).  The normal `--chunk 40` measure stayed at **969 clean
+/ 0 errors** throughout, so the linked image was never left broken.
+
+Both generators cost a round by breaking the *normal* build while the full-visibility
+number looked good, and both bugs are worth knowing:
+
+* the first version rebuilt the call from `(` to `)` and **dropped the trailing `;`** - four
+  `C2146` errors in the normal build, for a patch that looked fine in the full-visibility
+  count;
+* it patched the *line* the error pointed at, which for a call Ghidra wrapped over two
+  lines is half an expression.  It now refuses those sites ("the call spans several lines:
+  not patchable as text") and they join the hand queue.
+
+The lesson is in the numbers, not the prose: after any generated batch, run **both**
+measures - the full one says whether the error is gone, the chunked one says whether
+anything else broke.
+
+### Working the C2198 queue (and what the sites actually are)
+
+[`tools/dropped_arg_report.py`](tools/dropped_arg_report.py) is the queue's working tool:
+take the full-visibility log, group the sites by callee, and print for each one the
+callee's declaration plus the caller's listing up to the call - `mov ecx, ...` immediately
+before the `call` *is* the dropped argument, and its absence means ECX is the caller's own
+incoming `this`.  For callers IDA never defined (they sit inside library regions) it falls
+back to a byte-scan hint, labelled as a hint because an opcode scan can match bytes inside
+another instruction.
+
+Two examples from the current 36 sites, and they are two *different* kinds:
+
+* `sub_402910` (2 sites) - a `__thiscall` callee called with only its two float arguments.
+  Both callers show the same three instructions:
+
+  ```
+  mov ecx, dword_581168      ; the object, loaded from a global
+  call sub_402910
+  ```
+
+  so the restore is `sub_402910((int)DAT_00581168, 0x3f800000, 0x3f800000);` - recorded,
+  measured: the full-visibility error count 108 -> 106, and the normal measure still
+  969 clean / 0 errors.
+* `sub_414600` (5 sites) - *not* a register argument at all.  The listing shows
+  `push esi` / `push offset aCocreateinstan ; "CoCreateInstance(CLSID_AMMultiMediaStre..."`
+  followed by `call sub_414600`: it is a **printf-style logger**, variadic, with the format
+  string as its first argument, and Ghidra dropped the pushed arguments *and* modelled the
+  callee with a single parameter.  These five need the arguments read off the listing one
+  site at a time, the same way the `__ftol` operands do.
+
+So the queue is not one rule but two, and the tool separates them: a dropped register
+argument is a one-line restore, a dropped stack argument to a variadic callee is per-site
+work with the listing open.  Both kinds are recorded in `bulk_patches.csv` like every other
+hand fix.
+
+A second, smaller lesson: the *same* CSV trap as the previous round (a comma inside an
+unquoted `find`/`replace` field) cost another round - the field was truncated mid-comment,
+which left an unterminated `/*` and made the *next* function fail with a syntax error that
+pointed nowhere near the patch.  `make_bulk.py` now counts `/*` against `*/` after patching
+every function and says so, because that class of mistake is invisible in the patch table
+and misleading in the compiler output.
+
+And the 64-bit helpers (`__alldiv`, `__aulldiv`, `__aullrem`, `__allmul`, `__allshl`, 13
+call sites) turned out **not** to be a `__asm` shim away, which was the plan: Ghidra models
+them as one explicit low dword plus the high dword *implicitly in EDX* - the same lost-
+operand class as `__ftol`, whose sites are patched one by one.  The call shapes are
+recorded above; restoring them is per-site work, and until then those 5 stubs are the ones
+that would compute a wrong answer if executed.
+
+## The exe: it builds, and it says what it needs next
+
+```bat
+harness\build_dlls.bat bulk     :: also links build\groove_rebuild.exe (812 KB, 0 unresolved)
+build\groove_rebuild.exe        :: run it: it names the first function it is missing
+```
+
+Linking the *exe* used to fail with 14 unresolved symbols, and the reason was the entry
+point, not missing C: the original PE entry (`entry`, 0x563EE0) **is the MSVC 6 CRT
+startup**, and it is one of the excluded artefact bodies - so `/ENTRY:entry` replaced the
+runtime's startup with a stub of it, and the runtime's own entry points (`_memcpy`, `_cos`,
+`_malloc`, `_log2`, ...) had nowhere to come from.  The fix is the structure a rebuild
+wants anyway: the modern CRT keeps its startup (`WinMainCRTStartup`) and
+[`harness/exe_main.c`](harness/exe_main.c) supplies the `WinMain` it asks for, calling the
+game's own main.  That main is `sub_41D350` - identified by disassembling the original
+startup, whose calls include it.
+
+What a run currently does, with the stubs reporting themselves and two lines of
+instrumentation in `WinMain`:
+
+```
+[winmain] calling sub_41D350(hInst=00920000, cmd=)
+[stub] sub_405960
+```
+
+So: CRT startup ✓, the game's own main ✓, and then it reaches the first function whose body
+is still excluded - `sub_405960`, a 401-byte registry/settings helper (it sets up `HKEY`,
+`_strtok`, `_sprintf` and a 4 KB buffer; excluded because its decompiled body has 12
+register-artefact lines, and it uses `__alloca_probe`, which is why Ghidra's frame model
+for it is confused).  After that it waits rather than exits, which is the next thing to
+chase.
+
+That is the loop for a runnable image: **run it, read the name, reverse that function,
+rebuild** - and the name comes from the stubs themselves, so no debugger is needed to know
+where it stopped.
+
 ## Compiling and testing against the real WADs
 
 ```bat
@@ -509,36 +697,51 @@ MAP, all five levels      PASS  scalars, the ten array offsets, the colour accou
                                 and the five FNV-1a value hashes match the oracle
 ```
 
-**The code under those wrappers is the 13-function curated subset, not all 968** - and
-that is worth being precise about, because three plausible ways of getting the *bulk*
-behind the same wrappers were tried and two of them do not work in this toolchain:
+**The code under those wrappers is the whole bulk**: `build\groove_ghidra.dll` is built
+from all 25 chunk objects (`harness\build_dlls.bat bulk`), 689 KB instead of the subset's
+24 KB, and the numbers above were re-measured against *it*.  What it took, in the order
+it was measured:
 
-| Attempt | Result |
+| Step | Result |
 |---|---|
-| `build_dlls.bat bulk`: compile all 25 chunk objects and link them, hoping `/OPT:REF` drops what the exported wrappers cannot reach | **fails**: 282 unresolved symbols.  `/Gy` + `/OPT:REF` does *not* discard unreferenced functions - a two-function experiment (one exported, one unreferenced, both COMDATs, referencing an undefined symbol) fails with LNK2019 either way |
-| resolve those 282 with the `/alternatename` aliases in `harness/import_stubs.c` (the device that was built for exactly this) | **does not work here**: the same two-function experiment with `#pragma comment(linker, "/alternatename:...")` still fails with LNK2019.  `import_stubs.c` is not even in the subset link line - nothing has ever linked through it |
-| regenerate the alias list from the bulk log `tools/gen_import_stubs.py` | writes 201 aliases, link still fails identically |
+| link the system import libraries (`kernel32`, `user32`, `gdi32`, `advapi32`, `ole32`, `winmm`, `shell32`, `comctl32`, `version`, `ddraw`) | 282 unresolved symbols -> 167.  This is the only route for the `__imp__*` ones: an import-address entry cannot be spelled as a C symbol, `@` is not legal in an identifier |
+| generate the rest with [`tools/gen_link_stubs.py`](tools/gen_link_stubs.py) | **links**: 167 stubs, classified in `src_generated/link_stubs.csv` - 55 code labels Ghidra turned into values, 39 game functions whose bodies are still excluded, 28 Miles entry points, 27 MSVC 6 CRT/compiler helpers, 8 Win32/COM/DirectX APIs, 10 other.  The generator reads both link logs, keeps what is already stubbed (otherwise a clean log would erase it) and drops any stub the linker now reports as a duplicate (LNK2005) - so the list shrinks by itself as functions land |
+| the handful that must **not** be stubbed, in [`harness/crt_aliases.c`](harness/crt_aliases.c) | 16 names are implemented for real: `_malloc`/`_free`/`operator_new` (a stub returns NULL for every allocation), the `_mem*`/`_str*` family, `fcos`/`fsin`, and `__ftol`/`__frnd`, which MSVC 6 gave an x87 convention - written in `__asm` (`fistp`/`frndint`), because C cannot express `ST(0) -> EAX` |
+| the six functions the harness replaces, in [`harness/substituted.txt`](harness/substituted.txt) + [`tools/make_dll_source.py`](tools/make_dll_source.py) | the driver feeds a chunk from a *memory buffer*, so the bulk's real stream wrappers (`sub_415A90`/`AB0`/`AD0`/`AF0`), `sub_562941` and `operator_new` are filtered out of the DLL's chunk set and `io_substitutes.c` supplies them - 962 of the 968 functions are in the tested image.  Linking the real wrappers and handing them a memory pointer is exactly how the MAP driver crashed (exit `0xC0000005`) before this |
 
-The 282 symbols are, measured from `build/_ghidra_link.log`:
+Seven stubs are flagged in the summary as ones that would compute a **wrong** answer if
+executed - the 64-bit helpers (`__alldiv`, `__aulldiv`, `__aullrem`, `__allmul`,
+`__allshl`) and the float-formatting pair (`__cfltcvt`, `__fassign`).  A stub for
+`__alldiv` returns 0 for every 64-bit division, so that list is the honest boundary of
+what "it links" means here.
 
-* **39 game functions the compile still excludes** - the ~50 artefact-function class
-  (`unaff_*`, `in_stack_*`, dropped locals) and the two undecompilable giants.
-* **34 `__imp__*` and ~209 other imports** - Win32/COM/DirectX/Miles (`RegCloseKey`,
-  `CoInitialize`, `DirectDrawCreate`, the whole `AIL_*` set) and old-CRT internals
-  (`_fcos`, `_fptan`, `_flsall`, `_builtin_strncpy`, `_CARRY4`, `_ExceptionList`).
+The `exe` half of the same build (`link /SUBSYSTEM:WINDOWS /ENTRY:entry`) is **not**
+finished: it is 14 symbols short, all of them the runtime's own entry points
+(`_memcpy`, `_memset`, `_cos`, `_sin`, `_malloc`, `_free`, `_log2`, `__stricmp`, ...)
+which neither the DLL-CRT nor the static-CRT library sets resolve in this toolchain
+when the CRT startup is bypassed (`/ENTRY:entry`).  The bulk's `entry` is itself one of
+the excluded artefact functions, so a stub stands in for it.  The DLL is the tested
+artifact; the exe is a link milestone one library-set away, and `build_dlls.bat bulk`
+says so instead of pretending otherwise.
 
-The two routes that *would* work, and that the next round should take:
+Three plausible shortcuts did **not** work, each measured with a two-function
+experiment:
 
-1. link the real import libraries (`advapi32`, `user32`, `gdi32`, `ole32`, `winmm`, ...)
-   - they define the `__imp__*` symbols, which no C-level stub can express because `@`
-   is not legal in an identifier - plus the DirectX SDK and `mss32.lib` for the rest;
-2. generate ordinary **stub definitions** (one function or datum per remaining name)
-   for everything else, including the 39 game functions: measurable, and it turns the
-   bulk into a linkable image with a recorded list of what is not real code.
+* `build_dlls.bat bulk` with `/Gy` + `/OPT:REF`, hoping the linker would discard the
+  functions the wrappers cannot reach: it does not - the unreferenced function stays and
+  its undefined symbol fails the link;
+* the `/alternatename` aliases in `harness/import_stubs.c`, the device built for exactly
+  this (and never part of any link line): the same experiment still fails with LNK2019,
+  so the file is now documented as not working rather than relied on;
+* stubbing the runtime's own names from the exe log (`memcpy`, `cos`, `malloc`): a stub
+  shadows the real implementation for the whole image and collides with its prototype
+  (C2371/C2040), so the generator refuses them (`STANDARD_C`) and they are library work.
 
-So the honest state is: *every game function compiles; the loaders that are exercised
-run against real data and match an independent model; the whole-image link is one
-import-library list plus a stub generator away, and it is not claimed yet.*
+One naming trap cost two rounds and is worth recording: the linker prints **decorated**
+symbols, and x86 C decoration prepends one underscore - so the log's `_fcos` is the C
+name `fcos`, and `__malloc` is `_malloc`.  Both sets of definitions here had to be
+respelled against that rule, and the generator's skip-lists are what silently did nothing
+while they were wrong.
 
 ### Coverage, honestly
 

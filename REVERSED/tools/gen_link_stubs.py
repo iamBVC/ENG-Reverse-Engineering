@@ -41,7 +41,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src_generated"
 BUILD = ROOT / "build"
-LOG = BUILD / "_bulk_link.log"
+# both link logs are read when they exist: the DLL's and the exe's (the exe needs
+# `entry`, which nothing else references, so it is unresolved only in that one)
+LOGS = [BUILD / "_bulk_link.log", BUILD / "_exe_link.log"]
 HEADERS = [OUT / "ghidra_prototypes.h", OUT / "ghidra_globals.h",
            ROOT / "include" / "ghidra_shim.h"]
 
@@ -51,10 +53,25 @@ SYMBOL_RE = re.compile(r"(?:simbolo\s+esterno|external\s+symbol)\s+([^\s:]+)")
 # stubs for these would quietly compute the wrong answer; they are listed separately
 # Implemented for real in harness/crt_aliases.c (they are ordinary CRT calls that a
 # stub would break: a stub for `_malloc` returns NULL for every allocation).
+# keyed by the *C* name, because that is what the lookup below produces: the linker's
+# `_fcos` is the C `fcos`.  Spelling these with the leading underscore (the first
+# version of this set did) silently matched nothing and emitted `int fcos()` stubs
+# against the real definitions in harness/crt_aliases.c (C2371, measured).
 REAL_CRT = {
-    "_malloc", "_free", "operator_new", "_memset", "_memcpy", "_memmove",
-    "_strlen", "_strcmp", "_strncmp", "_strncpy", "_strcmpi", "_strrchr",
-    "_fcos", "_fsin", "__ftol", "__frnd",
+    "_malloc", "_free", "_memset", "_memcpy", "_memmove", "_strlen", "_strcmp",
+    "_strncmp", "_strncpy", "_strcmpi", "_strrchr", "fcos", "fsin", "__ftol",
+    "__frnd", "operator_new",
+}
+
+# Never stub these, whatever a log says: they belong to <string.h>/<math.h>/<stdlib.h>,
+# and a stub both shadows the real implementation for the whole image and collides with
+# its prototype (C2371/C2040, measured).  They appear in the *exe* link log because the
+# runtime's own startup objects reference them - that is library work, not a stub.
+STANDARD_C = {
+    "memcpy", "memmove", "memset", "strlen", "strcmp", "strncmp", "strncpy",
+    "strrchr", "strcmpi", "stricmp", "malloc", "free", "calloc", "realloc",
+    "cos", "sin", "tan", "atan", "atan2", "log", "log2", "log10", "exp",
+    "pow", "sqrt", "floor", "ceil", "fabs", "modf", "printf", "sprintf",
 }
 
 DANGEROUS = {
@@ -71,17 +88,82 @@ DANGEROUS = {
 }
 
 
+def log_lines() -> list[str]:
+    paths = [Path(p) for p in sys.argv[1:]] or [p for p in LOGS if p.exists()]
+    if not paths:
+        return []
+    out: list[str] = []
+    for path in paths:
+        out.extend(path.read_text(encoding="latin1", errors="replace").splitlines())
+    print(f"reading {len(paths)} link log(s): {', '.join(p.name for p in paths)}")
+    return out
+
+
+def previous_stubs() -> set[str]:
+    """The symbols already stubbed.  They have to survive regeneration, or the loop is
+    self-defeating: once the stubs make the link succeed the log is *clean*, and
+    regenerating from a clean log would emit an empty file and break the build again.
+    """
+    path = OUT / "link_stubs.csv"
+    if not path.exists():
+        return set()
+    with path.open(encoding="utf-8", newline="") as fh:
+        return {r["symbol"] for r in csv.DictReader(fh)}
+
+
+def now_defined(lines: list[str]) -> set[str]:
+    """Symbols the linker sees twice (LNK2005): the *real* code defines them now, so
+    their stub has to go.  That is what keeps the list honest as functions land."""
+    out = set()
+    for line in lines:
+        if "LNK2005" in line:
+            m = re.search(r"LNK2005:\s+([^\s:]+)", line)
+            if m:
+                out.add(m.group(1))
+    return out
+
+
+def is_game_symbol(sym: str) -> bool:
+    """Game code (stub it) versus system code (link a library for it).
+
+    Needed because the two logs mean different things.  The DLL's log is already
+    library-clean, so everything in it is stubbable.  The exe's log also carries the
+    runtime's *own* startup internals (`_memcpy`, `_cos`, `__imp__malloc`) - and a stub
+    for those is actively wrong: it shadows the CRT's implementation for the whole
+    image and collides with it (LNK2005, measured).  Those are library work.
+    """
+    return (sym.startswith(("_sub_", "_LAB_", "_Catch_", "_Unwind_"))
+            or sym in ("_entry", "_ExceptionList"))
+
+
 def unresolved() -> set[str]:
-    if not LOG.exists():
-        raise SystemExit(f"{LOG} missing - run harness/build_dlls.bat bulk once")
-    text = LOG.read_text(encoding="latin1", errors="replace")
-    syms = set()
-    for line in text.splitlines():
-        if "LNK2001" not in line and "LNK2019" not in line:
-            continue
-        for m in SYMBOL_RE.finditer(line):
-            syms.add(m.group(1))
-    return syms
+    paths = [Path(p) for p in sys.argv[1:]] or [p for p in LOGS if p.exists()]
+    if not paths:
+        raise SystemExit("no link log found - run harness/build_dlls.bat bulk once")
+    syms: set[str] = set()
+    needs_library: set[str] = set()
+    for path in paths:
+        exe_log = path.name == "_exe_link.log"
+        text = path.read_text(encoding="latin1", errors="replace")
+        for line in text.splitlines():
+            if "LNK2001" not in line and "LNK2019" not in line:
+                continue
+            for m in SYMBOL_RE.finditer(line):
+                sym = m.group(1)
+                if exe_log and not is_game_symbol(sym):
+                    needs_library.add(sym)
+                else:
+                    syms.add(sym)
+    print(f"reading {len(paths)} link log(s): {', '.join(p.name for p in paths)}")
+    syms |= previous_stubs()
+    lines = [ln for p in paths for ln in p.read_text(encoding="latin1", errors="replace").splitlines()]
+    for gone in sorted(now_defined(lines) & syms):
+        print(f"  dropping {gone}: the real code defines it now (LNK2005)")
+    if needs_library:
+        print(f"  {len(needs_library)} symbol(s) are the runtime's own and are left to the "
+              f"libraries, not stubbed: {', '.join(sorted(needs_library)[:8])}"
+              + (" ..." if len(needs_library) > 8 else ""))
+    return syms - now_defined(lines)
 
 
 def declarations() -> dict[str, str]:
@@ -144,13 +226,20 @@ def body_for(name: str, decl: str | None) -> str:
     full = (decl or f"int {name}()").replace("extern ", "").strip()
     rtype = full.split("(")[0].strip()
     empty = rtype.startswith("void") and "*" not in rtype
-    return f"{full}\n{{\n    {'' if empty else 'return 0;'}\n}}\n"
+    # A stub that says its own name is how a *run* of the image points at the next piece
+    # of work: the first line of output names the function the game needed but does not
+    # have.  Printed once per symbol, and harmless in the harness DLL (the drivers never
+    # reach a stub, and if one ever does, seeing which is the point).
+    report = (f'    static int reported = 0;\n'
+              f'    if (!reported++) fprintf(stderr, "[stub] %s\\n", "{name}");\n')
+    body = report + ('    return 0;\n' if not empty else '')
+    return f"{full}\n{{\n{body}}}\n"
 
 
 def main() -> int:
     syms = unresolved()
     if not syms:
-        print(f"nothing unresolved in {LOG.name} - the image links clean")
+        print("nothing unresolved in the link log(s) - the image links clean")
         return 0
     decls = declarations()
 
@@ -165,13 +254,19 @@ def main() -> int:
         lookup = re.sub(r"^__stdcall\s+", "", name).split("(")[0].strip()
         if lookup in REAL_CRT:
             continue          # harness/crt_aliases.c implements this one properly
+        if lookup in STANDARD_C:
+            continue          # a C library function: the library provides it, not a stub
         decl = decls.get(lookup)
         rows.append({"symbol": sym, "c_name": lookup, "kind": kind_of(sym),
                      "declaration": (decl or name), "note": note})
 
     lines = ["/* generated by tools/gen_link_stubs.py - do not edit",
              " * Stubs so the whole bulk links.  Every entry is one piece of the original",
-             " * that is not real code yet: see src_generated/link_stubs.csv. */",
+             " * that is not real code yet: see src_generated/link_stubs.csv.",
+             " *",
+             " * Each one reports itself the first time it is called, so running the image",
+             " * says *which* missing function it walked into. */",
+             "#include <stdio.h>",
              '#include "ghidra_shim.h"', '#include "ghidra_globals.h"',
              '#include "ghidra_prototypes.h"', ""]
     counts: dict[str, int] = {}

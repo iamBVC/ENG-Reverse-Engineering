@@ -319,6 +319,13 @@ def main() -> int:
                 patched += 1
             else:
                 print(f"  note: patch pattern not found in {name}: {find[:40]!r}")
+        # a patch whose replacement text was truncated (an unquoted comma in the CSV is
+        # the usual cause) leaves an unterminated /* behind, and the *next* function then
+        # fails with a syntax error that points nowhere near the patch.  Cheap net:
+        if body.count("/*") != body.count("*/"):
+            print(f"  note: unbalanced comment in {name} after patching "
+                  f"({body.count('/*')} vs {body.count('*/')} - check the replacement "
+                  f"text in bulk_patches.csv for a missing quote)")
         if name in auto_decls:
             lines = body.splitlines()
             for i, line in enumerate(lines):
