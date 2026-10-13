@@ -61,6 +61,7 @@ REAL_CRT = {
     "_malloc", "_free", "_memset", "_memcpy", "_memmove", "_strlen", "_strcmp",
     "_strncmp", "_strncpy", "_strcmpi", "_strrchr", "fcos", "fsin", "__ftol",
     "__frnd", "operator_new", "__strcmpi",
+    "fpatan", "CARRY4",
     # SDK declarations now resolve these through Ole32 with their actual ABI.
     "CoCreateInstance", "CoInitialize", "CoUninitialize",
     "timeGetTime",

@@ -130,6 +130,8 @@ typedef unsigned int       uint6;
 typedef int                int3;
 typedef int                int5;
 typedef long double        float10;      /* x87 80-bit value */
+double fpatan(double numerator, double denominator);
+int CARRY4(unsigned int first, unsigned int second);
 
 typedef unsigned char      byte;
 typedef unsigned char      uchar;

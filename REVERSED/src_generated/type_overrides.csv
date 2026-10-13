@@ -564,3 +564,15 @@ DAT_00573d40,float
 DAT_005724E3,string:0xd
 DAT_0056e15c,floatfile
 DAT_0056e1cc,floatfile
+DAT_0056e280,doublefile
+DAT_0056e11c,floatfile
+DAT_0056e124,floatfile
+DAT_0056e12c,floatfile
+DAT_0056e13c,floatfile
+DAT_0056e140,floatfile
+DAT_0056e144,floatfile
+DAT_0056e148,floatfile
+DAT_0056e14c,floatfile
+DAT_0056e150,floatfile
+PTR_sub_426500_005796bc,functions:0x114
+DAT_00579108,functions:0x5b4

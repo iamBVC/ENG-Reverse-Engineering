@@ -36,7 +36,9 @@ int sub_41D350(int instance, int previous, char *command)
         raise SystemExit("crash probe did not terminate with the expected diagnostic")
     if "[crash] access=1 target=00000000" not in log or "[crash] eip=" not in log:
         raise SystemExit("crash probe did not record the write target and registers")
-    print("crash logging: failing child terminated and recorded code, address, RVA, target and registers")
+    if not re.search(r"\[crash\] fault-module=.*probe\.exe base=.* offset=[0-9a-f]+ thread=\d+", log):
+        raise SystemExit("crash probe did not identify the faulting module and thread")
+    print("crash logging: failing child recorded code, target, registers, faulting module and thread")
     return 0
 
 if __name__ == "__main__":

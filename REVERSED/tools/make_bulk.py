@@ -874,7 +874,7 @@ def main() -> int:
         s = sig.strip()
         # These entries are invoked by Windows/DirectDraw, not by loose
         # decompiler calls. Their x86 callee cleanup and parameter count are ABI.
-        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640", "sub_412710", "sub_40E960", "sub_41E790", "sub_414600", "sub_41B8A0", "sub_42C180", "sub_402910", "sub_402960", "sub_41E4B0", "sub_41E610", "sub_41E680", "sub_410480"}:
+        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640", "sub_412710", "sub_40E960", "sub_41E790", "sub_414600", "sub_41B8A0", "sub_42C180", "sub_402910", "sub_402960", "sub_41E4B0", "sub_41E610", "sub_41E680", "sub_410480", "sub_409510"}:
             loose[n] = s
             continue
         if "::" in s or "@" in s:

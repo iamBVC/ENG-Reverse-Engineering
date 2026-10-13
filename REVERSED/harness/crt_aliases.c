@@ -91,6 +91,11 @@ char *_strrchr(const char *s, int c) { return strrchr(s, c); }
    log is the evidence - it lists the decorated form). */
 double fcos(double x) { return cos(x); }
 double fsin(double x) { return sin(x); }
+double fpatan(double numerator, double denominator) { return atan2(numerator, denominator); }
+int CARRY4(unsigned int first, unsigned int second)
+{
+    return (uint64_t)first + second > UINT32_MAX;
+}
 
 /* ---- the MSVC 6 stack probe -------------------------------------------
  * IDA's listing names the call: `sub_405960` calls `__alloca_probe` where the decompiled

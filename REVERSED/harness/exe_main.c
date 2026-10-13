@@ -38,9 +38,18 @@ static LONG WINAPI report_unhandled_exception(EXCEPTION_POINTERS *failure)
     CONTEXT *context = failure->ContextRecord;
     UINT_PTR base = (UINT_PTR)GetModuleHandleA(NULL);
     UINT_PTR address = (UINT_PTR)record->ExceptionAddress;
+    HMODULE fault_module = NULL;
+    char fault_path[MAX_PATH];
     fprintf(stderr, "[crash] code=%08lx address=%p module=%p rva=%08lx\n",
             record->ExceptionCode, (void *)address, (void *)base,
             (unsigned long)(address - base));
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          (LPCSTR)address, &fault_module) &&
+        GetModuleFileNameA(fault_module, fault_path, sizeof fault_path))
+        fprintf(stderr, "[crash] fault-module=%s base=%p offset=%08lx thread=%lu\n",
+                fault_path, (void *)fault_module,
+                (unsigned long)(address - (UINT_PTR)fault_module), GetCurrentThreadId());
     if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2)
         fprintf(stderr, "[crash] access=%lu target=%p\n",
                 (unsigned long)record->ExceptionInformation[0],

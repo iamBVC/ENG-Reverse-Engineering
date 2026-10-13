@@ -1,0 +1,5 @@
+# Original opcode handlers missing from the previous targeted exports.
+54DA90
+54DAC0
+54E880
+54F710

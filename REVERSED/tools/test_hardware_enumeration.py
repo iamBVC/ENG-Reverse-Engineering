@@ -106,8 +106,11 @@ def main(source_text=SOURCE, name="hardware_test", bulk=True):
         f'{name}.c /Fe:{name}.exe /link {objects}'
         'Kernel32.lib User32.lib Gdi32.lib AdvAPI32.lib Ole32.lib OleAut32.lib '
         'WinMM.lib Shell32.lib ComCtl32.lib Version.lib ddraw.lib dinput8.lib dxguid.lib\n'
-        f'if errorlevel 1 exit /b 1\n{name}.exe\nexit /b %errorlevel%\n', encoding="ascii")
-    return subprocess.run(["cmd", "/c", str(batch)], cwd=build).returncode
+        'exit /b %errorlevel%\n', encoding="ascii")
+    compiled = subprocess.run(["cmd", "/c", str(batch)], cwd=build, timeout=30)
+    if compiled.returncode:
+        return compiled.returncode
+    return subprocess.run([str(build / f"{name}.exe")], cwd=build, timeout=15).returncode
 
 if __name__ == "__main__":
     raise SystemExit(main())

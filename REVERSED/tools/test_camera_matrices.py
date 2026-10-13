@@ -10,7 +10,7 @@ SOURCE = r'''
 #define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
 int main(void)
 {
-    float camera[11] = {0};
+    float camera[40] = {0};
     float *matrix;
     int i;
     camera[6] = 1.0f;
@@ -32,7 +32,15 @@ int main(void)
     REQUIRE(fabs(matrix[5] - 0.75f) < 0.00001f);
     REQUIRE(fabs(matrix[10] + 101.0f / 99.0f) < 0.00001f);
     REQUIRE(fabs(matrix[14] - 200.0f / 99.0f) < 0.00001f);
-    puts("camera matrices: original angle scale, identity view and near/far fields passed");
+    /* Menu startup must write the camera's FOV at byte offset 0x20. */
+    for (i = 11; i < 40; ++i) camera[i] = 1234.0f;
+    DAT_00581168 = (unsigned int *)camera;
+    sub_41A440(320);
+    REQUIRE(fabs(camera[8] - 2.0 * atan2(DAT_0056e280 / 320.0, 1.0)) < 0.00001);
+    REQUIRE(DAT_0057dc68 > 0.0f && DAT_0057dc68 < 10000.0f);
+    for (i = 11; i < 40; ++i) REQUIRE(camera[i] == 1234.0f);
+    REQUIRE(CARRY4(0xffffffffU, 1U) && !CARRY4(123U, 456U));
+    puts("camera matrices: original angle scale, menu FOV, guarded camera layout, carry and near/far fields passed");
     return 0;
 }
 '''
