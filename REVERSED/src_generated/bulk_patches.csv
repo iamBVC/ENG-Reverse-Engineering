@@ -1029,6 +1029,7 @@ sub_424BE0,(**(code **)(**(int **)(iVar12 + 0xc) + 0x7c)),(**(groove_com2 **)(**
 sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x70)),(**(groove_com6 **)(*DAT_00582cd4 + 0x70))
 sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x74)),(**(groove_com8 **)(*DAT_00582cd4 + 0x74))
 sub_424BE0,"0x1c4,iVar4,iVar3,iVar2,uVar19)","0x1c4,iVar4,iVar3,iVar2,uVar19,0x1c)"
+sub_422740,"sub_41ECE0(local_c,local_8,local_4,*(undefined4 *)(param_2 + 8),param_3,param_4,param_5,","sub_41ECE0(local_c,local_8,local_4,*(float *)(param_2 + 8),*(float *)&param_3,*(float *)&param_4,*(float *)&param_5,"
 sub_401820,(float)(&DAT_0058b0fc)[uVar14 * 9],*(float *)((&DAT_0058b0fc) + uVar14 * 9)
 sub_401820,(float)(&DAT_0058b0fc)[uVar18 * 9],*(float *)((&DAT_0058b0fc) + uVar18 * 9)
 sub_401820,(float)(&DAT_0058b0fc)[uVar17 * 9],*(float *)((&DAT_0058b0fc) + uVar17 * 9)
