@@ -50,7 +50,7 @@ if __name__ == '__main__':
     body = text.split('/* ==== sub_546A30 ==== */', 1)[1].split('/* ====', 1)[0]
     symbols = {s.removeprefix('_') for s in re.findall(r'\b(?:_?DAT|s)_[A-Za-z0-9_]+\b', body)}
     definitions = (ROOT / 'src_generated/ghidra_globals.c').read_text(encoding='utf-8').splitlines()
-    selected = [line for line in definitions if '_storage[' in line or
+    selected = [line for line in definitions if ('_storage[' in line and 'DAT_00572ee0_storage[' not in line) or
                 any(re.search(r'\b' + re.escape(s) + r'\b', line) for s in symbols)]
     raise SystemExit(build_and_run(SOURCE + '\n'.join(selected) + body + MAIN,
                                   'music_arguments_test', bulk=False))

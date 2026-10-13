@@ -56,6 +56,49 @@ functions.
 
 ## Current status
 
+### Numeric registry parsing checkpoint (2026-10-12)
+
+The next desktop trace faults in the decompiled MSVC 6 numeric parser
+`sub_565A6B`, writing through its uninitialized CRT workspace pointer. Preference
+loading reaches this parser through `sub_405B00` and the original `atof` entry
+`sub_56286F`. The latter now delegates to the linked system CRT's `strtod`.
+
+The recovered numeric registry reader uses a 2,049-byte local buffer for the
+original 2,048-byte query and explicitly terminates textual values. It preserves
+unsigned DWORD-to-float conversion and leaves output untouched on query/open
+failure. Malformed DWORD lengths are rejected. The original export queried up
+to 2,048 bytes through a separately rebuilt four-byte scalar.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and EXE/DLL linking succeeds. Private registry mocks exercise textual and unsigned
+DWORD conversion, unterminated full-size input, empty text, malformed DWORDs,
+failed queries, missing keys, handle closing and getter defaults. The CRT wrapper
+also passes scientific notation and invalid-input checks. Desktop continuation,
+real audio playback and full gameplay remain unverified.
+
+### Registry preference table checkpoint (2026-10-12)
+
+The new desktop trace faults in `sub_424590` writing a boolean setting through
+a code address. The loop originally walks 39 contiguous 16-byte descriptors
+at `0x572EE0`; the rebuild emitted only individually referenced globals and
+continued toward an absolute original-image end address.
+
+The complete descriptor table now has shared storage and all 78 pointer slots
+are explicitly recorded and relocated. Missing exported key strings are read
+from the original executable. The generator promotes pointer targets throughout
+initialized record ranges, including explicitly typed members absent from the
+Ghidra symbol export. Recovered load/save routines iterate the exact 39 rows,
+preserve renderer applicability flags and handle integer, float and byte boolean
+values with their original widths. Float preference calls use explicit typed
+arguments and returns instead of lost x87 state or promoted arguments.
+
+Validation: all 1,132 included functions compile with zero reported errors,
+and EXE/DLL linking succeeds. An oracle fixture checks all record kinds, flags,
+relocated targets and original key names, then verifies 21 selected reads/writes
+for each renderer class through private registry mocks. Graphics preferences,
+input bindings, music arguments and sound initialization fixtures pass. Real
+registry persistence, audio playback and full desktop gameplay remain unverified.
+
 ### Music filenames and asset lookup checkpoint (2026-10-12)
 
 The desktop trace passes sound initialization, then faults in `sub_415690`

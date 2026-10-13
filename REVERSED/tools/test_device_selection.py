@@ -78,7 +78,13 @@ int main(void)
     setup(); reject_mode = 1;
     REQUIRE(sub_40FFD0("unmatched", "unmatched", 32, 32, size, size) == 0);
     REQUIRE(attempted == 2 && configured == 2 && selected == 0);
-    puts("device selection: GUID comparison, adapter fallback, format/mode fallback and exhausted lists passed");
+    setup(); DAT_00582cc8 = 1;
+    DAT_00583420 = (unsigned int *)adapters[0]; DAT_00583424 = (unsigned int *)devices[0];
+    DAT_005833e0 = 0; DAT_0058337c = 32; DAT_00583374 = 640; DAT_00583378 = 480;
+    REQUIRE(sub_40FFD0("{00000001-0002-0000-0300-000004000000}",
+                      "{00000001-0002-0000-0300-000004000000}", 32, 32, size, size) == 1);
+    REQUIRE(attempted == 0 && configured == 0);
+    puts("device selection: GUID comparison, fallbacks, exhausted lists and existing-device reuse passed");
     return 0;
 }
 '''
@@ -90,7 +96,7 @@ def main():
     bodies = [text.split(f'/* ==== {name} ==== */', 1)[1].split('/* ====', 1)[0] for name in names]
     symbols = set(re.findall(r'\b(?:_?DAT|s|PTR)_[A-Za-z0-9_]+\b', '\n'.join(bodies)))
     definitions = (ROOT / 'src_generated/ghidra_globals.c').read_text(encoding='utf-8').splitlines()
-    selected = [line for line in definitions if any(re.search(r'\b' + re.escape(s) + r'\b', line) for s in symbols)]
+    selected = [line for line in definitions if 'DAT_005833e0_storage[' in line or any(re.search(r'\b' + re.escape(s) + r'\b', line) for s in symbols)]
     return build_and_run(PREAMBLE + '\n'.join(selected) + '\n'.join(bodies) + MAIN,
                          'selection_test', bulk=False)
 

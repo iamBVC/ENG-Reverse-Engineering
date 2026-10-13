@@ -47,6 +47,20 @@ static LONG WINAPI report_unhandled_exception(EXCEPTION_POINTERS *failure)
                 (void *)record->ExceptionInformation[1]);
     fprintf(stderr, "[crash] eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
             context->Eip, context->Eax, context->Ecx, context->Edx, context->Esp, context->Ebp);
+    {
+        DWORD stack[32];
+        SIZE_T bytes = 0;
+        IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;
+        IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
+        unsigned int i;
+        if (ReadProcessMemory(GetCurrentProcess(), (void *)context->Esp,
+                              stack, sizeof stack, &bytes)) {
+            for (i = 0; i < bytes / sizeof stack[0]; ++i)
+                if (stack[i] >= base && stack[i] - base < nt->OptionalHeader.SizeOfImage)
+                    fprintf(stderr, "[crash] stack[%u]=%08lx rva=%08lx\n",
+                            i, stack[i], (unsigned long)(stack[i] - base));
+        }
+    }
     fflush(stderr);
     return EXCEPTION_EXECUTE_HANDLER;
 }

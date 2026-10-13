@@ -420,6 +420,25 @@ def main() -> int:
     # Pulling the target into the referenced set gives it a definition and a declaration,
     # and then the initialiser can be the symbol the linker fixes up.
     promoted = 0
+    # Explicitly typed record members may have no individually exported datum.
+    for symbol, kind in type_overrides.items():
+        address = addr_of(symbol)
+        if address is not None and address not in data:
+            if kind == "pointer":
+                data[address] = (symbol, 4, "pointer")
+            elif kind.startswith("string:"):
+                data[address] = (symbol, int(kind.split(":")[1], 16), "string")
+            elif kind == "int":
+                data[address] = (symbol, 4, "undefined4")
+    # Pointer members in a confirmed initialized record are references even
+    # when decompiled code names only the first member of the table.
+    for name, kind in type_overrides.items():
+        if kind.startswith("record:") and kind.endswith(":file"):
+            start = int(name.rsplit("_", 1)[1], 16)
+            end = start + int(kind.split(":")[1], 16)
+            for address, (symbol, _, dtype) in data.items():
+                if start <= address < end and dtype == "pointer" and IDENT_RE.match(symbol):
+                    referenced.setdefault(address, set()).add(symbol)
     for a in list(referenced):
         size = data.get(a, (None, 4, None))[1]
         try:
@@ -455,7 +474,7 @@ def main() -> int:
     # Separate linker globals cannot support rep stosd or pointer iteration.
     table_ranges = []
     for name, kind in type_overrides.items():
-        if kind.startswith(("dwords:", "record:")):
+        if kind.startswith(("dwords:", "record:", "functions:")):
             start = int(name.rsplit("_", 1)[1], 16)
             parts = kind.split(":")
             size = int(parts[1], 16)
@@ -467,6 +486,12 @@ def main() -> int:
         parts = kind.split(":")
         size = end - start
         storage = name + "_storage"
+        if kind.startswith("functions:"):
+            addresses = struct.unpack(f"<{size // 4}I", exe.read(start, size))
+            entries = [f"(code *)&sub_{value:06X}" if value else "0" for value in addresses]
+            defs.append(f"code *{storage}[{size // 4}] = {{{','.join(entries)}}};")
+            decls.append(f"extern code *{storage}[{size // 4}];")
+            continue
         if len(parts) > 2 and parts[2] == "file":
             entries = []
             for offset, value in enumerate(struct.unpack(f"<{size // 4}I", exe.read(start, size))):
@@ -475,6 +500,8 @@ def main() -> int:
                 if target and ((datum and datum[2] == "pointer") or
                            type_overrides.get(f"DAT_{start + offset * 4:08x}") == "pointer"):
                     entries.append(f"(int)((unsigned char *){target[2]}_storage + {value - target[0]})")
+                elif datum and datum[2] == "pointer" and value in data and value in referenced:
+                    entries.append(f"(int)&{data[value][0]}")
                 else:
                     entries.append(f"0x{value:08x}")
             values = ",".join(entries)
@@ -497,6 +524,9 @@ def main() -> int:
                         ctype = "unsigned int *" if dtype == "pointer" else (
                             "int" if alias.startswith("_DAT_") or width >= 4 else
                             "unsigned short" if width == 2 else "unsigned char")
+                        member_override = type_overrides.get(alias) or type_overrides.get(data.get(a, (canonical,))[0])
+                        if member_override in {"float", "floatfile", "double"}:
+                            ctype = "float" if member_override == "floatfile" else member_override
                         decls.append(f"#define {alias} (*({ctype} *)((unsigned char *){name}_storage + {a - start}))")
                     else:
                         decls.append(f"#define {alias} ({name}_storage[{(a - start) // 4}])")
@@ -553,6 +583,20 @@ def main() -> int:
             is_buffer = True
             override = None
         if override is not None:
+            if override == "floatfile":
+                value = struct.unpack("<f", exe.read(a, 4))[0]
+                defs.append(f"float {canonical} = {value!r}f;")
+                decls.append(f"extern float {canonical};")
+                for other in sorted(referenced[a] - {canonical}):
+                    if IDENT_RE.match(other):
+                        decls.append(f"#define {other} {canonical}")
+                continue
+            if override == "bytepointerfile":
+                value = struct.unpack("<I", exe.read(a, 4))[0]
+                target = data[value][0]
+                defs.append(f"unsigned char *{canonical} = (unsigned char *)&{target};")
+                decls.append(f"extern unsigned char *{canonical};")
+                continue
             ctype = {"float": "float", "double": "double",
                      "pointer": "unsigned int *"}.get(override, "int")
             defs.append(f"{ctype} {canonical};   /* 0x{a:08X}, type inferred from use */")
@@ -561,7 +605,9 @@ def main() -> int:
                 if IDENT_RE.match(other):
                     decls.append(f"#define {other} {canonical}")
             continue
-        if _dt == "pointer" or _dt.endswith("*"):
+        if canonical.startswith("PTR_sub_"):
+            ctype = "code *"
+        elif _dt == "pointer" or _dt.endswith("*"):
             # Ghidra's own symbol table says this datum holds an address.  That is
             # evidence the usage heuristics were ignoring: `PTR_s_Inserire_il_CD_...` was
             # typed `int`, so a string-table pointer was initialised as the *number*
@@ -748,7 +794,7 @@ def main() -> int:
     (OUT / "ghidra_globals.c").write_text(
         '/* generated by tools/make_bulk.py - do not edit */\n'
         '#include "ghidra_shim.h"\n'
-        '#include "ghidra_globals.h"\n\n'
+        '#include "ghidra_globals.h"\n#include "ghidra_prototypes.h"\n\n'
         "/* ---- data definitions -------------------------------------------- */\n"
         + "\n".join(defs)
         + "\n\n/* ---- floating point constants (values read from groove.exe) ------ */\n"

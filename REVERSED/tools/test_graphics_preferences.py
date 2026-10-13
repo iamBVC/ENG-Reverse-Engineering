@@ -69,7 +69,7 @@ def main():
     bodies = [text.split(f'/* ==== {name} ==== */', 1)[1].split('/* ====', 1)[0]
               for name in ['sub_410430', 'sub_411620']]
     definitions = (ROOT / 'src_generated/ghidra_globals.c').read_text(encoding='utf-8')
-    tables = [line for line in definitions.splitlines() if '_storage[' in line]
+    tables = [line for line in definitions.splitlines() if '_storage[' in line and 'DAT_00572ee0_storage[' not in line]
     return build_and_run(SOURCE + oracle + '\n'.join(tables) + '\n'.join(bodies) + MAIN,
                          'graphics_preferences_test', bulk=False)
 

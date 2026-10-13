@@ -63,6 +63,7 @@ REAL_CRT = {
     "__frnd", "operator_new", "__strcmpi",
     # SDK declarations now resolve these through Ole32 with their actual ABI.
     "CoCreateInstance", "CoInitialize", "CoUninitialize",
+    "timeGetTime",
 }
 
 # Never stub these, whatever a log says: they belong to <string.h>/<math.h>/<stdlib.h>,

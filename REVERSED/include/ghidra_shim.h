@@ -35,6 +35,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <mmsystem.h>
 #include <objbase.h>
 HRESULT groove_DirectDrawCreate(GUID *guid, void **object, void *outer);
 HRESULT groove_DirectInputCreateA(HINSTANCE instance, DWORD version, void **object, void *outer);
