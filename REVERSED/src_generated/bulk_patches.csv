@@ -1021,3 +1021,4 @@ sub_439160,local_74,rectangle[0]
 sub_439160,local_70,rectangle[1]
 sub_439160,local_6c,rectangle[2]
 sub_439160,local_68,rectangle[3]
+sub_43CB40,"sub_40CF10(DAT_00582ccc,uVar3)","sub_40CF10(DAT_00582ccc,uVar3,DAT_00583374,DAT_00583378)   /* PATCH: two more arguments, pushed before the file search and cleaned with `add esp,10h` - the listing has `mov ecx,dword_583378` / `mov edx,dword_583374` (the height and width the surface is created with). */"

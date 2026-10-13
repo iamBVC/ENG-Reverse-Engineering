@@ -915,10 +915,17 @@ def main() -> int:
     clean: list[str] = []
     dirty: list[str] = []
     reasons: dict[str, int] = {}
+    # The artefact scan is about *code*, so comments are stripped first: a recovered body
+    # naturally explains the artefact it replaced ("Ghidra read the value back through
+    # `in_EAX`"), and scanning the prose classified that function as needing hand fixing and
+    # dropped it from the clean subset - measured, on src_recovered/sub_410480.c, which
+    # then stayed a stub at run time.
+    comment = re.compile(re.escape("/*") + ".*?" + re.escape("*/"), re.S)
     for name in sorted(bodies):
         body = bodies[name]
-        hits = set(ARTIFACT_RE.findall(body))
-        missing = undeclared_locals(body)
+        code = comment.sub("", body)
+        hits = set(ARTIFACT_RE.findall(code))
+        missing = undeclared_locals(code)
         if hits or missing:
             dirty.append(name)
             for h in hits:

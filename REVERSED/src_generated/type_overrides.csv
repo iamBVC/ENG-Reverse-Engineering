@@ -558,3 +558,6 @@ DAT_00578908,record:0xc:file
 DAT_00578918,record:0x10:file
 DAT_00578930,record:0xc:file
 DAT_0056e6dc,record:0x10:file
+DAT_00573d38,float
+DAT_00573d3c,float
+DAT_00573d40,float
