@@ -14,6 +14,9 @@ sub_562B75       # _fwrite  -> fwrite
 sub_5628EB       # _fclose  -> fclose
 sub_562717       # _sprintf -> vsprintf (via a variadic wrapper)
 sub_56279D       # _strtok  -> strtok
+sub_5629E6       # _fread   -> fread
+sub_56294C       # _fseek   -> fseek
+sub_5639C2       # _ftell   -> ftell
 
 # Found the same way, reached now that the game's DirectDraw object list is populated:
 # the node destructor (`sub_413170`) releases the node's buffer through `sub_5628BC`, which

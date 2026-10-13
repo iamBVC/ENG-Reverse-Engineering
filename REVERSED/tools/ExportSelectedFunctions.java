@@ -31,12 +31,17 @@ public class ExportSelectedFunctions extends GhidraScript {
                 String name = String.format("sub_%06X", value);
                 Function function = getFunctionAt(address);
                 if (function == null) function = createFunction(address, name);
-                if (function == null) throw new RuntimeException("Cannot create " + name);
+                if (function == null) {
+                    println("FAILED " + name + ": cannot create function");
+                    continue;
+                }
                 function.setName(name, SourceType.USER_DEFINED);
                 decompiler.flushCache();
                 DecompileResults result = decompiler.decompileFunction(function, 60, monitor);
-                if (!result.decompileCompleted() || result.getDecompiledFunction() == null)
-                    throw new RuntimeException(name + ": " + result.getErrorMessage());
+                if (!result.decompileCompleted() || result.getDecompiledFunction() == null) {
+                    println("FAILED " + name + ": " + result.getErrorMessage());
+                    continue;
+                }
                 try (PrintWriter writer = new PrintWriter(new File(output, name + ".c"))) {
                     writer.println("/* Selected Ghidra export at " + address + ". */");
                     writer.print(result.getDecompiledFunction().getC());

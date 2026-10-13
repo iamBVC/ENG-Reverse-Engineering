@@ -125,6 +125,15 @@ size_t sub_562B75(void *buf, size_t size, size_t count, void *stream)
     return fwrite(buf, size, count, (FILE *)stream);
 }
 int    sub_5628EB(void *stream) { return fclose((FILE *)stream); }
+size_t sub_5629E6(void *buffer, size_t size, size_t count, void *stream)
+{
+    return fread(buffer, size, count, (FILE *)stream);
+}
+int sub_56294C(void *stream, long offset, int origin)
+{
+    return fseek((FILE *)stream, offset, origin);
+}
+long sub_5639C2(void *stream) { return ftell((FILE *)stream); }
 /* The reversed `sprintf` body (IDA names the call `_sprintf`).  Same argument as above, and
  * the same fix - and it matters here because the format is "\\sking%d.ksv" with a string
  * straight out of the registry: the 2001 body walks that value itself. */
@@ -138,8 +147,15 @@ char  *sub_56279D(char *s, const char *delim) { return strtok(s, delim); }
 int    sub_562717(char *buf, const char *fmt, ...)
 {
     va_list ap;
+    static int trace_formats = -1;
+    if (trace_formats < 0) trace_formats = getenv("GROOVE_TRACE_FORMATS") != NULL;
+    if (trace_formats) fprintf(stderr, "[format] caller=%p format=%s\n", _ReturnAddress(), fmt);
     va_start(ap, fmt);
-    return vsprintf(buf, fmt, ap);
+    {
+        int result = vsprintf(buf, fmt, ap);
+        va_end(ap);
+        return result;
+    }
 }
 
 /* ---- x87 conversions: their convention is the point -------------------- */

@@ -77,6 +77,10 @@ STANDARD_C = {
     "pow", "sqrt", "floor", "ceil", "fabs", "modf", "printf", "sprintf",
 }
 
+# The original shipped audio DLL is called through harness/audio_imports.c.
+REAL_CRT.update(re.findall(r"^int (_AAL_\w+)\(",
+                          (ROOT / "harness" / "audio_imports.c").read_text(), re.M))
+
 DANGEROUS = {
     "__alldiv": "64-bit signed divide helper (MSVC 6 convention: args in EDX:EAX/stack)",
     "__aulldiv": "64-bit unsigned divide helper",

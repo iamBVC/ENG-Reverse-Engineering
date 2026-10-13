@@ -100,7 +100,7 @@ def main(source_text=SOURCE, name="hardware_test", bulk=True):
                   if (p / "VC/Auxiliary/Build/vcvars32.bat").exists())
     batch = build / f"{name}.bat"
     objects = ('chunk_*.obj ghidra_globals.obj link_stubs.obj crt_aliases.obj '
-               'io_substitutes.obj directdraw_imports.obj ') if bulk else ''
+               'io_substitutes.obj directdraw_imports.obj audio_imports.obj ') if bulk else ''
     batch.write_text(f'@echo off\ncall "{vcvars}" >nul\n'
         f'cl /nologo /TC /W3 /MD /GS- /I"{ROOT / "include"}" /I"{ROOT / "src_generated"}" '
         f'{name}.c /Fe:{name}.exe /link {objects}'

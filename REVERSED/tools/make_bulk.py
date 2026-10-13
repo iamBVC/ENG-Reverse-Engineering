@@ -234,7 +234,15 @@ def main() -> int:
     data_csv = DEC / "_data.csv"
     if data_csv.exists():
         with data_csv.open(encoding="utf-8") as fh:
-            for row in csv.DictReader(fh):
+            reader = csv.reader(fh)
+            next(reader, None)
+            for fields in reader:
+                # Older Ghidra exports did not quote commas inside symbol names.
+                # Recover the three trailing metadata fields before sanitising.
+                if len(fields) < 4:
+                    raise ValueError(f"Invalid data export row: {fields!r}")
+                row = dict(zip(("name", "address", "size", "datatype"),
+                               [",".join(fields[:-3]), *fields[-3:]]))
                 a = addr_of(row["name"])
                 if a is None:
                     continue
@@ -559,6 +567,8 @@ def main() -> int:
                 raw = exe.read(a, size)
             except ValueError:
                 raw = b""
+            if not raw.endswith(b"\0"):
+                raw += b"\0"
             lit = ",".join(str(b) for b in raw)
             defs.append(f"const char {canonical}[] = {{{lit}}};   /* 0x{a:08X} */")
             decls.append(f"extern const char {canonical}[];")
@@ -583,10 +593,13 @@ def main() -> int:
             is_buffer = True
             override = None
         if override is not None:
-            if override == "floatfile":
-                value = struct.unpack("<f", exe.read(a, 4))[0]
-                defs.append(f"float {canonical} = {value!r}f;")
-                decls.append(f"extern float {canonical};")
+            if override in {"floatfile", "doublefile"}:
+                ctype = "float" if override == "floatfile" else "double"
+                value = struct.unpack("<f" if ctype == "float" else "<d",
+                                      exe.read(a, 4 if ctype == "float" else 8))[0]
+                suffix = "f" if ctype == "float" else ""
+                defs.append(f"{ctype} {canonical} = {value!r}{suffix};")
+                decls.append(f"extern {ctype} {canonical};")
                 for other in sorted(referenced[a] - {canonical}):
                     if IDENT_RE.match(other):
                         decls.append(f"#define {other} {canonical}")
@@ -861,7 +874,7 @@ def main() -> int:
         s = sig.strip()
         # These entries are invoked by Windows/DirectDraw, not by loose
         # decompiler calls. Their x86 callee cleanup and parameter count are ABI.
-        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640", "sub_412710", "sub_40E960"}:
+        if n in {"sub_41DDA0", "sub_4116B0", "sub_4116D0", "sub_411D60", "sub_412320", "sub_412640", "sub_412710", "sub_40E960", "sub_41E790", "sub_414600", "sub_41B8A0", "sub_42C180", "sub_402910", "sub_402960", "sub_41E4B0", "sub_41E610", "sub_41E680"}:
             loose[n] = s
             continue
         if "::" in s or "@" in s:

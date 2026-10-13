@@ -48,7 +48,7 @@ static LONG WINAPI report_unhandled_exception(EXCEPTION_POINTERS *failure)
     fprintf(stderr, "[crash] eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
             context->Eip, context->Eax, context->Ecx, context->Edx, context->Esp, context->Ebp);
     {
-        DWORD stack[32];
+        DWORD stack[128];
         SIZE_T bytes = 0;
         IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;
         IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
