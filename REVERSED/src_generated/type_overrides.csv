@@ -561,3 +561,6 @@ DAT_0056e6dc,record:0x10:file
 DAT_00573d38,float
 DAT_00573d3c,float
 DAT_00573d40,float
+DAT_005724E3,string:0xd
+DAT_0056e15c,floatfile
+DAT_0056e1cc,floatfile

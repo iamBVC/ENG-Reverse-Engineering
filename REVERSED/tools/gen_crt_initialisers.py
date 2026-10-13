@@ -39,6 +39,7 @@ Writes
 """
 from __future__ import annotations
 
+import csv
 import re
 import struct
 import sys
@@ -89,6 +90,23 @@ def main() -> int:
         for va in (a, resolve(pe, a)):
             if va not in wanted:
                 wanted.append(va)
+    # Everything the link currently stubs is also an address the analysis should look
+    # at: the code labels are callbacks and destructors the program *calls through*
+    # (the WndProc was the first one), and the 'game function' entries are bodies
+    # Ghidra never made a function for.  Creating them here is what gives them bodies
+    # to decompile; a stub entry whose symbol then lands stays honest through the
+    # LNK2005 loop in gen_link_stubs.py.
+    stubs = ROOT / "src_generated" / "link_stubs.csv"
+    if stubs.exists():
+        for row in csv.DictReader(stubs.open(encoding="utf-8")):
+            if not row or not row.get("symbol"):
+                continue
+            m = re.fullmatch(r"_?(?:sub|LAB)_([0-9A-Fa-f]{6})", row["symbol"])
+            if m:
+                va = int(m.group(1), 16)
+                if TEXT_LO <= va < TEXT_HI and va not in wanted:
+                    wanted.append(va)
+
     (ROOT / "src_generated" / "crt_initialisers.txt").write_text(
         "\n".join("0x%06X" % a for a in wanted) + "\n", encoding="utf-8")
 

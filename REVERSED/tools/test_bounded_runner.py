@@ -1,4 +1,4 @@
-"""Verify the independent watchdog stops a non-interactive child in three seconds."""
+"""Verify the independent watchdog stops a non-interactive child in eight seconds."""
 import subprocess
 import time
 from pathlib import Path
@@ -21,9 +21,9 @@ exit /b %errorlevel%
 subprocess.run(["cmd", "/c", str(batch)], cwd=build, check=True)
 start = time.monotonic()
 result = subprocess.run([str(build / "run_bounded.exe"), str(build / "watchdog_sleep.exe")],
-                        cwd=build, capture_output=True, text=True, timeout=8, check=True)
+                        cwd=build, capture_output=True, text=True, timeout=14, check=True)
 elapsed = time.monotonic() - start
-assert 2.8 <= elapsed < 7, elapsed
-assert "Stopped child at the three-second limit" in result.stdout, result.stdout
+assert 7.8 <= elapsed < 12, elapsed
+assert "Stopped child at the eight-second limit" in result.stdout, result.stdout
 print(result.stdout.strip())
 print(f"watchdog verified: sleeping child terminated after {elapsed:.2f} seconds")

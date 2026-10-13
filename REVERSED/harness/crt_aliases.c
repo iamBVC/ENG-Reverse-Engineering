@@ -67,7 +67,16 @@ void *operator_new(unsigned int n) { return malloc(n); }
 void *_memset(void *d, int c, size_t n) { return memset(d, c, n); }
 void *_memcpy(void *d, const void *s, size_t n) { return memcpy(d, s, n); }
 void *_memmove(void *d, const void *s, size_t n) { return memmove(d, s, n); }
-size_t _strlen(const char *s) { return strlen(s); }
+size_t _strlen(const char *s)
+{
+    /* Probe: the movie/format path crashed inside the CRT's own strlen with a pointer
+       that looks like text (`@eng`), so printing the first few pointers and their
+       callers names the site that hands one over.  Bounded on purpose. */
+    static int strlenprobe = 0;
+    if (strlenprobe++ < 8)
+        fprintf(stderr, "[strlen] %p from %p | ", (void *)s, _ReturnAddress());
+    return strlen(s);
+}
 int _strcmp(const char *a, const char *b) { return strcmp(a, b); }
 int _strncmp(const char *a, const char *b, size_t n) { return strncmp(a, b, n); }
 char *_strncpy(char *d, const char *s, size_t n) { return strncpy(d, s, n); }
@@ -155,7 +164,20 @@ int    sub_562717(char *buf, const char *fmt, ...)
     va_list ap;
     static int trace_formats = -1;
     if (trace_formats < 0) trace_formats = getenv("GROOVE_TRACE_FORMATS") != NULL;
-    if (trace_formats) fprintf(stderr, "[format] caller=%p format=%s\n", _ReturnAddress(), fmt);
+    if (trace_formats) {
+        va_list probe;
+        va_start(probe, fmt);
+        if (fmt != NULL && strchr(fmt, 37) != NULL) {
+            /* first conversion: for these path formats it is a %s, and a bad one is
+               what the CRT then faults on inside strnlen */
+            const char *first = va_arg(probe, const char *);
+            fprintf(stderr, "[format] caller=%p format=%s firstarg=%p\n",
+                    _ReturnAddress(), fmt, (const void *)first);
+        } else {
+            fprintf(stderr, "[format] caller=%p format=%s\n", _ReturnAddress(), fmt);
+        }
+        va_end(probe);
+    }
     va_start(ap, fmt);
     {
         int result = vsprintf(buf, fmt, ap);
@@ -163,6 +185,21 @@ int    sub_562717(char *buf, const char *fmt, ...)
         return result;
     }
 }
+
+/* ---- the 64-bit arithmetic helpers ------------------------------------
+ *
+ * A stub for any of these is worse than an unresolved symbol: `__alldiv` returning 0
+ * makes every 64-bit division in the game come out zero (the README has carried that
+ * warning since the link stub list was written).  The MSVC 6 ABI puts the dividend in
+ * EDX:EAX and the divisor on the stack, but *both* sides here are ours - the generated
+ * call sites are ordinary C calls - so plain C is both correct and simpler than naked
+ * asm, and the compiler emits the right instruction sequence for each operation.
+ */
+long long          __alldiv(long long a, long long b) { return a / b; }
+unsigned long long __aulldiv(unsigned long long a, unsigned long long b) { return a / b; }
+unsigned long long __aullrem(unsigned long long a, unsigned long long b) { return a % b; }
+long long          __allmul(long long a, long long b) { return a * b; }
+long long          __allshl(long long v, int count) { return (long long)((unsigned long long)v << count); }
 
 /* ---- x87 conversions: their convention is the point -------------------- */
 int __declspec(naked) __ftol()

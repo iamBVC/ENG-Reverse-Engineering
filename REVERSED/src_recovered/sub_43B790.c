@@ -8,7 +8,7 @@
        push offset dword_6D91B8 / push &desc / push device / call [vtable + 18h]
        mov eax,[desc+8] / imul eax,[desc+0Ch] / lea eax,[eax+eax*2]   <- height*width*3
        _malloc -> sub_40D3B0(file, buffer) -> fopen(file,"rb") / fread(buffer,1,size,..)
-       sub_43B080(surface, &param_1, buffer, 0, 3) -> _free(buffer)
+       sub_43B080(surface, &desc, buffer, 0, 3) -> _free(buffer)
 
    Ghidra's export lost three things here: the file-name argument of the search (EDX), the
    width/height it read back out of the descriptor (its `unaff_ESI`/`unaff_EBX`), and the
@@ -25,7 +25,7 @@ void sub_43B790(undefined4 param_1)
   int size;
 
   if (DAT_006d91b8 != 0) {
-    (**(code **)(*DAT_006d91b8 + 8))(DAT_006d91b8);
+    (**(groove_com1 **)(*DAT_006d91b8 + 8))(DAT_006d91b8);
     DAT_006d91b8 = 0;
   }
 
@@ -38,7 +38,7 @@ void sub_43B790(undefined4 param_1)
   desc.dwHeight = 0x1E0;                       /* 480 */
   desc.dwWidth = 0x280;                        /* 640 */
   desc.ddsCaps = 0x40;                         /* DDSCAPS_TEXTURE */
-  if ((**(code **)(*DAT_00582ccc + 0x18))(DAT_00582ccc, &desc, &DAT_006d91b8, 0) != 0)
+  if ((**(groove_com4 **)(*DAT_00582ccc + 0x18))(DAT_00582ccc, &desc, &DAT_006d91b8, 0) != 0)
     return;
 
   size = (int)desc.dwHeight * (int)desc.dwWidth * 3;
@@ -53,7 +53,7 @@ void sub_43B790(undefined4 param_1)
       fclose(file);
     }
   }
-  sub_43B080(DAT_006d91b8, &param_1, frame, 0, 3);
+  sub_43B080(DAT_006d91b8, &desc, frame, 0, 3);
   sub_5628BC(frame);
   return;
 }

@@ -1010,6 +1010,8 @@ sub_439160,(**(code **)(*DAT_00582cd8 + 0x50)),(**(groove_com7 **)(*DAT_00582cd8
 sub_43B8A0,(**(code **)(*DAT_006d91b8 + 0x94)),(**(groove_com2 **)(*DAT_006d91b8 + 0x94))
 sub_43B8A0,(**(code **)(*DAT_00582ce4 + 0x14)),(**(groove_com6 **)(*DAT_00582ce4 + 0x14))
 sub_43B8A0,(**(code **)(*DAT_006d91b8 + 0x98)),(**(groove_com2 **)(*DAT_006d91b8 + 0x98))
+sub_43B8A0,(**(code **)(*DAT_00582ce4 + 0x34)),(**(groove_com2 **)(*DAT_00582ce4 + 0x34))
+sub_43C940,(**(code **)(*DAT_006d91b8 + 8)),(**(groove_com1 **)(*DAT_006d91b8 + 8))
 sub_439160,undefined4 local_64 [20];,undefined4 local_64 [25] = {0};
 sub_439160,undefined4 local_14;,
 sub_439160,local_14,local_64[20]
