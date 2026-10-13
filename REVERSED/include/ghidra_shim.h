@@ -36,6 +36,8 @@
 #endif
 #include <windows.h>
 #include <mmsystem.h>
+uint64_t groove_multiply_parts(uint32_t low, int32_t high, uint32_t other_low, int32_t other_high);
+int64_t groove_divide_parts(uint64_t numerator, uint32_t low, int32_t high);
 #include <objbase.h>
 HRESULT groove_DirectDrawCreate(GUID *guid, void **object, void *outer);
 HRESULT groove_DirectInputCreateA(HINSTANCE instance, DWORD version, void **object, void *outer);

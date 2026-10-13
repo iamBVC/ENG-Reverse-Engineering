@@ -936,3 +936,6 @@ sub_439600,  return;,"  fprintf(stderr, ""[render] default states ready\n""); ff
   return;"
 sub_4280C0,(int)puVar6 < 0x5fef70,(char *)puVar6 < (char *)&DAT_005fef30 + 0x40
 sub_428D60,(int)puVar1 < 0x5fe648,puVar1 < &DAT_005fd598 + 4 * 0x10b
+sub_41F590,(**(code **)(*param_1 + 8)),(**(groove_com1 **)(*param_1 + 8))
+sub_41CEE0,__allmul,groove_multiply_parts
+sub_41CEE0,__alldiv,groove_divide_parts

@@ -23,6 +23,21 @@
 #include <math.h>
 #include <stdarg.h>
 
+uint64_t groove_multiply_parts(uint32_t low, int32_t high, uint32_t other_low, int32_t other_high)
+{
+    uint64_t first = ((uint64_t)(uint32_t)high << 32) | low;
+    uint64_t second = ((uint64_t)(uint32_t)other_high << 32) | other_low;
+    return first * second;
+}
+
+int64_t groove_divide_parts(uint64_t numerator, uint32_t low, int32_t high)
+{
+    int64_t denominator = (int64_t)(((uint64_t)(uint32_t)high << 32) | low);
+    if (denominator == 0)
+        RaiseException(EXCEPTION_INT_DIVIDE_BY_ZERO, 0, 0, NULL);
+    return (int64_t)numerator / denominator;
+}
+
 /* ---- the portable default path ----------------------------------------
  * The 2001 game gets its data paths from the installer's registry keys
  * (`Software\Disney Interactive\Emperors New Groove\1.0`), and when a key is missing the
