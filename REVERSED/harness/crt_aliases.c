@@ -119,6 +119,12 @@ void   sub_5628BC(void *p)
     free(p);
 }
 
+/* The reversed `_chsize` (the save-file resize calls it): its body is full of dropped
+   arguments - `sub_5667CA()` for the seeks, `sub_56A73D()` for the handle - so the
+   modern CRT's own `_chsize` is both shorter and right.  It takes (fd, size) and
+   returns 0 on success, exactly like the original's contract. */
+int    sub_56C7DF(int fd, int size) { return _chsize(fd, size); }
+
 void  *sub_562AEE(const char *path, const char *mode) { return fopen(path, mode); }
 size_t sub_562B75(void *buf, size_t size, size_t count, void *stream)
 {

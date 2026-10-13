@@ -290,4 +290,23 @@ typedef int                bool32;
 #define __OFSUB__(a,b)  (0)
 #define __PAIR64__(hi,lo) (((unsigned long long)(hi) << 32) | (unsigned int)(lo))
 
+/* ---- the DirectDraw surface descriptor the game builds by hand ----------
+ *
+ * Both recovered loaders (src_recovered/sub_40CF10.c, sub_43B790.c) fill this in
+ * themselves, and they are only correct if the *layout* matches: the listing writes
+ * `mov [desc+0],7Ch`, `[desc+4],7`, `[desc+8],height`, `[desc+0Ch],width` and the caps
+ * dword 40h at `+68h`, inside a 7Ch-byte zeroed local.  dwSize is declared as 7Ch (the
+ * v2 size) while the caps sit at the v1 offset, so the bytes in between stay opaque
+ * here - what matters is that the driver reads what the original wrote.
+ */
+typedef struct {
+    unsigned int dwSize;      /* 0x00  0000007Ch */
+    unsigned int dwFlags;     /* 0x04  7 = CAPS | HEIGHT | WIDTH */
+    unsigned int dwHeight;    /* 0x08 */
+    unsigned int dwWidth;     /* 0x0C */
+    unsigned char  unused[0x68 - 0x10];
+    unsigned int ddsCaps;     /* 0x68  40h = DDSCAPS_TEXTURE */
+    unsigned char  tail[0x7C - 0x6C];
+} groove_surface_desc;
+
 #endif /* GHIDRA_SHIM_H */

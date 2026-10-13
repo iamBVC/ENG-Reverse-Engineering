@@ -15,15 +15,7 @@
    declares), `+4 = 7` (CAPS|HEIGHT|WIDTH), `+8 = height`, `+0Ch = width`, and the caps
    dword 0x40 (DDSCAPS_TEXTURE) at +68h, inside a 7Ch-byte zeroed local. */
 
-typedef struct {
-  unsigned int dwSize;      /* 0x00  007Ch */
-  unsigned int dwFlags;     /* 0x04  7 */
-  unsigned int dwHeight;    /* 0x08  cy */
-  unsigned int dwWidth;     /* 0x0C  cx */
-  unsigned char  unused[0x68 - 0x10];
-  unsigned int ddsCaps;     /* 0x68  40h */
-  unsigned char  tail[0x7C - 0x6C];
-} groove_surface_desc;
+/* (the descriptor's layout lives in ghidra_shim.h: groove_surface_desc) */
 
 void *sub_40CF10(int *device, LPCSTR name, int cx, int cy)
 {

@@ -14,6 +14,14 @@ sub_562B75       # _fwrite  -> fwrite
 sub_5628EB       # _fclose  -> fclose
 sub_562717       # _sprintf -> vsprintf (via a variadic wrapper)
 sub_56279D       # _strtok  -> strtok
+
+# Found the same way, and needed because the compiler finally saw it: `sub_56C7DF` is
+# the 2001 CRT's `_chsize` (it validates the fd against the CRT's table and calls
+# `_get_osfhandle` + SetEndOfFile).  Ghidra dropped *three* arguments inside it, which
+# only becomes an error when the callee's definition precedes the call in the same
+# chunk (chunk boundaries shift as functions land) - the game's save-file resize at
+# 0043xxxx calls it with two arguments, so the modern `_chsize` is the right provider.
+sub_56C7DF       # _chsize  -> _chsize
 sub_5629E6       # _fread   -> fread
 sub_56294C       # _fseek   -> fseek
 sub_5639C2       # _ftell   -> ftell
