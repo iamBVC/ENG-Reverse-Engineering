@@ -1013,6 +1013,25 @@ sub_43B8A0,(**(code **)(*DAT_006d91b8 + 0x98)),(**(groove_com2 **)(*DAT_006d91b8
 sub_43B8A0,(**(code **)(*DAT_00582ce4 + 0x34)),(**(groove_com2 **)(*DAT_00582ce4 + 0x34))
 sub_43C940,(**(code **)(*DAT_006d91b8 + 8)),(**(groove_com1 **)(*DAT_006d91b8 + 8))
 sub_438CD0,&LAB_00409640,(undefined1 *)sub_409640
+sub_42AC50,DAT_006d9dbc + (int)local_c,(int)((byte *)DAT_006d9dbc + (int)local_c)
+sub_42AC50,local_18 + DAT_006d9dbc,(uint)((byte *)DAT_006d9dbc + local_18)
+sub_401820,(**(code **)(*DAT_00582cd4 + 0xa0)),(**(groove_com4 **)(*DAT_00582cd4 + 0xa0))
+sub_401820,(**(code **)(*DAT_00582cd4 + 0x98)),(**(groove_com3 **)(*DAT_00582cd4 + 0x98))
+sub_401820,(**(code **)(*DAT_00582cd4 + 0x58)),(**(groove_com3 **)(*DAT_00582cd4 + 0x58))
+sub_401820,(**(code **)(*DAT_00582cd4 + 0x70)),(**(groove_com6 **)(*DAT_00582cd4 + 0x70))
+sub_401820,(**(code **)(**(int **)(local_1c + 0xc) + 0x7c)),(**(groove_com2 **)(**(int **)(local_1c + 0xc) + 0x7c))
+sub_401820,pfVar16[5] = fVar5;,*(uint *)(pfVar16 + 5) = (uint)fVar5;
+sub_424BE0,(**(code **)(*DAT_00582cd4 + 0xa0)),(**(groove_com4 **)(*DAT_00582cd4 + 0xa0))
+sub_424BE0,(**(code **)(iVar12 + 0xa0)),(**(groove_com4 **)(iVar12 + 0xa0))
+sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x98)),(**(groove_com3 **)(*DAT_00582cd4 + 0x98))
+sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x58)),(**(groove_com3 **)(*DAT_00582cd4 + 0x58))
+sub_424BE0,(**(code **)(**(int **)(iVar12 + 0xc) + 0x7c)),(**(groove_com2 **)(**(int **)(iVar12 + 0xc) + 0x7c))
+sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x70)),(**(groove_com6 **)(*DAT_00582cd4 + 0x70))
+sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x74)),(**(groove_com8 **)(*DAT_00582cd4 + 0x74))
+sub_424BE0,"0x1c4,iVar4,iVar3,iVar2,uVar19)","0x1c4,iVar4,iVar3,iVar2,uVar19,0x1c)"
+sub_401820,(float)(&DAT_0058b0fc)[uVar14 * 9],*(float *)((&DAT_0058b0fc) + uVar14 * 9)
+sub_401820,(float)(&DAT_0058b0fc)[uVar18 * 9],*(float *)((&DAT_0058b0fc) + uVar18 * 9)
+sub_401820,(float)(&DAT_0058b0fc)[uVar17 * 9],*(float *)((&DAT_0058b0fc) + uVar17 * 9)
 sub_439160,undefined4 local_64 [20];,undefined4 local_64 [25] = {0};
 sub_439160,undefined4 local_14;,
 sub_439160,local_14,local_64[20]

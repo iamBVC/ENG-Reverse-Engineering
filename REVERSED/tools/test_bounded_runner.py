@@ -20,10 +20,11 @@ exit /b %errorlevel%
 ''')
 subprocess.run(["cmd", "/c", str(batch)], cwd=build, check=True)
 start = time.monotonic()
-result = subprocess.run([str(build / "run_bounded.exe"), str(build / "watchdog_sleep.exe")],
+result = subprocess.run([str(build / "run_bounded.exe"), str(build / "watchdog_sleep.exe"), '--sample'],
                         cwd=build, capture_output=True, text=True, timeout=14, check=True)
 elapsed = time.monotonic() - start
 assert 7.8 <= elapsed < 12, elapsed
 assert "Stopped child at the eight-second limit" in result.stdout, result.stdout
+assert '[sample] eip=' in result.stdout and '[sample] module=' in result.stdout, result.stdout
 print(result.stdout.strip())
 print(f"watchdog verified: sleeping child terminated after {elapsed:.2f} seconds")

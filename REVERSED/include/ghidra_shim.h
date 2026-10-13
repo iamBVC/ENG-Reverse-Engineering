@@ -154,6 +154,7 @@ typedef int __stdcall groove_com4(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com5(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com6(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 typedef int __stdcall groove_com7(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
+typedef int __stdcall groove_com8(UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR, UINT_PTR);
 
 /* The original passes addresses of adjacent stack slots as callback contexts.
  * Separate C locals have no guaranteed adjacency, so keep those slots together.
