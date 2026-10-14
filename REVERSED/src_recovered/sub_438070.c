@@ -61,5 +61,7 @@ undefined4 sub_438070(void)
   else {
     (**(code **)(*DAT_00582ce4 + 0x80))(DAT_00582ce4,0);
   }
+  if (traced == 1 && DAT_005833e1 == '\0')
+    groove_dump_render_surface(DAT_00582ce4, DAT_00582cd8);
   return 1;
 }

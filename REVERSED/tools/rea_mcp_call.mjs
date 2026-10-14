@@ -30,7 +30,10 @@ if (!callsFile) {
 }
 const spec = JSON.parse(readFileSync(callsFile, "utf8"));
 
-const child = spawn("cmd.exe", ["/d", "/c", "npx", "-y", REA_PACKAGE, "mcp"], {
+const launcher = process.env.REA_COMMAND;
+const command = launcher ? ["/d", "/c", launcher, "mcp"] :
+                          ["/d", "/c", "npx", "-y", REA_PACKAGE, "mcp"];
+const child = spawn("cmd.exe", command, {
   env: { ...process.env },
   cwd: process.env.REA_CWD ?? process.cwd(),
   stdio: ["pipe", "pipe", "pipe"],

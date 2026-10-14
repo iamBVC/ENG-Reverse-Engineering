@@ -312,4 +312,6 @@ typedef struct {
     unsigned char  tail[0x7C - 0x6C];
 } groove_surface_desc;
 
+void groove_dump_render_surface(void *surface, void *viewport);
+
 #endif /* GHIDRA_SHIM_H */
