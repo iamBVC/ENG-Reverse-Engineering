@@ -2,8 +2,6 @@ $ErrorActionPreference = 'Stop'
 
 $runDirectory = Join-Path $PSScriptRoot 'REVERSED\build\run'
 $sourcePath = Join-Path $runDirectory 'groove_rebuild.exe'
-$runToken = [Guid]::NewGuid().ToString('N')
-$gamePath = Join-Path $runDirectory ("groove_rebuild_watchdog_{0}.exe" -f $runToken)
 
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
     throw "Rebuilt game was not found: $sourcePath"
@@ -22,15 +20,10 @@ public static class GrooveWindowControl {
 '@
 }
 
-# Windows has a path-specific compatibility override on the staged filename.
-# Launch a byte-for-byte copy with a unique path so the same rebuilt image runs
-# without inheriting that override. Keep the asset working directory unchanged.
-Copy-Item -LiteralPath $sourcePath -Destination $gamePath
 $game = $null
 try {
     Write-Host "Starting rebuilt game from: $sourcePath"
-    Write-Host "Isolated launch path: $gamePath"
-    $game = Start-Process -FilePath $gamePath -WorkingDirectory $runDirectory -PassThru -WindowStyle Normal
+    $game = Start-Process -FilePath $sourcePath -WorkingDirectory $runDirectory -PassThru -WindowStyle Normal
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $maximumRunMilliseconds = 8000
     $window = [IntPtr]::Zero
@@ -70,14 +63,9 @@ try {
             $game.Refresh()
         }
         if (-not $game.HasExited) {
-            throw "Could not stop diagnostic process $($game.Id); temporary executable is retained at $gamePath."
+            throw "Could not stop diagnostic process $($game.Id) running from $sourcePath."
         }
     }
-
-    if (Test-Path -LiteralPath $gamePath) {
-        Remove-Item -LiteralPath $gamePath -Force
-    }
-    Write-Host ("Temporary executable removed: {0}" -f (-not (Test-Path -LiteralPath $gamePath)))
 }
 
 Write-Host "Trace log: $(Join-Path $runDirectory 'groove_trace.log')"

@@ -146,13 +146,11 @@ void sub_5458D0(void)
   if (range != *(unsigned int *)(device + 0x38)) {
     *(unsigned int *)(device + 0x38) = range;
     if (DAT_005834f4 != 0) {
-      (void)sub_544FC0(0, 50.0f, (float)range);
+      int converted_range;
+      converted_range = (int)sub_544FC0(0, 50.0f, (float)range);
       *(unsigned int *)(DAT_006d9490 + 0x68) |= 3;
-      {
-        int converted_range = __ftol();
-        *(int *)(DAT_006d9490 + 0x6C) = converted_range;
-        *(int *)(DAT_006d9490 + 0x70) = converted_range;
-      }
+      *(int *)(DAT_006d9490 + 0x6C) = converted_range;
+      *(int *)(DAT_006d9490 + 0x70) = converted_range;
     }
   }
 }

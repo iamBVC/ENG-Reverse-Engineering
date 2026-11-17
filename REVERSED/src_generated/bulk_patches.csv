@@ -1476,3 +1476,35 @@ void sub_4138A0(int x, int y, int width, int height)
   _DAT_005833b8 = (float)(span_x * _DAT_0056e158);
   _DAT_005833bc = (float)((double)stored_height * _DAT_0056e1d4);
 }"
+sub_556510,"  float local_38;","  float furthest_w;
+  int vertex_count;"
+sub_556510,"        fVar10 = (float)sub_401080(pfVar1);
+        pfVar19[5] = fVar10;
+        if (fVar10 == 0.0) {","        /* The original stores EAX directly in the vertex outcode slot. */
+        uint32_t outcode = (uint32_t)sub_401080(pfVar1);
+        memcpy(pfVar19 + 5, &outcode, sizeof outcode);
+        if (outcode == 0) {"
+sub_556510,"      local_38 = (float)(&DAT_0058b0fc)[(uint)puVar2[1] * 9];
+      if (local_38 < (float)(&DAT_0058b0fc)[(uint)puVar2[2] * 9]) {
+        local_38 = (float)(&DAT_0058b0fc)[(uint)puVar2[2] * 9];
+      }
+      if (local_38 < (float)(&DAT_0058b0fc)[(uint)puVar2[3] * 9]) {
+        local_38 = (float)(&DAT_0058b0fc)[(uint)puVar2[3] * 9];
+      }
+      if ((local_38 <= _DAT_0057f8f8) || (DAT_006d7c6a == '\0')) {","      {
+        float candidate_w;
+        /* FLD reads the original IEEE-754 value from offset 12 of each record. */
+        memcpy(&furthest_w, &DAT_0058b0f0_storage[(uint)puVar2[1] * 9 + 3], sizeof furthest_w);
+        memcpy(&candidate_w, &DAT_0058b0f0_storage[(uint)puVar2[2] * 9 + 3], sizeof candidate_w);
+        if (furthest_w < candidate_w) furthest_w = candidate_w;
+        memcpy(&candidate_w, &DAT_0058b0f0_storage[(uint)puVar2[3] * 9 + 3], sizeof candidate_w);
+        if (furthest_w < candidate_w) furthest_w = candidate_w;
+      }
+      if ((furthest_w <= _DAT_0057f8f8) || (DAT_006d7c6a == '\0')) {"
+sub_556510,"local_38 = 4.2039e-45;","vertex_count = 3;"
+sub_556510,"local_38 = (float)(iVar14 * 3 + 3);","vertex_count = iVar14 * 3 + 3;"
+sub_556510,"(int)local_38","vertex_count"
+sub_556510,"local_38 = (float)sub_43A610(","vertex_count = sub_43A610("
+sub_556510,"local_38 = (float)sub_439F20(","vertex_count = sub_439F20("
+sub_556510,"if (local_38 == 0.0)","if (vertex_count == 0)"
+sub_556510,"puVar12[2] = local_38;","puVar12[2] = vertex_count;"

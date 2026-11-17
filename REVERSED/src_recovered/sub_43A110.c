@@ -34,11 +34,14 @@ static void clip43a110_intersection(const float *from, const float *to,
                                     float sign, int axis, float *out)
 {
   float t = from_distance / (from_distance - to_distance);
-  int i;
   uint32_t from_color, to_color, color;
 
-  for (i = 0; i < 8; ++i)
-    out[i] = from[i] + (to[i] - from[i]) * t;
+  out[0] = from[0] + (to[0] - from[0]) * t;
+  out[1] = from[1] + (to[1] - from[1]) * t;
+  out[2] = from[2] + (to[2] - from[2]) * t;
+  out[3] = from[3] + (to[3] - from[3]) * t;
+  out[6] = from[6] + (to[6] - from[6]) * t;
+  out[7] = from[7] + (to[7] - from[7]) * t;
 
   memcpy(&from_color, &from[4], sizeof(from_color));
   memcpy(&to_color, &to[4], sizeof(to_color));
@@ -65,16 +68,21 @@ int sub_43A110(int plane, float *input, int count, float *output)
     const float *current = input + i * 8;
     float previous_distance = sign * previous[axis] - previous[3];
     float current_distance = sign * current[axis] - current[3];
-    int previous_inside = previous_distance <= DAT_0056e00c;
-    int current_inside = current_distance <= DAT_0056e00c;
-
-    if (previous_inside != current_inside) {
-      clip43a110_intersection(previous, current, previous_distance,
-                              current_distance, sign, axis,
-                              output + out_count * 8);
-      ++out_count;
-    }
-    if (current_inside) {
+    if (current_distance > DAT_0056e00c) {
+      if (previous_distance < DAT_0056e00c) {
+        clip43a110_intersection(previous, current, previous_distance,
+                                current_distance, sign, axis,
+                                output + out_count * 8);
+        ++out_count;
+      }
+    } else {
+      if (previous_distance > DAT_0056e00c &&
+          current_distance < DAT_0056e00c) {
+        clip43a110_intersection(current, previous, current_distance,
+                                previous_distance, sign, axis,
+                                output + out_count * 8);
+        ++out_count;
+      }
       memcpy(output + out_count * 8, current, 8 * sizeof(float));
       ++out_count;
     }
