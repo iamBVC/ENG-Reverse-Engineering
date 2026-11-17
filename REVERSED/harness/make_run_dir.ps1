@@ -65,6 +65,13 @@ if (Test-Path -LiteralPath $exe) {
     Write-Output "NOTE: $exe does not exist yet - run harness\build_dlls.bat bulk first"
 }
 
+foreach ($dllName in @('groove_ghidra.dll', 'groove_hand.dll')) {
+    $dll = Join-Path $reversed "build\$dllName"
+    if (Test-Path -LiteralPath $dll) {
+        Copy-Item -LiteralPath $dll -Destination (Join-Path $run $dllName) -Force
+    }
+}
+
 $wads = if (Test-Path (Join-Path $run 'wads')) { (Get-ChildItem (Join-Path $run 'wads') -File).Count } else { 0 }
 Write-Output "run directory : $run"
 Write-Output "  $linked file(s) linked, $wads WAD(s), 111.cor $(if (Test-Path (Join-Path $run '111.cor')) {'present'} else {'MISSING'})"

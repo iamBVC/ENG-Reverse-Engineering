@@ -6,8 +6,7 @@ rem  Writes one .c file per function into decompiled\ plus an _index.csv.
 rem
 rem  Requirements (already installed on this machine):
 rem    Ghidra  : D:\Programmi\Ghidra\ghidra_12.1.4_PUBLIC
-rem    JDK 21+ : C:\Program Files\Java\jdk-24   (Ghidra needs >= 21; the
-rem              JDK 8 further up the PATH is too old and must be overridden)
+rem    JDK 25  : D:\Programmi\Java\jdk-25-temurin (required by the installed Ghidra build)
 rem
 rem  Override with GHIDRA_HOME / JAVA_HOME if yours live elsewhere.
 rem =====================================================================
@@ -16,7 +15,7 @@ rem  this script lives in REVERSED\tools, so the project root is one level up
 for %%i in ("%~dp0..") do set "ROOT=%%~fi"
 
 if not defined GHIDRA_HOME set "GHIDRA_HOME=D:\Programmi\Ghidra\ghidra_12.1.4_PUBLIC"
-if not defined JAVA_HOME   set "JAVA_HOME=C:\Program Files\Java\jdk-24"
+if not defined JAVA_HOME   set "JAVA_HOME=D:\Programmi\Java\jdk-25-temurin"
 
 if not exist "%GHIDRA_HOME%\support\analyzeHeadless.bat" (
     echo [!] Ghidra not found at "%GHIDRA_HOME%".
@@ -24,8 +23,8 @@ if not exist "%GHIDRA_HOME%\support\analyzeHeadless.bat" (
     exit /b 1
 )
 if not exist "%JAVA_HOME%\bin\java.exe" (
-    echo [!] A JDK 21+ was not found at "%JAVA_HOME%".
-    echo     Ghidra 12 requires Java 21 or newer; set JAVA_HOME accordingly.
+    echo [!] Ghidra's required JDK 21 was not found at "%JAVA_HOME%".
+    echo     Set JAVA_HOME to an installed JDK 21 directory.
     exit /b 1
 )
 
@@ -59,6 +58,7 @@ rem  -analysisTimeoutPerFile guards against a pathological function eating the r
 call "%GHIDRA_HOME%\support\analyzeHeadless.bat" "%PROJ%" GrooveRebuild ^
      -import "%EXE%" ^
      -scriptPath "%ROOT%\tools" ^
+     -postScript RepairComputedJumpTables.java "%ROOT%\build\huge_function_jump_targets.csv" ^
      -postScript ExportDecompiledC.java "%OUT%" "%EXTRAS%" ^
      -analysisTimeoutPerFile 1800 ^
      -deleteProject

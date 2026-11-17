@@ -5,7 +5,7 @@ void sub_435D10(int sprite, int x, int y, int width, int height, uint color,
                char grayscale, char extra_pass, char alternate)
 {
   static uint traced;
-  int trace = traced++ < 3;
+  int trace = traced++ < 32;
   ushort *description;
   float *vertices;
   uint *node;

@@ -20,6 +20,67 @@
 #include <stdio.h>
 
 extern int sub_41D350(int hInstance, int hPrevInstance, char *lpCmdLine);
+extern void sub_567FCA(void);
+extern int DAT_006d94b8;
+extern int DAT_006da320;
+
+static LONG WINAPI report_first_chance_access_violation(EXCEPTION_POINTERS *failure)
+{
+    static volatile LONG reported_access_violation = 0;
+    static volatile LONG reported_cpp_exception = 0;
+    EXCEPTION_RECORD *record;
+    CONTEXT *context;
+    LONG ordinal;
+
+    if (failure == NULL || failure->ExceptionRecord == NULL ||
+        failure->ContextRecord == NULL)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    record = failure->ExceptionRecord;
+    context = failure->ContextRecord;
+    if (record->ExceptionCode == 0xE06D7363) {
+        ordinal = InterlockedIncrement(&reported_cpp_exception);
+        if (ordinal <= 16) {
+            UINT_PTR image_base = (UINT_PTR)GetModuleHandleA(NULL);
+            DWORD stack[16];
+            SIZE_T bytes = 0;
+            unsigned int i;
+            fprintf(stderr,
+                    "[first-chance-cxx] #%ld address=%p code=%08lx "
+                    "eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
+                    ordinal, record->ExceptionAddress, record->ExceptionCode,
+                    context->Eip, context->Eax, context->Ecx, context->Edx,
+                    context->Esp, context->Ebp);
+            if (ReadProcessMemory(GetCurrentProcess(), (void *)context->Esp,
+                                  stack, sizeof stack, &bytes)) {
+                for (i = 0; i < bytes / sizeof stack[0]; ++i) {
+                    if (stack[i] >= image_base && stack[i] - image_base < 0x1000000)
+                        fprintf(stderr, "[first-chance-cxx] stack[%u]=%08lx rva=%08lx\n",
+                                i, stack[i], (unsigned long)(stack[i] - image_base));
+                }
+            }
+            fflush(stderr);
+        }
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    if (record->ExceptionCode != EXCEPTION_ACCESS_VIOLATION)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    ordinal = InterlockedIncrement(&reported_access_violation);
+    if (ordinal <= 8) {
+        fprintf(stderr,
+                "[first-chance-av] #%ld address=%p access=%lu target=%p "
+                "eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
+                ordinal, record->ExceptionAddress,
+                record->NumberParameters >= 1 ? (unsigned long)record->ExceptionInformation[0] : 0,
+                record->NumberParameters >= 2 ? (void *)record->ExceptionInformation[1] : NULL,
+                context->Eip, context->Eax, context->Ecx, context->Edx,
+                context->Esp, context->Ebp);
+        fflush(stderr);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 /* The game's static initialisers, in the order the 2001 CRT ran them (see
  * tools/gen_crt_initialisers.py and harness/crt_initialisers.c, which is generated).
@@ -54,6 +115,20 @@ static LONG WINAPI report_unhandled_exception(EXCEPTION_POINTERS *failure)
         fprintf(stderr, "[crash] access=%lu target=%p\n",
                 (unsigned long)record->ExceptionInformation[0],
                 (void *)record->ExceptionInformation[1]);
+    if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+        MEMORY_BASIC_INFORMATION mbi;
+        void *target = (void *)record->ExceptionInformation[1];
+        SIZE_T queried = VirtualQuery(target, &mbi, sizeof mbi);
+        fprintf(stderr, "[crash] menu-particles=%08lx count=%lu target-region-query=%lu",
+                (unsigned long)DAT_006d94b8, (unsigned long)DAT_006da320,
+                (unsigned long)queried);
+        if (queried != 0)
+            fprintf(stderr, " base=%p size=%lu state=%08lx protect=%08lx type=%08lx",
+                    mbi.BaseAddress, (unsigned long)mbi.RegionSize,
+                    (unsigned long)mbi.State, (unsigned long)mbi.Protect,
+                    (unsigned long)mbi.Type);
+        fputc('\n', stderr);
+    }
     fprintf(stderr, "[crash] eip=%08lx eax=%08lx ecx=%08lx edx=%08lx esp=%08lx ebp=%08lx\n",
             context->Eip, context->Eax, context->Ecx, context->Edx, context->Esp, context->Ebp);
     {
@@ -103,6 +178,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
         /* no log available - carry on, the trace is a diagnostic, not a requirement */
     }
     SetUnhandledExceptionFilter(report_unhandled_exception);
+    /* Record first-chance AVs as well: the game's own filter can handle an exception
+       before Windows reaches the unhandled filter, which otherwise hides its origin. */
+    AddVectoredExceptionHandler(1, report_first_chance_access_violation);
+    /* Restore the game's C++ exception handler while preserving this diagnostic
+       handler as its fallback; sub_567FCA saves the current filter in DAT_006da430. */
+    sub_567FCA();
     /* The module handle comes first: tools/crash_report.py needs it to turn a fault
        address into a function name, and a fault inside the initialisers would otherwise
        happen before anything logged it. */

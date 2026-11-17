@@ -20,10 +20,17 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 /* The rebuild's own diagnostics (and the stubs' self-reports) use fprintf/stderr.  This
  * is safe for `FILE` too: the binary's own layout is `groove_FILE` below, and nothing in
  * the generated code touches <stdio.h>'s opaque `FILE` any more. */
 #include <stdio.h>
+
+/* Recovered C++ exception bridge and error-message literals used by the
+ * relocated MSVC 6 throw helpers. */
+void __cdecl __CxxThrowException_8(void *object, void *throw_info);
+extern const char groove_string_too_long[];
+extern const char groove_string_invalid_position[];
 
 /* The decompiled code calls Win32 APIs and uses their types (DWORD, PVOID,
  * HANDLE, RaiseException, RtlUnwind, ...).  Lean out windows.h and keep its
@@ -54,16 +61,34 @@ HRESULT groove_DirectDrawEnumerateExA(BOOL (WINAPI *callback)(GUID *, LPSTR, LPS
 #ifndef __cplusplus
 #include <math.h>
 #endif
-void __cfltcvt(void);
-void __fassign(void);
+int __cdecl __cfltcvt(double *argument, char *buffer, size_t format,
+                      int style, int precision, int caps);
+void __cdecl __fassign(int flag, char *argument, char *number);
+void __cdecl __global_unwind2(PVOID target_frame);
+void __local_unwind2();
+int __cdecl __abnormal_termination(void);
+int __cdecl flsall(int mode);
+void __cdecl __exit(int code_value);
+void __cdecl __amsg_exit(int message_id);
+void __cdecl __CxxThrowException_8(void *object, void *throw_info);
+void *__cdecl groove_resolve_legacy_func_info(void *legacy_info);
+int __cdecl __CallSettingFrame_12(unsigned int callback, unsigned int frame,
+                                  int notification);
+void ___add_12(unsigned int *destination, unsigned int *source);
 struct type_info;
 
-/* Ghidra models the SEH chain head (FS:[0]) as a plain global.  A plain global
- * is NOT faithful: the real slot lives in the TIB, so the decompiled
- * exception-registration sequences (34 functions, plus the `Catch@...`
- * handlers) will not work until this is replaced with a real FS:[0] accessor.
- * Everything else in those functions is fine.  See REVERSED/README.md. */
+/* Ghidra models the SEH chain head (FS:[0]) as a global variable.  Keep its
+ * source-level lvalue syntax while mapping it to the calling thread's TIB.
+ * A process-global pointer corrupts exception registration across threads. */
+#if defined(_MSC_VER) && defined(_M_IX86)
+#include <winternl.h>
+#define ExceptionList (((NT_TIB *)NtCurrentTeb())->ExceptionList)
+#elif defined(GROOVE_HOST_TEST)
+/* Standalone host-side tests that never exercise the decompiled SEH paths. */
 extern void *ExceptionList;
+#else
+#error The recovered SEH code requires the 32-bit MSVC TEB layout.
+#endif
 
 /* MSVC's internal SEH record, referenced by `_exception(exception *this)`. */
 typedef struct exception exception;
@@ -130,7 +155,14 @@ typedef unsigned int       uint6;
 typedef int                int3;
 typedef int                int5;
 typedef long double        float10;      /* x87 80-bit value */
+float10 ABS(float10 value);
+float10 ROUND(float10 value);
+float10 SQRT(float10 value);
+float10 f2xm1(float10 value);
+float10 fscale(float10 value, float10 exponent);
+unsigned int SUB104(float10 value, unsigned int byte_offset);
 double fpatan(double numerator, double denominator);
+int groove_angle_to_game_units(int delta_x, int delta_y, float scale);
 int CARRY4(unsigned int first, unsigned int second);
 
 typedef unsigned char      byte;
@@ -313,5 +345,8 @@ typedef struct {
 } groove_surface_desc;
 
 void groove_dump_render_surface(void *surface, void *viewport);
+void groove_probe_texture_surface(void *surface, void *texture, unsigned int index);
+void groove_probe_texture_source(const void *pixels, unsigned int width, unsigned int height,
+                                 unsigned int texture_type, unsigned int index);
 
 #endif /* GHIDRA_SHIM_H */

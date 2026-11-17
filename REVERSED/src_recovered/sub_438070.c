@@ -49,6 +49,9 @@ undefined4 sub_438070(void)
   }
   if (trace) fprintf(stderr, "[render] scene generation begin\n");
   sub_41A5E0();
+  if (trace) fprintf(stderr, "[scene-state] state=%u preview_mode=%u world=%p actor_count=%u actor_head=%p\n",
+                     DAT_005846e4, DAT_005865cc, (void *)DAT_006d9e1c,
+                     DAT_006d9dc8, (void *)DAT_006d9e28);
   if (trace) fprintf(stderr, "[render] scene generation complete; submission begin\n");
   sub_424BE0();
   if (trace) fprintf(stderr, "[render] submission complete\n");

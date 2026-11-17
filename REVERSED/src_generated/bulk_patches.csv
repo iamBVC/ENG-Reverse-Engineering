@@ -147,6 +147,7 @@ sub_56C1BC,void sub_56C1BC(,int sub_56C1BC(
 sub_56CFCA,void sub_56CFCA(,int sub_56CFCA(
 sub_56D0A0,void sub_56D0A0(,int sub_56D0A0(
 sub_410700,_DAT_00583388 = (float)DAT_00583374;,_DAT_00583388 = (float)(int)DAT_00583374;
+sub_410700,_DAT_00583384 = 0x3f400000;,_DAT_00583384 = 0.75f;
 sub_4146B0,fVar1 = (float)DAT_00583374;,fVar1 = (float)(int)DAT_00583374;
 sub_414780,fVar2 = (float)DAT_00583374;,fVar2 = (float)(int)DAT_00583374;
 sub_419460,_DAT_00584660 = (float)DAT_00583374 * _DAT_0056e248;,_DAT_00584660 = (float)(int)DAT_00583374 * _DAT_0056e248;
@@ -244,6 +245,10 @@ sub_42C460,sub_41BCC0(*(undefined4 *)(*(int *)(param_1 + 0x60) + iVar1 * 4));,"s
 sub_42C460,sub_41BCC0(DAT_00581164);,"sub_41BCC0((int)DAT_0058115c, DAT_00581164);"
 sub_40FF40,"uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834,0);","uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834);"
 sub_40FF40,"uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834,0);","uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834);"
+sub_40FF40,"uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834);","fprintf(stderr, ""[settings] display-read-begin\n""); fflush(stderr); uVar2 = sub_405790(s_DisplayDevice_00571784,&DAT_0057f834); fprintf(stderr, ""[settings] display-read=%p\n"", (void *)uVar2); fflush(stderr);"
+sub_40FF40,"uVar2 = sub_56D4ED(uVar2);","fprintf(stderr, ""[settings] display-copy-begin source=%p\n"", (void *)uVar2); fflush(stderr); uVar2 = sub_56D4ED(uVar2); fprintf(stderr, ""[settings] display-copy=%p\n"", (void *)uVar2); fflush(stderr);"
+sub_40FF40,"uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834);","fprintf(stderr, ""[settings] device-read-begin\n""); fflush(stderr); uVar3 = sub_405790(s_D3DDevice_00571778,&DAT_0057f834); fprintf(stderr, ""[settings] device-read=%p\n"", (void *)uVar3); fflush(stderr);"
+sub_40FF40,"uVar3 = sub_56D4ED(uVar3);","fprintf(stderr, ""[settings] device-copy-begin source=%p\n"", (void *)uVar3); fflush(stderr); uVar3 = sub_56D4ED(uVar3); fprintf(stderr, ""[settings] device-copy=%p\n"", (void *)uVar3); fflush(stderr);"
 sub_410330,"uVar1 = sub_405720(*(undefined4 *)(DAT_00583420 + 0xc),0);",uVar1 = sub_405720(*(undefined4 *)(DAT_00583420 + 0xc));
 sub_410330,"uVar1 = sub_405720(*(undefined4 *)(DAT_00583424 + 0xc),0);",uVar1 = sub_405720(*(undefined4 *)(DAT_00583424 + 0xc));
 sub_410330,"sub_405870(s_SoftwareScreenBPP_00571748,*(undefined4 *)(DAT_00583428 + 0xc),0);","sub_405870(s_SoftwareScreenBPP_00571748,*(undefined4 *)(DAT_00583428 + 0xc));"
@@ -260,6 +265,14 @@ sub_4114F0,"sub_4057C0(s_SoftwareScreenW_00571738,0x43a00000,0);","sub_4057C0(s_
 sub_4114F0,"sub_4057C0(s_SoftwareScreenH_00571728,0x43480000,0);","sub_4057C0(s_SoftwareScreenH_00571728,0x43480000);"
 sub_4170E0,"sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0,0);","sub_405870(s_SoundVolume_00571f30,(int)DAT_00584ea0);"
 sub_4196D0,"sub_40F060(PTR_DAT_005724dc + 0x18,PTR_DAT_005724dc + 0x118);",sub_40F060(PTR_DAT_005724dc + 0x18);
+sub_54B590,sub_40E0C0(PTR_DAT_005724dc + 0x18);,"sub_40E0C0(PTR_DAT_005724dc + 0x18,1);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] update begin state=%d steps=%d fade=%p\n"", DAT_005846e4, DAT_005724d4, DAT_0058372c);","if (trace) fprintf(stderr, ""[frame] update begin state=%d steps=%d fade=%p\n"", DAT_005846e4, DAT_005724d4, DAT_0058372c); if (trace) fprintf(stderr, ""[particle-watch] begin storage=%p value=%08lx count=%lu\n"", (void *)&DAT_006d94b8, (unsigned long)DAT_006d94b8, (unsigned long)DAT_006da320);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] input poll complete\n"");","if (trace) fprintf(stderr, ""[frame] input poll complete\n""); if (trace) fprintf(stderr, ""[particle-watch] after-input value=%08lx\n"", (unsigned long)DAT_006d94b8);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] fade update complete\n"");","if (trace) fprintf(stderr, ""[frame] fade update complete\n""); if (trace) fprintf(stderr, ""[particle-watch] after-fade value=%08lx\n"", (unsigned long)DAT_006d94b8);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] audio update complete\n"");","if (trace) fprintf(stderr, ""[frame] audio update complete\n""); if (trace) fprintf(stderr, ""[particle-watch] after-audio value=%08lx\n"", (unsigned long)DAT_006d94b8);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] state update call %p\n"", (&PTR_sub_426500_00579050)[DAT_005846e4]);","if (trace) fprintf(stderr, ""[frame] state update call %p\n"", (&PTR_sub_426500_00579050)[DAT_005846e4]); if (trace) fprintf(stderr, ""[particle-watch] before-state value=%08lx\n"", (unsigned long)DAT_006d94b8);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] state update complete\n"");","if (trace) fprintf(stderr, ""[frame] state update complete\n""); if (trace) fprintf(stderr, ""[particle-watch] after-state value=%08lx\n"", (unsigned long)DAT_006d94b8);"
+sub_4196D0,"if (trace) fprintf(stderr, ""[frame] state dispatch complete result=%u\n"", uVar1);","if (trace) fprintf(stderr, ""[frame] state dispatch complete result=%u\n"", uVar1); if (trace) fprintf(stderr, ""[particle-watch] after-dispatch value=%08lx\n"", (unsigned long)DAT_006d94b8);"
 sub_41ABC0,"sub_4057C0(s_MusicVolume_00571f48,0x41200000,0);","sub_4057C0(s_MusicVolume_00571f48,0x41200000);"
 sub_41ABC0,"sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000,0);","sub_4057C0(s_SoundEffectsVolume_005722c8,0x41200000);"
 sub_41C050,"uVar1 = sub_405790(s_HDPath_00571d94,0,0);","uVar1 = sub_405790(s_HDPath_00571d94,0);"
@@ -458,7 +471,13 @@ sub_412320,sub_412320(void,__stdcall sub_412320(void
 sub_412320,"sub_413700(local_138,iVar2)","sub_413700((undefined4 *)param_1,local_138,(undefined4 *)iVar2)"
 sub_412640,int sub_412640(,int __stdcall sub_412640(
 sub_411D60,"  cVar4 = sub_412A10(local_24 + 4,iVar5);","  cVar4 = sub_412A10(local_24 + 4,iVar5);
-  fprintf(stderr, ""[d3d] %s caps=%u flags=%08x device=%08x render=%08x z=%04x raster=%08x\n"", (char *)local_24[2], (unsigned char)cVar4, *(unsigned int *)(iVar5+4), *(unsigned int *)(iVar5+8), *(unsigned int *)(iVar5+0xf4), *(unsigned short *)(iVar5+0xf8), *(unsigned int *)(iVar5+0x68)); fflush(stderr);"
+  fprintf(stderr, ""[d3d-hw-check] name=%s guid=%p hw=%p result=%u hwflags=%08x hwdevice=%08x hwrender=%08x hwz=%04x hwraster=%08x hwtexture=%08x sw=%p swflags=%08x swdevice=%08x swrender=%08x swz=%04x swraster=%08x swtexture=%08x\n"", (char *)enum_context.record[2], param_1, (void *)(UINT_PTR)iVar5, (unsigned char)cVar4, *(unsigned int *)(iVar5+4), *(unsigned int *)(iVar5+8), *(unsigned int *)(iVar5+0xf4), *(unsigned short *)(iVar5+0xf8), *(unsigned int *)(iVar5+0x68), *(unsigned int *)(iVar5+0x70), (void *)(UINT_PTR)param_5, param_5 ? *(unsigned int *)(param_5+4) : 0, param_5 ? *(unsigned int *)(param_5+8) : 0, param_5 ? *(unsigned int *)(param_5+0xf4) : 0, param_5 ? *(unsigned short *)(param_5+0xf8) : 0, param_5 ? *(unsigned int *)(param_5+0x68) : 0, param_5 ? *(unsigned int *)(param_5+0x70) : 0); fflush(stderr);
+  if ((cVar4 == 0) && (param_5 != 0)) {
+    cVar4 = sub_412A10(enum_context.record + 4,(int)(UINT_PTR)param_5);
+    if (cVar4 != 0) iVar5 = (int)(UINT_PTR)param_5;
+  }
+  fprintf(stderr, ""[d3d-final] name=%s accepted=%u selected=%p sw=%p\n"", (char *)enum_context.record[2], (unsigned char)cVar4, (void *)(UINT_PTR)iVar5, (void *)(UINT_PTR)param_5); fflush(stderr);"
+sub_411D60,"  if (cVar4 != '\0') {","  if (cVar4 != '\0') {"
 sub_40E6F0,DirectInputCreateA(,groove_DirectInputCreateA(
 sub_40E630,    piVar1 = DAT_00582260;,    piVar1 = (DAT_00582260[0]);
 sub_40E690,  piVar1 = DAT_00582260;,  piVar1 = (DAT_00582260[0]);
@@ -497,6 +516,10 @@ sub_411D60,"((int *)param_6[1],param_1,sub_412640,&enum_context.parent);","((int
 sub_411D60,"    iVar5 = (**(groove_com5 **)(*(int *)*puVar8 + 0x20))((int *)*puVar8,0,0,&enum_context.parent,sub_412320);","    fprintf(stderr, ""[d3d] display enumeration begin\n""); fflush(stderr);
     iVar5 = (**(groove_com5 **)(*(int *)*puVar8 + 0x20))((int *)*puVar8,0,0,&enum_context.parent,sub_412320);
     fprintf(stderr, ""[d3d] display enumeration hr=%08x\n"", iVar5); fflush(stderr);"
+sub_4116D0,"  local_8 = 0xffffffff;","  local_8 = 0xffffffff;
+  fprintf(stderr, ""[adapter-callback] guid=%p value=%08x-%08x-%08x-%08x description=%s name=%s monitor=%p\n"", (void *)(UINT_PTR)param_1, param_1 ? *(unsigned int *)(UINT_PTR)param_1 : 0, param_1 ? *(unsigned int *)((UINT_PTR)param_1 + 4) : 0, param_1 ? *(unsigned int *)((UINT_PTR)param_1 + 8) : 0, param_1 ? *(unsigned int *)((UINT_PTR)param_1 + 12) : 0, param_2 ? param_2 : ""(null)"", param_3 ? param_3 : ""(null)"", (void *)param_5); fflush(stderr);"
+sub_4116D0,"    iVar6 = (**(groove_com3 **)(*enum_context.d3d + 0xc))(enum_context.d3d,sub_411D60,&enum_context.draw);","    iVar6 = (**(groove_com3 **)(*enum_context.d3d + 0xc))(enum_context.d3d,sub_411D60,&enum_context.draw);
+    fprintf(stderr, ""[d3d] EnumDevices guid=%p hr=%08x first=%p\n"", param_1, iVar6, enum_context.record); fflush(stderr);"
 sub_40FF40,"  undefined4 local_10;
   undefined4 local_c;
   undefined4 local_8;
@@ -570,9 +593,13 @@ sub_410550,"__CxxThrowException_8(&local_40,&DAT_0056eff0);","fprintf(stderr, ""
 sub_410700,"__CxxThrowException_8(&local_40,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_3c, local_38); fflush(stderr);
     __CxxThrowException_8(&local_40,&DAT_0056eff0);"
 sub_410700,"__CxxThrowException_8(&local_94,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_90, local_8c); fflush(stderr);
-    __CxxThrowException_8(&local_94,&DAT_0056eff0);"
+    sub_410ED0();
+    ExceptionList = local_10;
+    return 0;"
 sub_410700,"__CxxThrowException_8(&local_58,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_54, local_50); fflush(stderr);
-    __CxxThrowException_8(&local_58,&DAT_0056eff0);"
+    sub_410ED0();
+    ExceptionList = local_10;
+    return 0;"
 sub_410700,"__CxxThrowException_8(&local_70,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_6c, local_68); fflush(stderr);
     __CxxThrowException_8(&local_70,&DAT_0056eff0);"
 sub_410700,"__CxxThrowException_8(&local_88,&DAT_0056eff0);","fprintf(stderr, ""[graphics] failure: %s hr=%08x\n"", local_84, local_80); fflush(stderr);
@@ -933,6 +960,7 @@ sub_439600,  if (DAT_005833e1,"  fprintf(stderr, ""[render] default states begin
 sub_439600,  return;,"  fprintf(stderr, ""[render] default states ready\n""); fflush(stderr);
   return;"
 sub_4280C0,(int)puVar6 < 0x5fef70,(char *)puVar6 < (char *)&DAT_005fef30 + 0x40
+sub_4280C0,"DAT_006d94b8 = GlobalAlloc(0x40,DAT_006da320 << 5);","DAT_006d94b8 = GlobalAlloc(0x40,DAT_006da320 << 5); { MEMORY_BASIC_INFORMATION mbi; SIZE_T q = VirtualQuery((void *)DAT_006d94b8, &mbi, sizeof(mbi)); fprintf(stderr, ""[particle-init] ptr=%p count=%u query=%u state=%08lx protect=%08lx\n"", (void *)DAT_006d94b8, (unsigned int)DAT_006da320, (unsigned int)q, q ? (unsigned long)mbi.State : 0UL, q ? (unsigned long)mbi.Protect : 0UL); fflush(stderr); }"
 sub_428D60,(int)puVar1 < 0x5fe648,puVar1 < &DAT_005fd598 + 4 * 0x10b
 sub_41F590,(**(code **)(*param_1 + 8)),(**(groove_com1 **)(*param_1 + 8))
 sub_41CEE0,__allmul,groove_multiply_parts
@@ -1019,6 +1047,8 @@ sub_401820,(**(code **)(*DAT_00582cd4 + 0xa0)),(**(groove_com4 **)(*DAT_00582cd4
 sub_401820,(**(code **)(*DAT_00582cd4 + 0x98)),(**(groove_com3 **)(*DAT_00582cd4 + 0x98))
 sub_401820,(**(code **)(*DAT_00582cd4 + 0x58)),(**(groove_com3 **)(*DAT_00582cd4 + 0x58))
 sub_401820,(**(code **)(*DAT_00582cd4 + 0x70)),(**(groove_com6 **)(*DAT_00582cd4 + 0x70))
+sub_401820,"(**(groove_com6 **)(*DAT_00582cd4 + 0x70))(DAT_00582cd4,4,0x1c4,&DAT_005d15f8,param_2,0x1c);","fprintf(stderr, ""[mesh-draw] source=%p vertex-count=%d output=%p first=(%.3f,%.3f,%.3f,%.3f)\n"", (void *)param_1, param_2, (void *)&DAT_005d15f8, *(float *)&DAT_005d15f8, *(float *)&DAT_005d15fc, *(float *)&DAT_005d1600, *(float *)&DAT_005d1604); fflush(stderr); (**(groove_com6 **)(*DAT_00582cd4 + 0x70))(DAT_00582cd4,4,0x1c4,&DAT_005d15f8,param_2,0x1c);"
+sub_401820,"(**(groove_com6 **)(*DAT_00582cd4 + 0x70))(DAT_00582cd4,4,0x1c4,&DAT_005d15f8,local_4c,0x1c);","fprintf(stderr, ""[mesh-draw] source=%p vertex-count=%d output=%p first=(%.3f,%.3f,%.3f,%.3f)\n"", (void *)param_1, local_4c, (void *)&DAT_005d15f8, *(float *)&DAT_005d15f8, *(float *)&DAT_005d15fc, *(float *)&DAT_005d1600, *(float *)&DAT_005d1604); fflush(stderr); (**(groove_com6 **)(*DAT_00582cd4 + 0x70))(DAT_00582cd4,4,0x1c4,&DAT_005d15f8,local_4c,0x1c);"
 sub_401820,(**(code **)(**(int **)(local_1c + 0xc) + 0x7c)),(**(groove_com2 **)(**(int **)(local_1c + 0xc) + 0x7c))
 sub_401820,pfVar16[5] = fVar5;,*(uint *)(pfVar16 + 5) = (uint)fVar5;
 sub_424BE0,(**(code **)(*DAT_00582cd4 + 0xa0)),(**(groove_com4 **)(*DAT_00582cd4 + 0xa0))
@@ -1029,6 +1059,18 @@ sub_424BE0,(**(code **)(**(int **)(iVar12 + 0xc) + 0x7c)),(**(groove_com2 **)(**
 sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x70)),(**(groove_com6 **)(*DAT_00582cd4 + 0x70))
 sub_424BE0,(**(code **)(*DAT_00582cd4 + 0x74)),(**(groove_com8 **)(*DAT_00582cd4 + 0x74))
 sub_424BE0,"0x1c4,iVar4,iVar3,iVar2,uVar19)","0x1c4,iVar4,iVar3,iVar2,uVar19,0x1c)"
+sub_407240,"  return 1;
+}","  {
+    unsigned int _probeIndex;
+    for (_probeIndex = 0; _probeIndex < DAT_00581150; ++_probeIndex) {
+      uint *_probe = (uint *)((int)DAT_0058114c + _probeIndex * 0x20);
+      groove_probe_texture_surface((void *)_probe[3], (void *)_probe[4], _probeIndex);
+    }
+  }
+  return 1;
+}"
+sub_407240,"      puVar18 = (uint *)(iStack_6bc + (int)DAT_0058114c);","      puVar18 = (uint *)(iStack_6bc + (int)DAT_0058114c);
+      groove_probe_texture_source((const void *)puVar18[6], puVar18[1], puVar18[2], *puVar18 & 0x7f, iStack_6b8);"
 sub_422740,"sub_41ECE0(local_c,local_8,local_4,*(undefined4 *)(param_2 + 8),param_3,param_4,param_5,","sub_41ECE0(local_c,local_8,local_4,*(float *)(param_2 + 8),*(float *)&param_3,*(float *)&param_4,*(float *)&param_5,"
 sub_401820,(float)(&DAT_0058b0fc)[uVar14 * 9],*(float *)((&DAT_0058b0fc) + uVar14 * 9)
 sub_401820,(float)(&DAT_0058b0fc)[uVar18 * 9],*(float *)((&DAT_0058b0fc) + uVar18 * 9)
@@ -1045,3 +1087,293 @@ sub_439160,local_70,rectangle[1]
 sub_439160,local_6c,rectangle[2]
 sub_439160,local_68,rectangle[3]
 sub_43CB40,"sub_40CF10(DAT_00582ccc,uVar3)","sub_40CF10(DAT_00582ccc,uVar3,DAT_00583374,DAT_00583378)   /* PATCH: two more arguments, pushed before the file search and cleaned with `add esp,10h` - the listing has `mov ecx,dword_583378` / `mov edx,dword_583374` (the height and width the surface is created with). */"
+sub_413B20,"sub_413C40(uVar3);","sub_413C40(param_2,uVar3); /* PATCH: the original loads ECX with the destination string (param_2). */"
+sub_413B20,"sub_413BF0(1);","sub_413BF0(param_2,1); /* PATCH: preserve the original ECX string receiver. */"
+sub_413B20,"sub_413BF0(0);","sub_413BF0(param_2,0); /* PATCH: preserve the original ECX string receiver. */"
+sub_413F10,"sub_413C40(param_2);","sub_413C40(param_1,param_2); /* PATCH: the original loads ECX with the string object (param_1). */"
+sub_413F10,"sub_413BF0(1);","sub_413BF0(param_1,1); /* PATCH: preserve the original ECX string receiver. */"
+sub_413F10,"sub_413BF0(0);","sub_413BF0(param_1,0); /* PATCH: preserve the original ECX string receiver. */"
+sub_414160,"sub_413C40(uVar6);","sub_413C40(param_1,uVar6); /* PATCH: the original loads ECX with the destination string (param_1). */"
+sub_414160,"sub_413BF0(1);","sub_413BF0(param_1,1); /* PATCH: preserve the original ECX string receiver. */"
+sub_414160,"sub_413BF0(0);","sub_413BF0(param_1,0); /* PATCH: preserve the original ECX string receiver. */"
+sub_414390,"sub_413C40(uVar3);","sub_413C40(param_1,uVar3); /* PATCH: the original loads ECX with the destination string (param_1). */"
+sub_414390,"sub_413BF0(1);","sub_413BF0(param_1,1); /* PATCH: preserve the original ECX string receiver. */"
+sub_414390,"sub_413BF0(0);","sub_413BF0(param_1,0); /* PATCH: preserve the original ECX string receiver. */"
+sub_548650,"&LAB_00548600","sub_548600 /* PATCH: use the recovered audio queue callback instead of the generated no-op label stub. */"
+sub_547750,"sub_547710(param_1,&local_4,param_3);","sub_547710(param_1,&local_4); /* PATCH: the callee reads only the first two cdecl stack arguments; the third pushed value is unused. */"
+sub_56B126,"sub_56AB70();","((void (*)(void))sub_56AB70)(); /* PATCH: this x87 bridge prebuilds its custom stack frame before the call. */"
+sub_56B139,"sub_56AB70();","((void (*)(void))sub_56AB70)(); /* PATCH: this x87 bridge prebuilds its custom stack frame before the call. */"
+sub_567FDB,"SetUnhandledExceptionFilter(DAT_006da430);","SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)DAT_006da430); /* PATCH: restore the saved Windows exception-filter function pointer. */"
+sub_408EE0,"    case 4:
+    }","    case 4:
+      break;
+    } /* PATCH: an empty terminal case exits the switch without changing state. */"
+sub_40AAB0,"  case 3:
+  }","  case 3:
+    break;
+  } /* PATCH: an empty terminal case exits the switch without changing state. */"
+sub_40A030,"param_7 = (uint *)param_10;","param_7 = (uint *)(*(uint *)&param_10); /* PATCH: preserve the raw 32-bit slot where Ghidra inferred conflicting pointer and float uses. */"
+sub_56C7DF,"sub_56A73D();","sub_56A73D(param_1); /* PATCH: the original pushes EBX (arg_8h) before this cdecl call. */"
+sub_41F0C0,"s_pMMStream_>GetMediaStream_MSPID__00572a54","s_pMMStream__GetMediaStream_MSPID__00572a54"
+sub_41F0C0,"s_pPrimaryVidStream_>QueryInterfac_005729e0","s_pPrimaryVidStream__QueryInterfac_005729e0"
+sub_41F0C0,"s_pDDStream_>CreateSample_NULL__NU_00572990","s_pDDStream__CreateSample_NULL__NU_00572990"
+sub_41F0C0,"s_pSample_>GetSurface__pSurface____00572948","s_pSample__GetSurface__pSurface____00572948"
+sub_41F0C0,"s_pSurface_>QueryInterface_IID_IDi_005728e0","s_pSurface__QueryInterface_IID_IDi_005728e0"
+sub_41F0C0,"s_pMMStream_>SetState_STREAMSTATE__0057289c","s_pMMStream__SetState_STREAMSTATE__0057289c"
+sub_41F0C0,"s_pMMStream_>SetState_STREAMSTATE__00572854","s_pMMStream__SetState_STREAMSTATE__00572854"
+sub_41F0C0,"sub_414600();","sub_414600((const char *)ppiStack_238,iVar1); /* PATCH: the original stages the error string and HRESULT in these stack slots. */"
+sub_41F0C0,"(*(code *)*puRam00000000)(0);","((HRESULT (WINAPI *)(void *,const GUID *,void **))(*(void ***)local_204[2])[0])((void *)local_204[2],(const GUID *)&DAT_0056e60c,(void **)&ppiStack_8); /* PATCH: the original calls COM vtable slot 0 (QueryInterface) on the surface returned in local_204[2]. */"
+sub_41F0C0,"int sub_41F0C0(int *param_1,int *param_2)","int sub_41F0C0(int *param_1,int *param_2,int *param_3) /* PATCH: caller at 0041f5da pushes three stack arguments. */"
+sub_409290,"param_2 = (ushort *)((float)(uVar1 & 0x3e0) * _DAT_0056e124);","*(float *)&param_2 = (float)(uVar1 & 0x3e0) * _DAT_0056e124; /* PATCH: same 32-bit stack slot carries a float after the source pixel is loaded. */"
+sub_409290,"param_2 = (ushort *)((float)param_2 * _DAT_0056e158);","*(float *)&param_2 = *(float *)&param_2 * _DAT_0056e158; /* PATCH: preserve the float bit pattern in the reused stack slot. */"
+sub_409290,"(float)param_2 * _DAT_0056e134","*(float *)&param_2 * _DAT_0056e134"
+sub_409290,"(float)param_2 * _DAT_0056e140","*(float *)&param_2 * _DAT_0056e140"
+sub_40AD30,"param_2 = (ushort *)((float)((byte)uVar1 & 0x1f) * _DAT_0056e11c);","*(float *)&param_2 = (float)((byte)uVar1 & 0x1f) * _DAT_0056e11c; /* PATCH: preserve the low color component as float bits in the reused stack slot. */"
+sub_40AD30,"param_1 = (uint *)((float)(uVar1 & 0x3e0) * _DAT_0056e124);","*(float *)&param_1 = (float)(uVar1 & 0x3e0) * _DAT_0056e124; /* PATCH: preserve the middle color component as float bits in the reused stack slot. */"
+sub_40AD30,"(float)param_1 * _DAT_0056e134","*(float *)&param_1 * _DAT_0056e134"
+sub_40AD30,"(float)param_2 * _DAT_0056e138","*(float *)&param_2 * _DAT_0056e138"
+sub_40AD30,switchD_0040adbb_caseD_1:,switchD_0040adbb_caseD_1:;
+sub_40AF10,switchD_0040b592_caseD_1:,switchD_0040b592_caseD_1:;
+sub_40AF10,switchD_0040b35d_caseD_1:,switchD_0040b35d_caseD_1:;
+sub_40AF10,switchD_0040b125_caseD_1:,switchD_0040b125_caseD_1:;
+sub_40B750,switchD_0040be40_caseD_1:,switchD_0040be40_caseD_1:;
+sub_40B750,switchD_0040bbef_caseD_1:,switchD_0040bbef_caseD_1:;
+sub_40B750,switchD_0040b998_caseD_1:,switchD_0040b998_caseD_1:;
+sub_4321E0,"(float)pfStack_130","*(float *)&pfStack_130 /* PATCH: same x86 local slot is used as an output pointer and an FPU value. */"
+sub_43A110,"param_4 = (float *)((float)iVar2 * pfVar9[param_1] - pfVar9[3]);","*(float *)&param_4 = (float)iVar2 * pfVar9[param_1] - pfVar9[3]; /* PATCH: the parameter slot is reused for a float result. */"
+sub_43A110,"(float)param_4","*(float *)&param_4"
+sub_43A110,"param_4 = (float *)(float)fVar12;","*(float *)&param_4 = (float)fVar12; /* PATCH: preserve the result bits in the reused parameter slot. */"
+sub_56D188,"exception::~exception(this);","sub_56D64F((undefined4 *)this); /* PATCH: route Ghidra's C++ destructor syntax to the recovered C destructor body. */"
+sub_56D23E,"exception::~exception(this);","sub_56D64F((undefined4 *)this); /* PATCH: route Ghidra's C++ destructor syntax to the recovered C destructor body. */"
+sub_56D326,"exception::~exception(this);","sub_56D64F((undefined4 *)this); /* PATCH: route Ghidra's C++ destructor syntax to the recovered C destructor body. */"
+Unwind_0056d91c,"exception::~exception(*(exception **)(unaff_EBP + -0x14));","sub_56D64F(*(undefined4 **)(unaff_EBP + -0x14)); /* PATCH: use the recovered exception destructor with the original stack object. */"
+Unwind_0056d930,"exception::~exception(*(exception **)(unaff_EBP + -0x10));","sub_56D64F(*(undefined4 **)(unaff_EBP + -0x10)); /* PATCH: use the recovered exception destructor with the original stack object. */"
+Unwind_0056d944,"exception::~exception(*(exception **)(unaff_EBP + -0x10));","sub_56D64F(*(undefined4 **)(unaff_EBP + -0x10)); /* PATCH: use the recovered exception destructor with the original stack object. */"
+Unwind_0056d958,"exception::~exception(*(exception **)(unaff_EBP + -0x10));","sub_56D64F(*(undefined4 **)(unaff_EBP + -0x10)); /* PATCH: use the recovered exception destructor with the original stack object. */"
+Unwind_0056d980,"exception::~exception(*(exception **)(unaff_EBP + -0x10));","sub_56D64F(*(undefined4 **)(unaff_EBP + -0x10)); /* PATCH: use the recovered exception destructor with the original stack object. */"
+sub_56814E,"NAN(","_isnan( /* PATCH: Ghidra's unordered-comparison helper is a NaN predicate, not the NAN constant macro. */"
+sub_559A46,"void sub_559A46(int param_1,int param_2)","void sub_559A46(int in_EAX,int param_1,int param_2) /* PATCH: original fastcall entry consumes EAX, ECX, and EDX in that order. */"
+sub_559A46,"  int in_EAX;",""
+sub_55DC20,"sub_559A46();","sub_559A46(param_1,param_2,param_3); /* PATCH: restore original EAX/ECX/EDX argument values as C parameters. */"
+sub_55E8B6,"sub_559A46();","sub_559A46(param_1,param_2,param_3); /* PATCH: restore original EAX/ECX/EDX argument values as C parameters. */"
+sub_55F55C,"sub_559A46();","sub_559A46(param_1,param_2,param_3); /* PATCH: restore original EAX/ECX/EDX argument values as C parameters. */"
+sub_5601F2,"sub_559A46();","sub_559A46(param_1,param_2,param_3); /* PATCH: restore original EAX/ECX/EDX argument values as C parameters. */"
+sub_43A610,"sub_43A110(4);","sub_43A110(4,param_2,param_3,pfVar2); /* PATCH: restore the three register/stack values observed before the original call. */"
+sub_56D1E1,"undefined4 * sub_56D1E1(void)","undefined4 * sub_56D1E1(int param_1) /* PATCH: caller pushes the source object at 0056d2bb; body reads [EBP+8]. */"
+sub_56D0FA,"undefined4 * sub_56D0FA(void)","undefined4 * sub_56D0FA(int param_1) /* PATCH: caller pushes the temporary string at 0056d307; body reads [EBP+8]. */"
+sub_56B376,"fVar2 = fVar2 - (float10)(unkint10)(fVar2 / fVar3) * fVar3;","fVar2 = (float10)fmod((double)fVar2,(double)fVar3); /* PATCH: original uses x87 FPREM, i.e. remainder with truncating quotient. */"
+sub_56B62E,"fVar2 = fVar2 - (float10)(unkint10)(fVar2 / fVar3) * fVar3;","fVar2 = (float10)fmod((double)fVar2,(double)fVar3); /* PATCH: original uses x87 FPREM/FPREM1 in its precision branches. */"
+sub_56B57C,"return in_ST0 - (float10)(unkint10)(in_ST0 / in_ST1) * in_ST1;","return (float10)fmod((double)in_ST0,(double)in_ST1); /* PATCH: equivalent remainder operation for the source-level x87 bridge. */"
+sub_56B834,"return in_ST0 - (float10)(unkint10)(in_ST0 / in_ST1) * in_ST1;","return (float10)fmod((double)in_ST0,(double)in_ST1); /* PATCH: equivalent remainder operation for the source-level x87 bridge. */"
+sub_56B57C,"(float10)sub_56B376()","((float10 (*)())sub_56B376)() /* PATCH: original caller prebuilds the x87 argument frame on the stack. */"
+sub_56B57C,"(float10)sub_56B376(in_ST1 * (float10)dRam0057d064)","((float10 (*)())sub_56B376)(in_ST1 * (float10)dRam0057d064) /* PATCH: keep the custom x87 bridge call despite Ghidra's inferred arity. */"
+sub_56B834,"(float10)sub_56B62E()","((float10 (*)())sub_56B62E)() /* PATCH: original caller prebuilds the x87 argument frame on the stack. */"
+sub_56B834,"(float10)sub_56B62E(in_ST1 * (float10)dRam0057d064)","((float10 (*)())sub_56B62E)(in_ST1 * (float10)dRam0057d064) /* PATCH: keep the custom x87 bridge call despite Ghidra's inferred arity. */"
+sub_56B57C,"(float10)sub_56B376(in_ST1 * (float10)_DAT_0057d064)","((float10 (*)())sub_56B376)(in_ST1 * (float10)_DAT_0057d064) /* PATCH: preserve the original x87 bridge call despite Ghidra's inferred arity. */"
+sub_56B834,"(float10)sub_56B62E(in_ST1 * (float10)_DAT_0057d064)","((float10 (*)())sub_56B62E)(in_ST1 * (float10)_DAT_0057d064) /* PATCH: preserve the original x87 bridge call despite Ghidra's inferred arity. */"
+sub_56B361,"sub_56AB70();","((uint (*)())sub_56AB70)(); /* PATCH: original wrapper stores two x87 80-bit values in a custom stack frame. */"
+sub_568519,"sub_5683D0();","((float10 (*)())sub_5683D0)(); /* PATCH: original helper consumes the caller's prepared x87/stack frame. */"
+sub_563382,"uVar2 = sub_568519();","uVar2 = ((undefined4 (*)())sub_568519)(); /* PATCH: use the original helper's EAX result at this call site. */"
+sub_5679DD,"uVar1 = sub_56AB58();","uVar1 = ((undefined4 (*)())sub_56AB58)(); /* PATCH: preserve the original helper's returned EAX value. */"
+sub_563382,"  short in_FPUControlWord;","  short in_FPUControlWord; undefined4 _local_4;"
+sub_563382,"  unkbyte10 in_ST7;","  undefined1 in_ST7[10];"
+sub_563382,"auStack_e = (undefined1  [10])in_ST7;","memcpy(auStack_e,in_ST7,sizeof(auStack_e)); /* PATCH: represent Ghidra's 10-byte register copy as a byte copy. */"
+sub_4281E0,"sub_428210(param_1,param_2,param_3,&DAT_006d94c0);","{ int particle_hit[3] = { 0, 0, DAT_006d94c8 }; sub_428210(param_1,param_2,param_3,particle_hit); DAT_006d94c0 = particle_hit[0]; DAT_006d94c8 = particle_hit[2]; }"
+sub_410700,"  UpdateWindow(DAT_005855d0);","  UpdateWindow(DAT_005855d0);
+  { void **ddraw_vtable = *(void ***)DAT_00582ccc; HMODULE owner = NULL; char owner_path[MAX_PATH] = {0};
+    (void)GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)ddraw_vtable[21], &owner);
+    if (owner) (void)GetModuleFileNameA(owner, owner_path, MAX_PATH);
+    fprintf(stderr, ""[ddraw-vtable] object=%p vtable=%p coop=%p setmode=%p createsurface=%p owner=%s mode=%ux%u bpp=%u refresh=60\n"", DAT_00582ccc, ddraw_vtable, ddraw_vtable[20], ddraw_vtable[21], ddraw_vtable[6], owner_path, *(unsigned int *)(param_2 + 0xc), *(unsigned int *)(param_2 + 0x10), *(unsigned int *)(param_1 + 0xc));
+    fflush(stderr);
+  }"
+sub_410550,"  local_2c = (**(groove_com3 **)*local_18)(local_18,&DAT_0056e71c,&DAT_00582ccc);","  local_2c = (**(groove_com3 **)*local_18)(local_18,&DAT_0056e71c,&DAT_00582ccc);
+  fprintf(stderr, ""[ddraw-query] iid=%08x-%08x-%08x-%08x hr=%08x source=%p interface=%p\n"", DAT_0056e71c[0], DAT_0056e71c[1], DAT_0056e71c[2], DAT_0056e71c[3], local_2c, local_18, DAT_00582ccc); fflush(stderr);"
+sub_556510,"  cVar7 = sub_402840(param_1,&DAT_006d7be8,&local_8);","  {
+    static unsigned int trace_model_calls;
+    unsigned int trace_model = trace_model_calls++;
+    cVar7 = sub_402840(param_1,&DAT_006d7be8,&local_8);
+    if (trace_model < 8) {
+      fprintf(stderr, ""[model-cull] call=%u model=%08x field6c=%u field6e=%u visible=%u detail=%08x\n"", trace_model + 1, (unsigned)param_1, *(ushort *)(param_1 + 0x6c), *(ushort *)(param_1 + 0x6e), (unsigned char)cVar7, (unsigned int)local_8);
+      if (trace_model == 0) {
+        float *matrix = (float *)&DAT_006d7be8;
+        float *bounds = (float *)(param_1 + 0x10);
+        fprintf(stderr, ""[model-matrix] %+.3f %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f %+.3f\n"", (double)matrix[0], (double)matrix[1], (double)matrix[2], (double)matrix[3], (double)matrix[4], (double)matrix[5], (double)matrix[6], (double)matrix[7], (double)matrix[8], (double)matrix[9], (double)matrix[10], (double)matrix[11], (double)matrix[12], (double)matrix[13], (double)matrix[14], (double)matrix[15]);
+        fprintf(stderr, ""[model-bounds] p0=%+.3f/%+.3f/%+.3f p7=%+.3f/%+.3f/%+.3f\n"", (double)bounds[0], (double)bounds[1], (double)bounds[2], (double)bounds[21], (double)bounds[22], (double)bounds[23]);
+      }
+      fflush(stderr);
+    }
+  }"
+sub_402840,"    uVar1 = sub_401080(pfVar2 + -2);","    uVar1 = sub_401080(pfVar2 + -2);
+    {
+      static unsigned int trace_clip_points;
+      if (trace_clip_points < 8) {
+        fprintf(stderr, ""[clip-point] n=%u x=%.3f y=%.3f z=%.3f w=%.3f code=%02x\n"", trace_clip_points + 1, (double)pfVar2[-2], (double)pfVar2[-1], (double)pfVar2[0], (double)pfVar2[1], uVar1);
+        fflush(stderr);
+      }
+      ++trace_clip_points;
+    }"
+sub_550140,"  DAT_006d9e1c = param_1;","  {
+    static unsigned int trace_world_sets;
+    if (trace_world_sets++ < 8) {
+      fprintf(stderr, ""[world-set] old=%08x new=%08x flags=%08x\n"", (unsigned)DAT_006d9e1c, (unsigned)param_1, param_1 != 0 ? *(unsigned int *)(param_1 + 0xe8) : 0);
+      fflush(stderr);
+    }
+  }
+  DAT_006d9e1c = param_1;"
+sub_54D0D0,"  DAT_006d9e1c = 0;","  {
+    static unsigned int trace_world_resets;
+    if (trace_world_resets++ < 8) {
+      fprintf(stderr, ""[world-reset] old=%08x pending=%08x actors=%u\n"", (unsigned)DAT_006d9e1c, (unsigned)DAT_006d9e20, (unsigned)DAT_006d9dc8);
+      fflush(stderr);
+    }
+  }
+  DAT_006d9e1c = 0;"
+sub_401780,"  if (*(int *)(param_1 + 0x28) != 0) {","  {
+    static unsigned int trace_camera_configs;
+    unsigned int camera_object = *(unsigned int *)(param_1 + 0x28);
+    if (trace_camera_configs++ < 3) {
+      fprintf(stderr, ""[camera-config] descriptor=%08x camera=%08x yaw=%d height=%d pos=%d/%d/%d\n"", (unsigned)param_1, camera_object, *(int *)(param_1 + 0x2c), *(int *)(param_1 + 0x30), *(int *)(param_2 + 0x10), *(int *)(param_2 + 0x14), *(int *)(param_2 + 0x18));
+      fflush(stderr);
+    }
+  }
+  if (*(int *)(param_1 + 0x28) != 0) {"
+sub_54B590,"  sub_425BB0();","  sub_425BB0();
+  if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_425BB0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"        sub_425C00();","        sub_425C00();
+        if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_425C00 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"        sub_54C4A0();","        sub_54C4A0();
+        if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_54C4A0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"        sub_4287C0();","        sub_4287C0();
+        if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_4287C0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"    sub_40C6E0();","    sub_40C6E0();
+    if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_40C6E0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"  sub_40E0C0(PTR_DAT_005724dc + 0x18,1);","  sub_40E0C0(PTR_DAT_005724dc + 0x18,1);
+  if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_40E0C0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"      sub_419E00();","      sub_419E00();
+      if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_419E00 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"    sub_41A220();","    sub_41A220();
+    if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_41A220 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"  sub_427C40();","  sub_427C40();
+  if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_427C40 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"    sub_40DD60();","    sub_40DD60();
+    if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_40DD60 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"  sub_41E020();","  sub_41E020();
+  if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_41E020 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"      iVar1 = sub_414FB0();","      iVar1 = sub_414FB0();
+      if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_414FB0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"      iVar1 = sub_4152D0();","      iVar1 = sub_4152D0();
+      if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_4152D0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"              sub_545F90();","              sub_545F90();
+              if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_545F90 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"            sub_546170();","            sub_546170();
+            if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_546170 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"              sub_4267E0();","              sub_4267E0();
+              if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_4267E0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"                sub_545E30();","                sub_545E30();
+                if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_545E30 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"            sub_545EB0();","            sub_545EB0();
+            if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_545EB0 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"  sub_40DB70();","  sub_40DB70();
+  if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-write-watch] after sub_40DB70 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54B590,"    sub_40C6E0();","    fprintf(stderr, ""[camera-write-watch] before sub_40C6E0 count=%u anim=%p arrays=%p dims=%p target=%p\n"", (unsigned)DAT_00581134, (void *)DAT_00581138, (void *)DAT_00581154, (void *)DAT_0058114c, (void *)&DAT_006d9d80);
+    fflush(stderr);
+    sub_40C6E0();"
+sub_54B590,"    sub_40C6E0();","    fprintf(stderr, ""[camera-write-watch] before sub_40C6E0 count=%u anim=%p arrays=%p lists=%p dims=%p target=%p type=%u\n"", (unsigned)DAT_00581134, (void *)DAT_00581138, (void *)DAT_00581154, (void *)DAT_00581144, (void *)DAT_0058114c, (void *)&DAT_006d9d80, (unsigned)*((unsigned char *)DAT_00581138 + 2));
+    fflush(stderr);
+    sub_40C6E0();"
+sub_40C6E0,"        *puVar4 = puVar4[-1];","        if ((uintptr_t)puVar4 >= (uintptr_t)&DAT_006d9d80 && (uintptr_t)puVar4 < (uintptr_t)&DAT_006d9d80 + 12) fprintf(stderr, ""[camera-animation-write] shift-dest=%p source=%p value=%08x\n"", (void *)puVar4, (void *)(puVar4 - 1), (unsigned)puVar4[-1]);
+        *puVar4 = puVar4[-1];"
+sub_40C6E0,"          *puVar4 = uVar1;","          if ((uintptr_t)puVar4 >= (uintptr_t)&DAT_006d9d80 && (uintptr_t)puVar4 < (uintptr_t)&DAT_006d9d80 + 12) fprintf(stderr, ""[camera-animation-write] insert-dest=%p value=%08x\n"", (void *)puVar4, (unsigned)uVar1);
+          *puVar4 = uVar1;"
+
+sub_54B590,"    sub_40C6E0();","    fprintf(stderr, ""[camera-write-watch] before sub_40C6E0 target=%d/%d/%d count=%u anim=%p arrays=%p lists=%p dims=%p target-ptr=%p type=%u\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88, (unsigned)DAT_00581134, (void *)DAT_00581138, (void *)DAT_00581154, (void *)DAT_00581144, (void *)DAT_0058114c, (void *)&DAT_006d9d80, (unsigned)*((unsigned char *)DAT_00581138 + 2));
+    fflush(stderr);
+    sub_40C6E0();"
+sub_40C6E0,"*puVar10 = *puVar4;","if ((uintptr_t)puVar10 >= (uintptr_t)&DAT_006d9d80 && (uintptr_t)puVar10 < (uintptr_t)&DAT_006d9d80 + 12) fprintf(stderr, ""[camera-animation-write] copy-dest=%p source=%p value=%08x\n"", (void *)puVar10, (void *)puVar4, (unsigned)*puVar4);
+*puVar10 = *puVar4;"
+sub_54C4A0,"  sub_54C440();","  sub_54C440(); fprintf(stderr, ""[camera-transition-step] after sub_54C440 %d/%d/%d\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_403EE0(puVar2,DAT_005846ec,DAT_00584648);","    sub_403EE0(puVar2,DAT_005846ec,DAT_00584648); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_403EE0 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_403020(puVar2,DAT_005846ec,DAT_00584648);","    sub_403020(puVar2,DAT_005846ec,DAT_00584648); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_403020 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_54BC30(puVar2);","    sub_54BC30(puVar2); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_54BC30 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_4051D0();","    sub_4051D0(); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_4051D0 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_41ADA0(puVar9[0x3d]);","    sub_41ADA0(puVar9[0x3d]); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_41ADA0-a %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_41ADA0(puVar9[0x30]);","    sub_41ADA0(puVar9[0x30]); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_41ADA0-b %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_546240(puVar9,0xffffffff);","    sub_546240(puVar9,0xffffffff); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_546240 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_429DB0((int)*(char *)((int)puVar9 + 0x153));","    sub_429DB0((int)*(char *)((int)puVar9 + 0x153)); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_429DB0-a %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_41FA30(puVar9[4],puVar9[5],iVar5);","    sub_41FA30(puVar9[4],puVar9[5],iVar5); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_41FA30 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_54BBD0(puVar9,*puVar9);","    sub_54BBD0(puVar9,*puVar9); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_54BBD0 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_54C4A0,"    sub_54D180(puVar9);","    sub_54D180(puVar9); if (DAT_006d9d80 != 0 || DAT_006d9d84 != 0x1000 || DAT_006d9d88 != 0) fprintf(stderr, ""[camera-transition-step] after sub_54D180 %d/%d/%d\\n"", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);"
+sub_401820,"(**(groove_com3 **)(*DAT_00582cd4 + 0x98))(DAT_00582cd4,0,*(int *)(local_1c + 0x10));","fprintf(stderr, ""[mesh-texture] material=%p object=%p surface=%p\n"", (void *)local_1c, (void *)*(int *)(local_1c + 0xc), (void *)*(int *)(local_1c + 0x10)); fflush(stderr); (**(groove_com3 **)(*DAT_00582cd4 + 0x98))(DAT_00582cd4,0,*(int *)(local_1c + 0x10)); fprintf(stderr, ""[mesh-texture] set returned\n""); fflush(stderr);"
+sub_41ED50,"  DAT_00586568 = operator_new(0x7d000);","  DAT_00586568 = operator_new(0x7d000); fprintf(stderr, ""[arena-init] base=%08x\n"", (uint)DAT_00586568); fflush(stderr);"
+sub_41ED90,"  iVar1 = DAT_0058656c;","  iVar1 = DAT_0058656c; static uint alloc_trace = 0; ++alloc_trace; if (alloc_trace <= 5 || (uint)iVar1 < 0x10000 || (uint)iVar1 >= 0x80000000) { fprintf(stderr, ""[arena-alloc] n=%u ptr=%08x base=%08x left=%08x\n"", alloc_trace, (uint)iVar1, (uint)DAT_00586568, (uint)DAT_00586570); fflush(stderr); }"
+sub_41EDC0,"  DAT_00586570 = 0x7d000;","  DAT_00586570 = 0x7d000; static uint reset_trace = 0; if (++reset_trace <= 4) { fprintf(stderr, ""[arena-reset] n=%u base=%08x current=%08x\n"", reset_trace, (uint)DAT_00586568, (uint)DAT_0058656c); fflush(stderr); }"
+sub_401820,"DAT_006d7c54 != *(int *)(local_1c + 0x10)","DAT_006d7c54 != (((uint)*(int *)(local_1c + 0x10) == 0x80000000U || ((uint)*(int *)(local_1c + 0x10) < 0x10000U && *(int *)(local_1c + 0x10) != 0)) ? 0 : *(int *)(local_1c + 0x10))"
+sub_401820,",0,*(int *)(local_1c + 0x10));",",0,(((uint)*(int *)(local_1c + 0x10) == 0x80000000U || ((uint)*(int *)(local_1c + 0x10) < 0x10000U && *(int *)(local_1c + 0x10) != 0)) ? 0 : *(int *)(local_1c + 0x10)));"
+sub_401820,"DAT_006d7c54 = *(int *)(local_1c + 0x10);","DAT_006d7c54 = (((uint)*(int *)(local_1c + 0x10) == 0x80000000U || ((uint)*(int *)(local_1c + 0x10) < 0x10000U && *(int *)(local_1c + 0x10) != 0)) ? 0 : *(int *)(local_1c + 0x10));"
+sub_401820,"LAB_0040209f: ;","LAB_0040209f: ; static uint material_map_trace = 0; if (material_map_trace++ < 40) fprintf(stderr, ""[material-map] id=%u anim=%u flags=%02x count=%u base=%p row=%p row-index=%d object=%p surface=%p\\n"", local_8[2], local_8[3], local_8[0], DAT_00581150, (void *)DAT_0058114c, (void *)local_1c, local_1c ? ((int)local_1c - (int)DAT_0058114c) / 0x20 : -1, (void *)(local_1c ? *(int *)(local_1c + 0xc) : 0), (void *)(local_1c ? *(int *)(local_1c + 0x10) : 0));"
+sub_436550,"  bVar1 = *param_1;","  bVar1 = *param_1; static uint text_input_trace = 0; if (text_input_trace++ < 24) { int _ti; fprintf(stderr, ""[text-input] call=%u ptr=%p bytes="", text_input_trace, (void *)param_1); for (_ti = 0; _ti < 48 && param_1[_ti] != 0; ++_ti) fprintf(stderr, ""%02X"", param_1[_ti]); fprintf(stderr, ""\\n""); }"
+sub_401820,"local_1c = (char)local_8[2] * 0x20 + DAT_0058114c;","local_1c = (char)local_8[2] * 0x20 + (int)DAT_0058114c;"
+sub_40C6E0,"* 0x20 + 8 + DAT_0058114c","* 0x20 + 8 + (int)DAT_0058114c"
+sub_41FB30,"local_128 = (char)(byte)local_fc[1] * 0x20 + DAT_0058114c;","local_128 = (char)(byte)local_fc[1] * 0x20 + (int)DAT_0058114c;"
+sub_422740,"local_54 = (char)(byte)local_3c[1] * 0x20 + DAT_0058114c;","local_54 = (char)(byte)local_3c[1] * 0x20 + (int)DAT_0058114c;"
+sub_42C8C0,"(char)(byte)(*(ushort * *)(sprite_stack.bytes + 0x4c))[1] * 0x20 + DAT_0058114c","(char)(byte)(*(ushort * *)(sprite_stack.bytes + 0x4c))[1] * 0x20 + (int)DAT_0058114c"
+sub_4321E0,"(char)(byte)puStack_100[1] * 0x20 + DAT_0058114c","(char)(byte)puStack_100[1] * 0x20 + (int)DAT_0058114c"
+sub_434AD0,"(char)puVar12[1] * 0x20 + DAT_0058114c","(char)puVar12[1] * 0x20 + (int)DAT_0058114c"
+sub_434AD0,"(char)(byte)puVar12[1] * 0x20 + DAT_0058114c","(char)(byte)puVar12[1] * 0x20 + (int)DAT_0058114c"
+sub_555140,"(char)puVar2[1] * 0x20 + DAT_0058114c","(char)puVar2[1] * 0x20 + (int)DAT_0058114c"
+sub_556510,"(char)(byte)local_40[1] * 0x20 + DAT_0058114c","(char)(byte)local_40[1] * 0x20 + (int)DAT_0058114c"
+sub_558FF0,"void sub_558FF0(int param_1,int param_2)","void sub_558FF0(int in_EAX,int param_1,int param_2) /* PATCH: restore the first vertex from original EAX input. */"
+sub_558FF0,"  int in_EAX;",""
+sub_559459,"void sub_559459(int param_1,int param_2)","void sub_559459(int in_EAX,int param_1,int param_2) /* PATCH: restore the first vertex from original EAX input. */"
+sub_559459,"  int in_EAX;",""
+sub_560EA0,"sub_558FF0();","sub_558FF0((int)param_1,(int)param_2,(int)param_3); /* PATCH: pass EAX/ECX/EDX vertex pointers explicitly. */"
+sub_403020,"fpatan((float10)(*(int *)(param_1 + 0x50) - *(int *)(param_1 + 0x30)),
+                   (float10)(*(int *)(param_1 + 0x58) - *(int *)(param_1 + 0x38)));
+            uVar3 = __ftol();","uVar3 = (undefined2)groove_angle_to_game_units(
+                *(int *)(param_1 + 0x50) - *(int *)(param_1 + 0x30),
+                *(int *)(param_1 + 0x58) - *(int *)(param_1 + 0x38), DAT_0056e068);"
+sub_41E1C0,"    DAT_00581168[7] = DAT_0057f90c;","    ((float *)(void *)DAT_00581168)[7] = DAT_0057f90c; /* preserve the camera far-plane float bits */"
+sub_41E1C0,"  fVar1 = DAT_0057f91c;","  fVar1 = *(float *)(void *)&DAT_0057f91c;"
+sub_41E1C0,"  fVar2 = DAT_0057f920;","  fVar2 = *(float *)(void *)&DAT_0057f920;"
+sub_41E1C0,"_DAT_0057f914 = _DAT_0056e288 / (_DAT_0057f8fc - DAT_0057f910);","_DAT_0057f914 = _DAT_0056e288 / (_DAT_0057f8fc - (*(float *)(void *)&DAT_0057f910));"
+sub_41E1C0,"    DAT_00581168[8] = _DAT_0057f908 * (float)_DAT_0056e358 * (float)_DAT_0056e368;","    ((float *)(void *)DAT_00581168)[8] = _DAT_0057f908 * (float)_DAT_0056e358 * (float)_DAT_0056e368;"
+sub_41A480,"_DAT_0057f914 = _DAT_0056e288 / (_DAT_0057f8fc - DAT_0057f910);","_DAT_0057f914 = _DAT_0056e288 / (_DAT_0057f8fc - (*(float *)(void *)&DAT_0057f910));"
+sub_41A480,"*(float *)(DAT_00581168 + 0x1c) = _DAT_0057f8fc;","*(float *)((unsigned char *)DAT_00581168 + 0x1c) = _DAT_0057f8fc;"
+sub_41A480,"*(float *)(DAT_00581168 + 0x18) = DAT_0057f910;","*(float *)((unsigned char *)DAT_00581168 + 0x18) = *(float *)(void *)&DAT_0057f910;"
+sub_546EA0,"  undefined1 local_24 [4];
+  undefined4 local_20;
+  undefined4 local_1c;
+  undefined4 local_18;
+  undefined4 local_14;
+  undefined2 local_10;
+  undefined2 local_e;
+  undefined4 local_c;
+  undefined4 local_8;
+  undefined2 local_4;
+  undefined2 local_2;","  /* Contiguous 0x24-byte record read by AAL_InitDriver at 00546F9C. */
+  struct {
+    uint32_t reserved0, device_id, reserved8, flags, window;
+    uint16_t format, channels;
+    uint32_t sample_rate, bytes_per_second;
+    uint16_t block_align, bits_per_sample;
+  } driver = {0};
+  typedef char driver_record_size_check[(sizeof driver == 0x24) ? 1 : -1];"
+sub_546EA0,"    local_20 = DAT_005834d8;
+    local_14 = *(undefined4 *)(param_2 + 4);
+    local_18 = 0;
+    local_1c = 0;
+    local_2 = 0x10;
+    local_10 = 1;
+    local_e = 2;
+    local_c = 0xac44;
+    local_4 = 4;
+    local_8 = 0x2b110;
+    _AAL_InitDriver_4(local_24);","    driver.device_id = DAT_005834d8;
+    driver.window = *(undefined4 *)(param_2 + 4);
+    driver.format = 1;
+    driver.channels = 2;
+    driver.sample_rate = 44100;
+    driver.bytes_per_second = 176400;
+    driver.block_align = 4;
+    driver.bits_per_sample = 16;
+    _AAL_InitDriver_4(&driver);"

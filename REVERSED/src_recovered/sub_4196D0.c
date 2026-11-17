@@ -21,9 +21,9 @@ undefined4 sub_4196D0(void)
     *puVar3 = 0;
     puVar3 = puVar3 + 1;
   }
-  if (trace) fprintf(stderr, "[frame] update begin state=%d steps=%d fade=%p\n", DAT_005846e4, DAT_005724d4, DAT_0058372c);
+  if (trace) fprintf(stderr, "[frame] update begin state=%d steps=%d fade=%p target=%d/%d/%d\n", DAT_005846e4, DAT_005724d4, DAT_0058372c, DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   sub_40F060(PTR_DAT_005724dc + 0x18,PTR_DAT_005724dc + 0x118);
-  if (trace) fprintf(stderr, "[frame] input poll complete\n");
+  if (trace) fprintf(stderr, "[frame] input poll complete target=%d/%d/%d\n", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   iVar2 = 0;
   DAT_00573d20 = 1;
   if (0 < DAT_005724d4) {
@@ -32,9 +32,9 @@ undefined4 sub_4196D0(void)
       iVar2 = iVar2 + 1;
     } while (iVar2 < DAT_005724d4);
   }
-  if (trace) fprintf(stderr, "[frame] fade update complete\n");
+  if (trace) fprintf(stderr, "[frame] fade update complete target=%d/%d/%d\n", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   sub_545C00();
-  if (trace) fprintf(stderr, "[frame] audio update complete\n");
+  if (trace) fprintf(stderr, "[frame] audio update complete target=%d/%d/%d\n", DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   if (trace) fprintf(stderr, "[frame] state update call %p\n", (&PTR_sub_426500_00579050)[DAT_005846e4]);
   (*(code *)(&PTR_sub_426500_00579050)[DAT_005846e4])();
   if (trace) fprintf(stderr, "[frame] state update complete\n");

@@ -2,6 +2,8 @@
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
+/* sub_409510 leaves a nonzero blend scale in ST(0) only for nonzero alpha. */
+
 undefined4
 sub_40B750(float param_1,int param_2,uint *param_3,int param_4,float param_5,float param_6,
           undefined2 *param_7,int param_8,int param_9,float param_10,int param_11,int param_12,
@@ -30,9 +32,6 @@ sub_40B750(float param_1,int param_2,uint *param_3,int param_4,float param_5,flo
   uint *puVar20;
   undefined2 *puVar21;
   undefined1 *puVar22;
-  float10 extraout_ST0;
-  float10 extraout_ST0_00;
-  float10 extraout_ST0_01;
   float fStack_10;
   
   iVar14 = param_14;
@@ -77,6 +76,7 @@ sub_40B750(float param_1,int param_2,uint *param_3,int param_4,float param_5,flo
               *puVar19 = 0;
             }
             else {
+              int alpha_scale_nonzero = 0;
               uVar2 = *(ushort *)(param_11 + (uint)bVar1 * 2);
               param_6 = (float)((byte)uVar2 & 0x1f) * _DAT_0056e11c;
               param_1 = (float)(uVar2 & 0x3e0) * _DAT_0056e124;
@@ -89,6 +89,7 @@ sub_40B750(float param_1,int param_2,uint *param_3,int param_4,float param_5,flo
                 case 4:
                   param_10 = param_5 * _DAT_0056e130 +
                              param_1 * _DAT_0056e134 + param_6 * _DAT_0056e138;
+                  alpha_scale_nonzero = param_10 != _DAT_0056e00c;
                   sub_409510(&param_6,&param_1,&param_5,param_10);
                   if (param_10 != _DAT_0056e00c) goto switchD_0040be40_caseD_1;
                   break;
@@ -106,7 +107,7 @@ switchD_0040be40_caseD_1:
               uVar12 = __ftol();
               uVar13 = __ftol();
               uVar10 = uVar10 & uVar3 | uVar11 & uVar4 | uVar12 & uVar5 | uVar13 & uVar6;
-              if ((((char)param_13 != '\0') && (extraout_ST0_01 != (float10)_DAT_0056e00c)) &&
+              if ((((char)param_13 != '\0') && alpha_scale_nonzero) &&
                  ((uVar16 & uVar10) == 0)) {
                 uVar10 = ~uVar16 & uVar10 | param_14;
               }
@@ -146,6 +147,7 @@ switchD_0040be40_caseD_1:
               *puVar21 = 0;
             }
             else {
+              int alpha_scale_nonzero = 0;
               uVar2 = *(ushort *)(param_11 + (uint)bVar1 * 2);
               param_6 = (float)((byte)uVar2 & 0x1f) * _DAT_0056e11c;
               param_1 = (float)(uVar2 & 0x3e0) * _DAT_0056e124;
@@ -161,6 +163,7 @@ switchD_0040bbef_caseD_1:
                 case 4:
                   param_10 = param_5 * _DAT_0056e130 +
                              param_1 * _DAT_0056e134 + param_6 * _DAT_0056e138;
+                  alpha_scale_nonzero = param_10 != _DAT_0056e00c;
                   sub_409510(&param_6,&param_1,&param_5,param_10);
                   if (param_10 != _DAT_0056e00c) goto switchD_0040bbef_caseD_1;
                   break;
@@ -175,7 +178,7 @@ switchD_0040bbef_caseD_1:
               uVar12 = __ftol();
               uVar13 = __ftol();
               uVar10 = uVar10 & uVar3 | uVar11 & uVar4 | uVar12 & uVar5 | uVar13 & uVar6;
-              if (((cVar9 != '\0') && (extraout_ST0_00 != (float10)_DAT_0056e00c)) &&
+              if ((cVar9 != '\0') && alpha_scale_nonzero &&
                  ((uVar16 & uVar10) == 0)) {
                 uVar10 = ~uVar16 & uVar10 | param_14;
               }
@@ -217,6 +220,7 @@ switchD_0040bbef_caseD_1:
               *puVar20 = 0;
             }
             else {
+              int alpha_scale_nonzero = 0;
               uVar2 = *(ushort *)(param_11 + (uint)bVar1 * 2);
               param_6 = (float)((byte)uVar2 & 0x1f) * _DAT_0056e11c;
               param_1 = (float)(uVar2 & 0x3e0) * _DAT_0056e124;
@@ -232,6 +236,7 @@ switchD_0040b998_caseD_1:
                 case 4:
                   param_10 = param_5 * _DAT_0056e130 +
                              param_1 * _DAT_0056e134 + param_6 * _DAT_0056e138;
+                  alpha_scale_nonzero = param_10 != _DAT_0056e00c;
                   sub_409510(&param_6,&param_1,&param_5,param_10);
                   if (param_10 != _DAT_0056e00c) goto switchD_0040b998_caseD_1;
                   break;
@@ -246,7 +251,7 @@ switchD_0040b998_caseD_1:
               uVar12 = __ftol();
               uVar13 = __ftol();
               uVar10 = uVar10 & uVar3 | uVar11 & uVar4 | uVar12 & uVar5 | uVar13 & uVar6;
-              if ((((char)param_13 != '\0') && (extraout_ST0 != (float10)_DAT_0056e00c)) &&
+              if ((((char)param_13 != '\0') && alpha_scale_nonzero) &&
                  ((uVar16 & uVar10) == 0)) {
                 uVar10 = ~uVar16 & uVar10 | param_14;
               }

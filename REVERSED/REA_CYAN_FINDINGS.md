@@ -24,9 +24,11 @@ The owned analysis session was closed. Complete output is retained in
 
 ## Other observations
 
-The prior bounded run logged accepted Direct3D calls with distinct UI rectangle
-positions and packed colors. The user still saw cyan. These are harness runtime
-observations, not REA runtime evidence.
+The prior user-visible bounded run logged accepted Direct3D calls with distinct
+UI rectangle positions and packed colors. The captured render surface was uniformly
+cyan, and all 15 texture surfaces read back as zero despite nonzero source hashes
+for several textures. These are harness runtime observations, not REA runtime
+evidence.
 
 The native-boundary viewport and indexed texture-upload tests pass with the
 current build. They verify descriptor contents, callback arguments, pitch and
@@ -34,16 +36,14 @@ stack balance using mocks; they do not test the physical DirectDraw device.
 
 ## Prepared next probe
 
-The current build captures the first completed hardware-rendered scene after
-EndScene, reads the viewport dimensions, and saves `build/run/groove_render.raw`.
-`tools/decode_render_surface.py` decodes that dump to BMP and reports its color
-histogram. Capture is independent of the desktop screenshot and presentation.
+The subsequent trace localized the texture-side defect to `sub_436CC0`: its
+decompiled pointer-versus-original-address loop never initialized the RGB square
+table after relocation. That function now uses a bounded 256-entry loop, and a
+focused test confirms histogram accumulation, palette construction, and texel
+remapping for representative RGB555 samples. The full executable was rebuilt.
 
-No diagnostic game launch was made after the user reported an RDP session.
-The independent eight-second watchdog remains required. Wait for visual feedback
-after each launch.
-
-If the captured buffer contains menu graphics, investigate presentation and the
-surface chain. If it is already cyan, investigate actual texture contents and
-render state. Neither outcome has yet been observed. Main-menu visibility,
-intro playback, input and gameplay remain unverified.
+A bounded launch from the isolated Codex account reached adapter enumeration but
+did not enter the hardware-rendered frame path, so it supplied no visual validation
+of the repaired build. The user still needs to run `run_rebuild_visible_8s.cmd` on
+the desktop. Main-menu visibility, intro playback, input and gameplay remain
+unverified.

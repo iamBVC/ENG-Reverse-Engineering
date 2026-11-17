@@ -11,6 +11,7 @@ reported so it can be split further.
 
     python tools/compile_check.py
     python tools/compile_check.py --chunk 20
+    python tools/compile_check.py --all --chunk 20
 """
 
 from __future__ import annotations
@@ -31,44 +32,71 @@ VS_CANDIDATES = [
 MARKER = re.compile(r"^/\* ==== ([\w@]+) ==== \*/")
 
 
+def compile_source_path(include_all: bool) -> Path:
+    """Choose the compiler input without changing the default clean-subset flow."""
+    return OUT / ("bulk_all.c" if include_all else "clean_subset.c")
+
+
+def compiler_input_groups(chunks: list[Path], max_files: int = 30) -> list[list[Path]]:
+    """Keep each cl.exe command below cmd.exe's practical argument-length limit."""
+    if max_files < 1:
+        raise ValueError("max_files must be positive")
+    return [chunks[i:i + max_files] for i in range(0, len(chunks), max_files)]
+
+
+def updated_failed_functions(previous: set[str], compiled: set[str],
+                             bad: set[str]) -> set[str]:
+    """Keep untested worklist entries, replace results for functions compiled now."""
+    # Older exporter runs stored Ghidra's raw `Catch@...`/`Unwind@...` names;
+    # generated C now uses the sanitized identifiers, so retire those stale entries
+    # when the corresponding functions are included in a clean compile pass.
+    normalized_previous = {re.sub(r"[^A-Za-z0-9_]", "_", name) for name in previous}
+    return (normalized_previous - compiled) | bad
+
+
 def write_batch(chunks: list[Path]) -> Path:
     vsdir = next((c for c in VS_CANDIDATES if (Path(c) / "VC/Auxiliary/Build/vcvars32.bat").exists()),
                  None)
     if vsdir is None:
         raise SystemExit("no Visual Studio installation found; edit VS_CANDIDATES")
-    # ghidra_globals.c carries the single set of data definitions the chunks declare
-    cl_list = " ".join(f'"{p}"' for p in list(chunks) + [OUT / "ghidra_globals.c"])
+    groups = compiler_input_groups(chunks)
     batch = BUILD / "_bulk_compile.bat"
-    batch.write_text(
-        "@echo off\r\n"
-        f'call "{vsdir}\\VC\\Auxiliary\\Build\\vcvars32.bat" >nul\r\n'
-        f'cd /d "{BUILD}"\r\n'
-        # /MD so the DLL build and the Python driver share one CRT: a FILE* only
-        # crosses the boundary if both sides use the same runtime
-        # (An earlier comment here claimed /Gy lets the DLL link drop the functions
-        # the harness does not call.  Measured: it does not - a two-function test
-        # with /Gy + /OPT:REF keeps the unreferenced one and fails on its undefined
-        # symbol.  What makes the bulk linkable is regenerating harness/import_stubs.c
-        # from the link log, see build_dlls.bat bulk.)
-        f'cl /nologo /c /TC /W0 /GS- /MD /I"{ROOT}\\include" /I"{OUT}" '
-        + cl_list + ' > "_bulk_compile.log" 2>&1\r\n'
-        "exit /b %errorlevel%\r\n",
-        encoding="ascii")
+    lines = [
+        "@echo off",
+        f'call "{vsdir}\\VC\\Auxiliary\\Build\\vcvars32.bat" >nul',
+        f'cd /d "{BUILD}"',
+        'set "CL_FAILED=0"',
+    ]
+    for i, group in enumerate(groups):
+        # Compile shared data definitions once, alongside the final group.
+        sources = list(group)
+        if i == len(groups) - 1:
+            sources.append(OUT / "ghidra_globals.c")
+        cl_list = " ".join(f'"{p}"' for p in sources)
+        redirect = ">" if i == 0 else ">>"
+        lines.extend([
+            f'cl /nologo /c /TC /W0 /GS- /MD /I"{ROOT}\\include" /I"{OUT}" '
+            f'{cl_list} {redirect} "_bulk_compile.log" 2>&1',
+            'if errorlevel 1 set "CL_FAILED=1"',
+        ])
+    lines.append("exit /b %CL_FAILED%")
+    batch.write_text("\r\n".join(lines) + "\r\n", encoding="ascii")
     return batch
 
 
 def main() -> int:
     chunk_size = 40
+    include_all = "--all" in sys.argv
     if "--chunk" in sys.argv:
         chunk_size = int(sys.argv[sys.argv.index("--chunk") + 1])
 
-    src = OUT / "clean_subset.c"
+    src = compile_source_path(include_all)
     if not src.exists():
         print(f"{src} missing - run tools/make_bulk.py first")
         return 1
     text = src.read_text(encoding="utf-8", errors="replace")
     if "/* ==== " not in text:
-        print("clean_subset.c has no function markers; regenerate with make_bulk.py")
+        print(f"{src.name} has no function markers; regenerate with make_bulk.py")
         return 1
     preamble = text[:text.index("/* ==== ")]
     blocks = re.split(r"(?=^/\* ==== )", text[text.index("/* ==== "):], flags=re.M)[1:]
@@ -111,7 +139,8 @@ def main() -> int:
     capped = sorted(f for f, n in per_chunk_errors.items() if n >= 95)
     errors = re.findall(r"error (C\d+):", logtext)
 
-    print("--- chunked compile of the decompiled bulk (C mode) ---")
+    label = "all generated functions" if include_all else "clean subset of the decompiled bulk"
+    print(f"--- chunked compile of {label} (C mode) ---")
     print(f"chunks                    : {len(chunk_files)} x <= {chunk_size} functions")
     print(f"cl exit code              : {proc.returncode}")
     print(f"errors reported           : {len(errors)}")
@@ -137,15 +166,16 @@ def main() -> int:
     #     the failures (make_bulk.py reads this list) is what makes the chunks
     #     buildable, and the loop converge.
     #   * it is the work queue for the hand fixes.
-    # Accumulate: a function excluded on an earlier pass must stay excluded, or it
-    # would reappear in the next clean subset and the loop would not converge.
+    # Keep failures not present in this invocation, but replace the status of every
+    # function that was just compiled. This lets an all-functions clean pass clear
+    # stale exclusions and restore those functions to the clean subset.
     failed = OUT / "failed.txt"
     previously = set()
     if failed.exists():
         previously = {ln.strip() for ln in failed.read_text(encoding="utf-8").splitlines() if ln.strip()}
-    allbad = previously | set(bad)
+    allbad = updated_failed_functions(previously, set(names), set(bad))
     failed.write_text("\n".join(sorted(allbad)) + ("\n" if allbad else ""), encoding="utf-8")
-    print(f"failures written to {failed}: {len(bad)} new, {len(allbad)} total excluded")
+    print(f"failures written to {failed}: {len(bad)} current, {len(allbad)} pending")
     return 0 if proc.returncode == 0 and not errors else 1
 
 

@@ -13,8 +13,8 @@
  *   __ftol   ST(0) -> EAX (truncating, and it pops the FPU stack)
  *   __frnd   ST(0) -> ST(0), rounded to an integer
  *
- * Everything else is on the symbol list in src_generated/link_stubs.csv as a stub,
- * with the ones that would silently compute the wrong thing called out there.
+ * The unresolved-symbol manifest is generated separately; these implementations keep
+ * legacy CRT spellings backed by real runtime operations instead of placeholder stubs.
  */
 #include "ghidra_shim.h"
 
@@ -97,14 +97,6 @@ int CARRY4(unsigned int first, unsigned int second)
     return (uint64_t)first + second > UINT32_MAX;
 }
 
-/* ---- the MSVC 6 stack probe -------------------------------------------
- * IDA's listing names the call: `sub_405960` calls `__alloca_probe` where the decompiled
- * body calls `sub_562840()`.  A rebuild does not need it - the modern compiler emits its
- * own probe for a frame that size, and the callers only ever call it for that - so the
- * faithful implementation here is a no-op.  It is the first of the Ghidra-only stubs in
- * the CRT region whose *name* can be recovered from the listing's call sites. */
-void sub_562840(void) { }
-
 /* ---- the reversed CRT bodies, mapped onto the modern CRT ---------------
  * IDA names these call targets `_fopen` / `_fwrite` / `_fclose`; Ghidra decompiled the
  * *bodies* as ordinary `sub_XXXX` functions.  They cannot work in a rebuild: they use the
@@ -114,8 +106,8 @@ void sub_562840(void) { }
  * rebuild's own fopen never made.
  *
  * Mapping the calls onto the modern CRT is the correct answer - the same decision already
- * taken for `_malloc`/`_strlen` and for the C++ runtime - and the bodies are excluded from
- * the build in harness/substituted.txt so there is exactly one definition of each. */
+ * taken for `_malloc`/`_strlen` and for the C++ runtime.  harness/crt_bodies.txt removes
+ * the old-body definitions from the EXE inputs, leaving exactly one definition of each. */
 /* The reversed `free` (IDA names the free at 0x5628BC as a plain `sub_`): the node
    destructor `sub_413170` releases each DirectDraw list node's buffer through it, and those
    nodes are allocated by `operator_new` above - a modern `malloc`.  Leaving the decompiled

@@ -172,10 +172,10 @@ LAB_004324bf:
             fStack_11c = (fStack_a4 + fStack_cc) * _DAT_0056e158;
             fStack_8c = fStack_9c - fStack_c4;
             fStack_88 = fStack_c8 - fStack_a0;
-            pfStack_130 = (float *)SQRT(fStack_8c * fStack_8c + fStack_88 * fStack_88);
-            fStack_8c = fStack_8c / (float)pfStack_130;
-            fStack_88 = fStack_88 / (float)pfStack_130;
-            fStack_e8 = _DAT_0056e00c / (float)pfStack_130;
+            *(float *)&pfStack_130 = (float)SQRT(fStack_8c * fStack_8c + fStack_88 * fStack_88);
+            fStack_8c = fStack_8c / *(float *)&pfStack_130;
+            fStack_88 = fStack_88 / *(float *)&pfStack_130;
+            fStack_e8 = _DAT_0056e00c / *(float *)&pfStack_130;
             fStack_f0 = (float)DAT_00583374 * _DAT_0056e1dc * fStack_8c * _DAT_0056e158;
             fStack_ec = (float)DAT_00583378 * _DAT_0056e1d8 * fStack_88 * _DAT_0056e158;
             fStack_84 = fStack_e8;

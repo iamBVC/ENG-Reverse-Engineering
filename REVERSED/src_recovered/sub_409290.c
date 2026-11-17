@@ -7,7 +7,7 @@ void sub_409290(uint *param_1,ushort *param_2,int param_3,int param_4,char param
 {
   ushort uVar1;
   undefined1 uVar2;
-  undefined1 extraout_AH;
+  uint uVar0;
   uint uVar3;
   uint uVar4;
   uint uVar5;
@@ -53,12 +53,13 @@ void sub_409290(uint *param_1,ushort *param_2,int param_3,int param_4,char param
           }
         }
       }
-      __ftol();
+      /* Preserve AH from the first conversion; the original packs it as green. */
+      uVar0 = __ftol();
       uVar2 = __ftol();
       uVar3 = __ftol();
       uVar4 = __ftol();
-      uVar5 = uVar4 & 0xff000000 | (uint)CONCAT11(extraout_AH,uVar2) | uVar3 & 0xff0000;
-      if ((param_5 != '\0') && (CONCAT11(extraout_AH,uVar2) == 0 && (uVar3 & 0xff0000) == 0)) {
+      uVar5 = uVar4 & 0xff000000 | (uVar0 & 0xff00) | (uint)uVar2 | uVar3 & 0xff0000;
+      if ((param_5 != '\0') && (((uVar0 & 0xff00) | (uint)uVar2) == 0 && (uVar3 & 0xff0000) == 0)) {
         uVar5 = CONCAT31((int3)((uVar4 & 0xff000000) >> 8),1);
       }
       *param_1 = uVar5;

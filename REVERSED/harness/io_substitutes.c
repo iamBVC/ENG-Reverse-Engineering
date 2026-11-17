@@ -10,9 +10,9 @@
  *   sub_415AB0(Stream, Buffer)              -> fread(Buffer, 4, 1, Stream)
  *   sub_415AF0(Stream, Buffer)              -> fread(Buffer, 2, 1, Stream)
  *
- * Also stubs `sub_562941`, which the MAP loader calls once at the end to release a
- * scratch block: a no-op is harmless for a one-shot driver, and it avoids pulling
- * in sub_5628BC's closure.
+ * `sub_562941` is implemented here as the game's one-argument free wrapper.  The
+ * MAP loader and exception cleanup paths pass allocations made by the compatible
+ * allocator below, so release them through the matching CRT heap.
  *
  * This file is a *harness* device, like the import stubs: it substitutes I/O
  * primitives, not the logic under test.
@@ -21,6 +21,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+void sub_5628BC(void *block);
 
 int sub_415A90(void *Stream, void *Buffer, int ElementSize)
 {
@@ -52,7 +54,7 @@ int sub_415AF0(void *Stream, void *Buffer)
 
 void sub_562941(void *block)
 {
-    (void)block;   /* releasing a scratch list: a no-op here */
+    sub_5628BC(block);
 }
 
 /* The MAP loader allocates its scratch tile list with the C++ operator new, which
@@ -63,11 +65,12 @@ void *operator_new(unsigned int size)
 }
 
 /* Ghidra kept the `call __ftol` sites of the *greyscale* colour path but lost the
- * x87 operands they consumed (see BODY_PATCHES in make_verify_subset.py).  The
- * driver runs with the greyscale switch (0x6D7C61) set, so those paths are never
- * taken; this exists only so the code links.  The two x87 conversions that DO run
- * - the tile cell index - are patched back to real expressions instead. */
+ * x87 operands they consumed (see BODY_PATCHES in make_verify_subset.py).  Preserve
+ * the original helper contract for callers that leave their value in ST(0): FISTP
+ * uses the active x87 rounding mode and pops the converted value. */
 int groove_ftol(void)
 {
-    return 0;
+    int converted;
+    __asm { fistp dword ptr [converted] }
+    return converted;
 }

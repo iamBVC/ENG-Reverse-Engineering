@@ -1,10 +1,15 @@
 /* Selected Ghidra export at 0054b460. */
+#include <stdio.h>
 
 void sub_54B460(void)
 
 {
+  fprintf(stderr, "[camera-write-watch] enter sub_54B460 %d/%d/%d\n",
+          DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   if (DAT_005fcf08 != 0) {
     sub_41A160(0);
+    fprintf(stderr, "[camera-write-watch] after sub_41A160 %d/%d/%d\n",
+            DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   }
   if (DAT_006d9c1c == 0) {
     sub_436840((&PTR_s_Inizia_Gioco_0057bbf0)[DAT_00584f04],0xa0,0,DAT_0058463c,0x112);
@@ -18,6 +23,8 @@ void sub_54B460(void)
     sub_4368D0((&PTR_DAT_0057bba4)[DAT_00584f04],200,0,DAT_006d9c20,0,0x19a);
   }
   sub_54B590();
+  fprintf(stderr, "[camera-write-watch] after sub_54B590 %d/%d/%d\n",
+          DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   return;
 }
 

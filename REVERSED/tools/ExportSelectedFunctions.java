@@ -30,6 +30,14 @@ public class ExportSelectedFunctions extends GhidraScript {
                 Address address = toAddr(value);
                 String name = String.format("sub_%06X", value);
                 Function function = getFunctionAt(address);
+                if (getInstructionAt(address) == null) {
+                    if (function != null) removeFunction(function);
+                    if (!disassemble(address) || getInstructionAt(address) == null) {
+                        println("FAILED " + name + ": cannot disassemble entry point");
+                        continue;
+                    }
+                    function = getFunctionAt(address);
+                }
                 if (function == null) function = createFunction(address, name);
                 if (function == null) {
                     println("FAILED " + name + ": cannot create function");
@@ -37,16 +45,23 @@ public class ExportSelectedFunctions extends GhidraScript {
                 }
                 function.setName(name, SourceType.USER_DEFINED);
                 decompiler.flushCache();
-                DecompileResults result = decompiler.decompileFunction(function, 60, monitor);
+                // The two very large renderer functions consistently exceed the
+                // default targeted-export budget. Match ExportDecompiledC.java's
+                // bounded timeout so this recovery path can harvest them with Ghidra.
+                int timeoutSeconds = (address.toString().equalsIgnoreCase("00447770")
+                                      || address.toString().equalsIgnoreCase("004CB870"))
+                                     ? 900 : 60;
+                DecompileResults result = decompiler.decompileFunction(function, timeoutSeconds, monitor);
                 if (!result.decompileCompleted() || result.getDecompiledFunction() == null) {
-                    println("FAILED " + name + ": " + result.getErrorMessage());
+                    println("FAILED " + name + " (timeout " + timeoutSeconds + " seconds): "
+                            + result.getErrorMessage());
                     continue;
                 }
                 try (PrintWriter writer = new PrintWriter(new File(output, name + ".c"))) {
                     writer.println("/* Selected Ghidra export at " + address + ". */");
                     writer.print(result.getDecompiledFunction().getC());
                 }
-                println("Exported " + name);
+                println("Exported " + name + " body_bytes=" + function.getBody().getNumAddresses());
             }
         } finally {
             decompiler.dispose();

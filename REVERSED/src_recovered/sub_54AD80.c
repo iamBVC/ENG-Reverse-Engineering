@@ -1,4 +1,5 @@
 /* Selected Ghidra export at 0054ad80. */
+#include <stdio.h>
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
@@ -20,7 +21,11 @@ void sub_54AD80(void)
   sub_419510(0,0,0,3);
   sub_54D0D0(DAT_00584648);
   sub_54BA90(DAT_00584648);
+  fprintf(stderr, "[camera-transition] after sub_54BA90 %d/%d/%d\n",
+          DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   sub_54C4A0();
+  fprintf(stderr, "[camera-transition] after sub_54C4A0 %d/%d/%d\n",
+          DAT_006d9d80, DAT_006d9d84, DAT_006d9d88);
   DAT_00584718 = 0;
   sub_4268C0(1);
   DAT_00584640 = 0;

@@ -36,7 +36,7 @@ void sub_54B8A0(void)
     puVar2 = puVar2 + 1;
     puVar3 = puVar3 + 1;
   }
-  sub_40E0C0(PTR_DAT_005724dc + 0x18);
+  sub_40E0C0(PTR_DAT_005724dc + 0x18,1);
   uStack_c = 0x54b904;
   sub_41A220();
   return;

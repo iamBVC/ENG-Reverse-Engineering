@@ -1,83 +1,77 @@
-/* Selected Ghidra export at 00424900. */
-
-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
-
-void sub_424900(void)
-
+/* 00424900: six screen-scaled vertices for two menu highlight triangles. */
+void sub_424900(int x, int y, int unused, float current, float start, float end)
 {
-  float fVar1;
-  float fVar2;
-  int iVar3;
-  int iVar4;
-  int iVar5;
-  int iVar6;
-  int iVar7;
-  float *pfVar8;
-  float *pfVar9;
-  undefined4 *puVar10;
-  int iVar11;
-  
-  iVar3 = __ftol();
-  iVar4 = __ftol();
-  iVar5 = __ftol();
-  iVar6 = __ftol();
-  __ftol();
-  iVar7 = __ftol();
-  pfVar8 = (float *)sub_41ED90(0x180);
-  if (pfVar8 != (float *)0x0) {
-    pfVar9 = pfVar8 + 5;
-    iVar11 = 3;
-    do {
-      pfVar9[-2] = 1.0;
-      *pfVar9 = 0.0;
-      pfVar9 = pfVar9 + 8;
-      iVar11 = iVar11 + -1;
-    } while (iVar11 != 0);
-    *pfVar8 = (float)(iVar4 - iVar5);
-    fVar1 = (float)(iVar6 + iVar3);
-    pfVar8[8] = (float)iVar4;
-    pfVar8[1] = fVar1;
-    fVar2 = (float)iVar3;
-    pfVar8[0xc] = 2.3495283e-38;
-    pfVar8[0x14] = 2.3495283e-38;
-    pfVar8[9] = fVar2;
-    pfVar8[0x10] = (float)iVar4;
-    pfVar8[0x11] = fVar1;
-    pfVar8[4] = 1.6580612e-38;
-    pfVar8[0x1c] = 4.425502e-39;
-    pfVar8[0x24] = 4.425502e-39;
-    pfVar8[0x18] = (float)(iVar7 + -3);
-    pfVar8[0x2c] = 4.425502e-39;
-    pfVar8[0x19] = fVar2;
-    pfVar8[0x20] = (float)(iVar7 + 3);
-    pfVar8[0x21] = fVar2;
-    pfVar8[0x28] = (float)iVar7;
-    pfVar8[0x29] = fVar1;
-    puVar10 = (undefined4 *)sub_41ED90(0x20);
-    if (puVar10 != (undefined4 *)0x0) {
-      puVar10[1] = pfVar8 + 0x18;
-      *puVar10 = DAT_005f6ef8;
-      puVar10[2] = 3;
-      puVar10[3] = 0;
-      puVar10[4] = 0;
-      puVar10[5] = 0;
-      puVar10[6] = 0;
-      puVar10[7] = 0x61;
-      DAT_005f6ef8 = puVar10;
-    }
-    puVar10 = (undefined4 *)sub_41ED90(0x20);
-    if (puVar10 != (undefined4 *)0x0) {
-      puVar10[1] = pfVar8;
-      *puVar10 = DAT_005f6ef8;
-      puVar10[2] = 3;
-      puVar10[3] = 0;
-      puVar10[4] = 0;
-      puVar10[5] = 0;
-      puVar10[6] = 0;
-      puVar10[7] = 0x61;
-      DAT_005f6ef8 = puVar10;
-    }
+  float scale_x;
+  float scale_y;
+  float fade_height;
+  float *vertices;
+  unsigned int *bits;
+  unsigned int *node;
+  int anchor_x;
+  int anchor_y;
+  int fade_height_int;
+  int width;
+  int marker;
+  int step;
+  int i;
+
+  (void)unused;
+  scale_x = (float)DAT_00583378 * 0.004166666883975267f;
+  anchor_x = (int)((float)(x - 10) * scale_x);
+  scale_y = (float)DAT_00583374 * 0.001953125f;
+  anchor_y = (int)((float)y * scale_y);
+  fade_height = scale_y * 200.0f;
+  fade_height_int = (int)fade_height;
+  width = (int)(scale_x * 15.0f);
+  step = (int)(((current - start) / (end - start)) * scale_y * 200.0f);
+  marker = (int)((float)anchor_y - fade_height + (float)step);
+
+  vertices = (float *)(uintptr_t)sub_41ED90(0x180);
+  if (vertices == (float *)0) return;
+  bits = (unsigned int *)vertices;
+  for (i = 0; i < 3; ++i) {
+    vertices[i * 8 + 3] = 1.0f;
+    vertices[i * 8 + 5] = 0.0f;
   }
-  return;
+
+  vertices[0] = (float)(anchor_y - fade_height_int);
+  vertices[1] = (float)(anchor_x + width);
+  vertices[8] = (float)anchor_y;
+  vertices[9] = (float)anchor_x;
+  vertices[16] = (float)anchor_y;
+  vertices[17] = (float)(anchor_x + width);
+  bits[4] = 0x00B48C00;
+  bits[12] = 0x00FFD74A;
+  bits[20] = 0x00FFD74A;
+
+  vertices[24] = (float)(marker - 3);
+  vertices[25] = (float)anchor_x;
+  vertices[32] = (float)(marker + 3);
+  vertices[33] = (float)anchor_x;
+  vertices[40] = (float)marker;
+  vertices[41] = (float)(anchor_x + width);
+  bits[28] = 0x00303080;
+  bits[36] = 0x00303080;
+  bits[44] = 0x00303080;
+
+  node = (unsigned int *)(uintptr_t)sub_41ED90(0x20);
+  if (node != (unsigned int *)0) {
+    node[0] = (unsigned int)DAT_005f6ef8;
+    node[1] = (unsigned int)(uintptr_t)(vertices + 24);
+    node[2] = 3;
+    node[3] = node[4] = node[5] = node[6] = 0;
+    node[7] = 0x61;
+    DAT_005f6ef8 = (int)(uintptr_t)node;
+  }
+
+  node = (unsigned int *)(uintptr_t)sub_41ED90(0x20);
+  if (node != (unsigned int *)0) {
+    node[0] = (unsigned int)DAT_005f6ef8;
+    node[1] = (unsigned int)(uintptr_t)vertices;
+    node[2] = 3;
+    node[3] = node[4] = node[5] = node[6] = 0;
+    node[7] = 0x61;
+    DAT_005f6ef8 = (int)(uintptr_t)node;
+  }
 }
 

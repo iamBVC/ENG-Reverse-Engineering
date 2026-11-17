@@ -125,7 +125,10 @@ def main() -> int:
             dropped.add(int(token, 16))
     calls = [resolve(pe, a) for _, a in entries]
     have = [a for a in calls
-            if a not in dropped and (ROOT / "decompiled" / ("sub_%06X.c" % a)).exists()]
+            if a not in dropped and (
+                (ROOT / "decompiled" / ("sub_%06X.c" % a)).exists()
+                or (ROOT / "src_recovered" / ("sub_%06X.c" % a)).exists()
+            )]
     missing = [a for a in calls if a not in have]
 
     lines = [

@@ -38,6 +38,8 @@ import re
 import sys
 from pathlib import Path
 
+from code_label_aliases import aliases_for_code_labels, function_for_code_label
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src_generated"
 BUILD = ROOT / "build"
@@ -49,6 +51,7 @@ HEADERS = [OUT / "ghidra_prototypes.h", OUT / "ghidra_globals.h",
 
 # the linker diagnostics are localised, so match the marker and take the next token
 SYMBOL_RE = re.compile(r"(?:simbolo\s+esterno|external\s+symbol)\s+([^\s:]+)")
+FUNCTION_MARKER_RE = re.compile(r"^/\* ==== ([\w@]+) ==== \*/", re.M)
 
 # stubs for these would quietly compute the wrong answer; they are listed separately
 # Implemented for real in harness/crt_aliases.c (they are ordinary CRT calls that a
@@ -62,6 +65,14 @@ REAL_CRT = {
     "_strncmp", "_strncpy", "_strcmpi", "_strrchr", "fcos", "fsin", "__ftol",
     "__frnd", "operator_new", "__strcmpi",
     "fpatan", "CARRY4",
+    # These Ghidra external-call spellings reproduce x87 instructions in the
+    # generated C; concrete MSVC x86 implementations live in x87_math_helpers.c.
+    "ABS", "ROUND", "SQRT", "SUB104", "f2xm1", "fscale",
+    # Recovered from the static MSVC runtime bodies embedded in groove.exe.
+    "__cfltcvt", "__fassign", "__global_unwind2", "__local_unwind2",
+    "__abnormal_termination", "flsall", "__exit", "__amsg_exit",
+    "__CxxThrowException_8", "__CallSettingFrame_12", "___add_12",
+    "__fload_withFB", "__startOneArgErrorHandling",
     # SDK declarations now resolve these through Ole32 with their actual ABI.
     "CoCreateInstance", "CoInitialize", "CoUninitialize",
     "timeGetTime",
@@ -131,6 +142,49 @@ def now_defined(lines: list[str]) -> set[str]:
     return out
 
 
+def compiled_game_functions(chunk_dir: Path | None = None,
+                            substituted_path: Path | None = None,
+                            crt_bodies_path: Path | None = None,
+                            label_source: Path | None = None) -> set[str]:
+    """Return functions with real definitions in the current bulk build inputs.
+
+    The link-stub CSV persists between builds so it can remember unresolved symbols.
+    When a previously missing function is recovered, the old stub must be removed even
+    if the last linker log is stale or compilation failed before linking.  Chunk markers
+    are generated from the exact C functions selected for the current bulk build.
+    The EXE drops the old CRT bodies listed in ``crt_bodies.txt``; harness substitutions
+    are included in the EXE even though the verification DLL filters them out.  This
+    shared stub source must therefore exclude the union of functions defined by either
+    final image, not every marker in the unfiltered chunk input.
+    """
+    chunk_dir = chunk_dir or (OUT / "chunks")
+    substituted_path = substituted_path or (ROOT / "harness" / "substituted.txt")
+    crt_bodies_path = crt_bodies_path or (ROOT / "harness" / "crt_bodies.txt")
+    defined: set[str] = set()
+    referenced_labels: set[str] = set()
+    if chunk_dir.exists():
+        for source in chunk_dir.glob("chunk_*.c"):
+            text = source.read_text(encoding="utf-8", errors="replace")
+            defined.update(FUNCTION_MARKER_RE.findall(text))
+            referenced_labels.update(re.findall(r"\b(?:LAB|FUN)_[0-9a-fA-F]{1,8}\b", text))
+    label_source = label_source or (ROOT / "harness" / "code_labels.c")
+    if label_source.exists():
+        defined.update(FUNCTION_MARKER_RE.findall(
+            label_source.read_text(encoding="utf-8", errors="replace")))
+    if substituted_path.exists():
+        for line in substituted_path.read_text(encoding="utf-8").splitlines():
+            name = line.split("#", 1)[0].strip()
+            if name:
+                defined.add(name)
+    if crt_bodies_path.exists():
+        for line in crt_bodies_path.read_text(encoding="utf-8").splitlines():
+            name = line.split("#", 1)[0].strip()
+            if name:
+                defined.discard(name)
+    defined.update(aliases_for_code_labels(referenced_labels, defined))
+    return defined
+
+
 def is_game_symbol(sym: str) -> bool:
     """Game code (stub it) versus system code (link a library for it).
 
@@ -142,6 +196,49 @@ def is_game_symbol(sym: str) -> bool:
     """
     return (sym.startswith(("_sub_", "_LAB_", "_Catch_", "_Unwind_"))
             or sym in ("_entry", "_ExceptionList"))
+
+
+def unreferenced_previous_stubs(previous: set[str], current: set[str],
+                                source_texts: list[str]) -> set[str]:
+    """Find persisted stubs absent from current C inputs and current link errors.
+
+    The CSV intentionally remembers old unresolved symbols between builds, but that
+    also kept dead placeholders forever after the corresponding code path vanished.
+    Only prune a symbol if this build's link logs no longer report it and no current
+    C input refers to its C spelling.  Comments and string literals do not count as
+    calls, so dynamic-loader names in diagnostics cannot keep an obsolete link stub.
+    """
+    code = "\n".join(source_texts)
+    # Remove literals first: comment markers inside path strings must not erase
+    # the remainder of a translation unit.
+    code = re.sub(r'"(?:\\.|[^"\\])*"', " ", code)
+    code = re.sub(r"'(?:\\.|[^'\\])*'", " ", code)
+    code = re.sub(r"/\*.*?\*/|//[^\r\n]*", " ", code, flags=re.S)
+    stale: set[str] = set()
+    for sym in previous - current:
+        # This name is a Ghidra pseudo-global for the x86 TIB's FS:[0] field;
+        # include/ghidra_shim.h now maps it to the NT_TIB prefix of the current TEB.
+        if sym == "_ExceptionList":
+            stale.add(sym)
+            continue
+        name, _ = c_name(sym)
+        if name is None:
+            continue
+        lookup = re.sub(r"^__stdcall\s+", "", name).split("(", 1)[0].strip()
+        if not re.search(r"\b" + re.escape(lookup) + r"\b", code):
+            stale.add(sym)
+    return stale
+
+
+def current_source_texts() -> list[str]:
+    """Return C text compiled into either current image, excluding generated stubs."""
+    paths = list((OUT / "chunks").glob("chunk_*.c"))
+    paths += list((ROOT / "harness").glob("*.c"))
+    globals_source = OUT / "ghidra_globals.c"
+    if globals_source.exists():
+        paths.append(globals_source)
+    return [path.read_text(encoding="utf-8", errors="replace")
+            for path in paths if path.name != "link_stubs.c"]
 
 
 def unresolved() -> set[str]:
@@ -163,15 +260,35 @@ def unresolved() -> set[str]:
                 else:
                     syms.add(sym)
     print(f"reading {len(paths)} link log(s): {', '.join(p.name for p in paths)}")
-    syms |= previous_stubs()
+    previous = previous_stubs()
+    stale = unreferenced_previous_stubs(previous, syms, current_source_texts())
+    for gone in sorted(stale):
+        print(f"  dropping {gone}: no reference in the current C inputs")
+    syms |= previous - stale
+    # ExceptionList is now an lvalue macro into the current thread's NT_TIB; it
+    # must never be emitted as a process-global linker definition.
+    syms.discard("_ExceptionList")
     lines = [ln for p in paths for ln in p.read_text(encoding="latin1", errors="replace").splitlines()]
-    for gone in sorted(now_defined(lines) & syms):
-        print(f"  dropping {gone}: the real code defines it now (LNK2005)")
+    source_definitions = compiled_game_functions()
+    source_defined_stubs = set()
+    for sym in syms:
+        name, _ = c_name(sym)
+        if name is None:
+            continue
+        lookup = re.sub(r"^__stdcall\s+", "", name).split("(")[0].strip()
+        if lookup in source_definitions:
+            source_defined_stubs.add(sym)
+        else:
+            alias_target = function_for_code_label(lookup)
+            if alias_target in source_definitions:
+                source_defined_stubs.add(sym)
+    for gone in sorted(source_defined_stubs):
+        print(f"  dropping {gone}: a current C source supplies the function")
     if needs_library:
         print(f"  {len(needs_library)} symbol(s) are the runtime's own and are left to the "
               f"libraries, not stubbed: {', '.join(sorted(needs_library)[:8])}"
               + (" ..." if len(needs_library) > 8 else ""))
-    return syms - now_defined(lines)
+    return syms - source_defined_stubs
 
 
 def declarations() -> dict[str, str]:
@@ -248,7 +365,6 @@ def main() -> int:
     syms = unresolved()
     if not syms:
         print("nothing unresolved in the link log(s) - the image links clean")
-        return 0
     decls = declarations()
 
     rows = []

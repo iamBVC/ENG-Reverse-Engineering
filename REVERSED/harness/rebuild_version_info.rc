@@ -1,0 +1,30 @@
+#include <windows.h>
+
+1 VERSIONINFO
+ FILEVERSION 1, 0, 0, 1
+ PRODUCTVERSION 1, 0, 0, 1
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x00040004L
+ FILETYPE 0x00000001L
+ FILESUBTYPE 0x00000000L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080904B0"
+        BEGIN
+            VALUE "CompanyName", "Argonaut\0"
+            VALUE "FileDescription", "Croc2\0"
+            VALUE "FileVersion", "1, 0, 0, 1\0"
+            VALUE "InternalName", "Croc2\0"
+            VALUE "LegalCopyright", "Copyright \251 1999\0"
+            VALUE "OriginalFilename", "Croc2.exe\0"
+            VALUE "ProductName", "Argonaut Croc2\0"
+            VALUE "ProductVersion", "1, 0, 0, 1\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0809, 1200
+    END
+END

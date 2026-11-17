@@ -3,12 +3,14 @@
 
 void sub_54CFC0(int param_1)
 {
-  uint block[100] = {0};
+  uint block[100];
   uint *actor = block + 15;
   uint *record = *(uint **)(param_1 + 0x38);
   uint index;
 
   block[0] = (uint)actor;
+  block[1] = 0;
+  block[5] = 0;
   DAT_006d9dc8 = 0;
   fprintf(stderr, "[actors] instantiate records=%u\n", *(uint *)(param_1 + 4));
   for (index = 0; index < *(uint *)(param_1 + 4); ++index, record += 18) {

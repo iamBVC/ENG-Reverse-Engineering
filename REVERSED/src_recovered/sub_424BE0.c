@@ -5,8 +5,17 @@
 void sub_424BE0(void)
 {
   static uint traced;
+  static uint diagnostic_frame;
+  static uint invalid_queue_nodes;
+  uint frame = ++diagnostic_frame;
+  uint draw_calls = 0;
+  uint indexed_calls = 0;
+  uint unindexed_calls = 0;
+  uint submitted_vertices = 0;
   int draw_result;
   undefined4 *puVar1;
+  undefined4 *queue_head;
+  undefined4 *queue_previous;
   int iVar2;
   int iVar3;
   int iVar4;
@@ -37,8 +46,29 @@ void sub_424BE0(void)
     local_18 = 0x7ff;
     do {
       iVar7 = local_18 + local_14 * 0x800;
-      for (puVar1 = (undefined4 *)(&DAT_005f6ef8)[iVar7]; puVar1 != (undefined4 *)0x0;
-          puVar1 = (undefined4 *)*puVar1) {
+      queue_head = (undefined4 *)(&DAT_005f6ef8)[iVar7];
+      queue_previous = (undefined4 *)0x0;
+      for (puVar1 = queue_head; puVar1 != (undefined4 *)0x0;
+          queue_previous = puVar1, puVar1 = (undefined4 *)*puVar1) {
+        /* A corrupt/sentinel queue head can otherwise be dereferenced below as a
+         * 32-byte draw command. Keep the diagnostic run alive and report the exact
+         * queue bucket so its producer can be traced. */
+        if ((uint)(uintptr_t)puVar1 < (uint)DAT_00586568 ||
+            (uint)(uintptr_t)puVar1 >= (uint)DAT_00586568 + 0x7d000) {
+          if (invalid_queue_nodes++ < 32) {
+            fprintf(stderr, "[render-queue-invalid] frame=%u bucket=%d first=%p cursor=%p prev=%p prev_link=%08x prev_verts=%08x prev_count=%u prev_indices=%08x prev_flags=%08x arena=%08x..%08x\n",
+                    frame, iVar7, (void *)queue_head, (void *)puVar1,
+                    (void *)queue_previous,
+                    queue_previous != (undefined4 *)0x0 ? queue_previous[0] : 0,
+                    queue_previous != (undefined4 *)0x0 ? queue_previous[1] : 0,
+                    queue_previous != (undefined4 *)0x0 ? queue_previous[2] : 0,
+                    queue_previous != (undefined4 *)0x0 ? queue_previous[4] : 0,
+                    queue_previous != (undefined4 *)0x0 ? queue_previous[7] : 0,
+                    (uint)DAT_00586568,
+                    (uint)DAT_00586568 + 0x7d000);
+          }
+          break;
+        }
         uVar8 = puVar1[7];
         uVar14 = (int)uVar8 >> 0xe;
         uVar15 = (int)uVar8 >> 0xc & 3;
@@ -58,6 +88,10 @@ void sub_424BE0(void)
         uVar8 = uVar8 & 1;
         if (0 < iVar3) {
           if (DAT_005833e1 == '\0') {
+            ++draw_calls;
+            submitted_vertices += (uint)iVar3;
+            if (iVar2 == 0) ++unindexed_calls;
+            else ++indexed_calls;
             if (iVar12 == 0) {
               if (DAT_006d7c58 != 1) {
                 (**(code **)(*DAT_00582cd4 + 0xa0))(DAT_00582cd4,0,1,1);
@@ -330,7 +364,7 @@ LAB_004253c5:
               draw_result = (**(code **)(*DAT_00582cd4 + 0x74))
                         (DAT_00582cd4,(-(uVar8 != 0) & 2U) + 4,0x1c4,iVar4,iVar3,iVar2,uVar19);
             }
-            if (traced++ < 6) {
+            if (traced++ < 32) {
               float *v = (float *)iVar4;
               fprintf(stderr, "[draw] hr=%08x mode=%u count=%d texture=%08x indices=%08x flags=%08x xy=%g/%g z=%g w=%g color=%08x uv=%g/%g\n",
                       draw_result, (-(uVar8 != 0) & 2U) + 4, iVar3, DAT_006d7c54, iVar2, puVar1[7],
@@ -361,6 +395,10 @@ LAB_004253c5:
     } while (-1 < local_18);
     local_14 = local_14 + -1;
     if (local_14 < 0) {
+      if (frame <= 4) {
+        fprintf(stderr, "[draw-summary] frame=%u calls=%u indexed=%u unindexed=%u vertices=%u\n",
+                frame, draw_calls, indexed_calls, unindexed_calls, submitted_vertices);
+      }
       return;
     }
   } while( true );

@@ -13,7 +13,7 @@ static struct { void **methods; } draw = {draw_methods}, surface = {surface_meth
 static unsigned int format[8] = {32, 0x20, 0, 8, 0, 0, 0, 0};
 static unsigned char pixels[8], source[4] = {1, 2, 3, 4};
 static unsigned int texture[8];
-static int created, locked, unlocked, selected, evicted;
+static int created, locked, read_locked, unlocked, selected, evicted;
 static int WINAPI evict(UINT_PTR self) { REQUIRE(self == (UINT_PTR)&d3d); ++evicted; return 0; }
 static int WINAPI create_surface(UINT_PTR self, UINT_PTR descriptor, UINT_PTR output, UINT_PTR outer)
 {
@@ -32,9 +32,12 @@ static int WINAPI color_key(UINT_PTR self, UINT_PTR flags, UINT_PTR key)
 static int WINAPI lock(UINT_PTR self, UINT_PTR rectangle, UINT_PTR descriptor, UINT_PTR flags, UINT_PTR event)
 {
     unsigned int *desc = (unsigned int *)descriptor;
-    REQUIRE(self == (UINT_PTR)&surface && !rectangle && !event && flags == 0x821);
+    REQUIRE(self == (UINT_PTR)&surface && !rectangle && !event);
+    desc[2] = 2; desc[3] = 2; desc[21] = 8;
     desc[4] = 4; desc[9] = (UINT_PTR)pixels;
-    ++locked; return 0;
+    if (flags == 0x11) ++read_locked;       /* DDLOCK_WAIT | DDLOCK_READONLY probe */
+    else { REQUIRE(flags == 0x821); ++locked; }
+    return 0;
 }
 static int WINAPI unlock(UINT_PTR self, UINT_PTR rectangle)
 { REQUIRE(self == (UINT_PTR)&surface && !rectangle); ++unlocked; return 0; }
@@ -58,7 +61,7 @@ int main(void)
     __asm mov before, esp
     REQUIRE(sub_407240() == 1);
     __asm mov after, esp
-    REQUIRE(before == after && created == 1 && locked == 1 && unlocked == 1 && selected == 1 && evicted == 1);
+    REQUIRE(before == after && created == 1 && locked == 1 && read_locked == 1 && unlocked == 2 && selected == 1 && evicted == 1);
     REQUIRE(pixels[0] == 1 && pixels[1] == 2 && pixels[4] == 3 && pixels[5] == 4);
     REQUIRE(pixels[2] == 0xcd && pixels[3] == 0xcd && pixels[6] == 0xcd && pixels[7] == 0xcd);
     REQUIRE(texture[3] == (UINT_PTR)&surface && texture[4] == (UINT_PTR)&surface && texture[6] == 0);

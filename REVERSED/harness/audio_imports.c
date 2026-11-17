@@ -1,20 +1,36 @@
 /* Bridge reconstructed calls to the original shipped AAL audio library. */
 #include "ghidra_shim.h"
+#include <intrin.h>
 
 static FARPROC groove_audio_export(const char *name)
 {
     static HMODULE module;
+    static unsigned int traced_exports;
     FARPROC procedure;
     if (!module) {
         module = LoadLibraryA("aal.dll");
         if (module) fprintf(stderr, "[audio] loaded aal.dll\n");
     }
     procedure = module ? GetProcAddress(module, name) : NULL;
+    if (procedure && traced_exports++ < 64)
+        fprintf(stderr, "[audio-api] %s\n", name);
     if (!procedure) {
         fprintf(stderr, "[audio] missing export %s, error=%lu\n", name, GetLastError());
         ExitProcess(ERROR_PROC_NOT_FOUND);
     }
     return procedure;
+}
+
+int _AAL_AllocateVoiceForHandle_8(UINT_PTR arg0, UINT_PTR arg1)
+{
+    typedef int (__stdcall *AudioCall)(UINT_PTR, UINT_PTR);
+    return ((AudioCall)groove_audio_export("_AAL_AllocateVoiceForHandle@8"))(arg0, arg1);
+}
+
+int _AAL_AllocateVoice_4(UINT_PTR arg0)
+{
+    typedef int (__stdcall *AudioCall)(UINT_PTR);
+    return ((AudioCall)groove_audio_export("_AAL_AllocateVoice@4"))(arg0);
 }
 
 int _AAL_Close3DProvider_4(UINT_PTR arg0)
@@ -92,7 +108,16 @@ int _AAL_InitDriver_4(UINT_PTR arg0)
 int _AAL_Init_0(void)
 {
     typedef int (__stdcall *AudioCall)(void);
-    return ((AudioCall)groove_audio_export("_AAL_Init@0"))();
+    FARPROC procedure = groove_audio_export("_AAL_Init@0");
+    void *caller = _ReturnAddress();
+    int result;
+
+    fprintf(stderr, "[audio-call] _AAL_Init enter caller=%p target=%p\n", caller, procedure);
+    fflush(stderr);
+    result = ((AudioCall)procedure)();
+    fprintf(stderr, "[audio-call] _AAL_Init return=%d caller=%p\n", result, caller);
+    fflush(stderr);
+    return result;
 }
 
 int _AAL_LoadFile_8(UINT_PTR arg0, UINT_PTR arg1)
