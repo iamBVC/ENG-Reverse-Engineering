@@ -1377,3 +1377,102 @@ sub_546EA0,"    local_20 = DAT_005834d8;
     driver.block_align = 4;
     driver.bits_per_sample = 16;
     _AAL_InitDriver_4(&driver);"
+sub_402840,"  float *pfVar2;
+  float *pfVar3;","  /* 0057DC78 through 0057DD98 spans eight original 0x24-byte slots. */
+  float clip_point[4];
+  float *pfVar2 = clip_point + 2;
+  float *pfVar3;
+  unsigned int corner = 0;"
+sub_402840,"  pfVar2 = (float *)&DAT_0057dc78;
+",""
+sub_402840,"    pfVar2 = pfVar2 + 9;
+",""
+sub_402840,"  } while ((int)pfVar2 < 0x57dd98);","  } while (++corner < 8);"
+sub_40E0C0,} while ((int)piVar6 < 0x58266c);,} while (iVar8 < 0x100);
+sub_43A610,"  pfVar2 = (float *)&DAT_006d7f00;","  /* The original alternates between two 0x140-byte polygon buffers. */
+  float clip_buffers[2][0x140 / sizeof(float)];
+  pfVar2 = clip_buffers[0];"
+sub_43A610,"pfVar3 = (float *)(&DAT_006d7f00 + iVar7 * 0x50);","pfVar3 = clip_buffers[iVar7];"
+sub_4138A0,"void sub_4138A0(float param_1,int param_2,int param_3,int param_4)
+
+{
+  float fVar1;
+  uint uVar2;
+  
+  _DAT_00583398 = (float)(int)param_1 * DAT_00583390 * _DAT_0056e1dc;
+  _DAT_005833a0 = (float)param_2 * DAT_00583394 * _DAT_0056e1d8;
+  _DAT_005833a8 = (float)param_3 * DAT_00583390 * _DAT_0056e1dc;
+  _DAT_005833ac = (float)param_4 * DAT_00583394 * _DAT_0056e1d8;
+  fVar1 = _DAT_005833a8 + _DAT_00583398;
+  uVar2 = ((uint)fVar1 >> 0x17 & 0xff) - 0x17;
+  if ((int)uVar2 < 1) {
+    if (uVar2 == 0xffffffe9) {
+      param_1 = (float)CONCAT31((uint3)((uint)fVar1 >> 8) & 0x800000,1);
+    }
+    else {
+      param_1 = (float)(0x400000 >> (-(char)uVar2 & 0x1fU) | (uint)fVar1 & 0x80000000);
+    }
+  }
+  else {
+    param_1 = (float)((uVar2 & 0xff) << 0x17 | (uint)fVar1 & 0x80000000);
+  }
+  _DAT_0058339c = fVar1 - param_1;
+  fVar1 = _DAT_005833ac + _DAT_005833a0;
+  uVar2 = ((uint)fVar1 >> 0x17 & 0xff) - 0x17;
+  if ((int)uVar2 < 1) {
+    if (uVar2 == 0xffffffe9) {
+      param_1 = (float)CONCAT31((uint3)((uint)fVar1 >> 8) & 0x800000,1);
+    }
+    else {
+      param_1 = (float)(0x400000 >> (-(char)uVar2 & 0x1fU) | (uint)fVar1 & 0x80000000);
+    }
+  }
+  else {
+    param_1 = (float)((uVar2 & 0xff) << 0x17 | (uint)fVar1 & 0x80000000);
+  }
+  _DAT_005833a4 = fVar1 - param_1;
+  _DAT_005833b0 = (_DAT_005833a8 * _DAT_0056e158 + _DAT_00583398) - _DAT_0056e028;
+  _DAT_005833b4 = (_DAT_005833ac * _DAT_0056e158 + _DAT_005833a0) - _DAT_0056e028;
+  _DAT_005833b8 = _DAT_005833a8 * _DAT_0056e158;
+  _DAT_005833bc = _DAT_005833ac * _DAT_0056e1d4;
+  return;
+}","/* Decode the exponent-sized adjustment used by the original viewport setup. */
+static float groove_viewport_edge_step(float edge)
+{
+  uint32_t bits, step;
+  int exponent;
+  float result;
+  memcpy(&bits, &edge, sizeof bits);
+  exponent = (int)((bits >> 23) & 0xff) - 23;
+  if (exponent > 0)
+    step = (uint32_t)exponent << 23;
+  else if (exponent == -23)
+    step = 1;
+  else
+    step = 0x00400000u >> -exponent;
+  step |= bits & 0x80000000u;
+  memcpy(&result, &step, sizeof result);
+  return result;
+}
+
+void sub_4138A0(int x, int y, int width, int height)
+{
+  double left = (double)x * DAT_00583390 * _DAT_0056e1dc;
+  float top = (float)((double)y * DAT_00583394 * _DAT_0056e1d8);
+  double span_x = (double)width * DAT_00583390 * _DAT_0056e1dc;
+  double span_y = (double)height * DAT_00583394 * _DAT_0056e1d8;
+  float stored_height = (float)span_y;
+  double right = left + span_x;
+  double bottom = (double)top + span_y;
+
+  _DAT_00583398 = (float)left;
+  _DAT_0058339c = (float)(right - groove_viewport_edge_step((float)right));
+  _DAT_005833a0 = top;
+  _DAT_005833a4 = (float)(bottom - groove_viewport_edge_step((float)bottom));
+  _DAT_005833a8 = (float)span_x;
+  _DAT_005833ac = (float)span_y;
+  _DAT_005833b0 = (float)(span_x * _DAT_0056e158 + left - _DAT_0056e028);
+  _DAT_005833b4 = (float)((double)stored_height * _DAT_0056e158 + top - _DAT_0056e028);
+  _DAT_005833b8 = (float)(span_x * _DAT_0056e158);
+  _DAT_005833bc = (float)((double)stored_height * _DAT_0056e1d4);
+}"
